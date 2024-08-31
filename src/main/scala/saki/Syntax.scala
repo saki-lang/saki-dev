@@ -1,0 +1,5 @@
+package saki
+
+class Syntax {
+
+}

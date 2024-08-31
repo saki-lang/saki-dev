@@ -1,0 +1,6 @@
+
+
+@main
+def main(): Unit = {
+
+}
