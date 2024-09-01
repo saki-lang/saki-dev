@@ -3,7 +3,7 @@ plugins {
     id 'antlr'
 }
 
-group = 'lepton'
+group = 'saki'
 version = '1.0-SNAPSHOT'
 
 repositories {

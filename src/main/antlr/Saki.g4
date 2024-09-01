@@ -6,23 +6,31 @@ startRule: NL* (expr (NL+ expr)*)? NL* EOF;
 
 expr
     // Value
-    :   atom                                                    # exprAtom
-    |   '(' expr ')'                                            # exprParen
-    |   expr '(' (expr (',' NL* expr)* ','?)? NL* ')'           # exprCall
-    |   expr '.' Identifier                                     # exprField
-    |   expr expr+                                              # exprSeq
-    |   block                                                   # exprBlock
+    :   value=atom                                                          # exprAtom
+    |   '(' value=expr ')'                                                  # exprParen
+    |   func=expr '(' NL* (args+=expr (',' NL* args+=expr)* ','?)? NL* ')'  # exprCall
+    |   subject=expr '.' member=Identifier                                  # exprField
+    |   '|' paramList '|' body=expr                                         # exprLambda
+//    |   Operator expr                                                       # exprPrefixOp
+//    |   expr Operator                                                       # exprPostfixOp
+//    |   expr Operator expr                                                  # exprBinOp
+    |   lhs=expr rhs=expr                                                   # exprSeq
+    |   block                                                               # exprBlock
     // Control
-    |   'if' expr 'then' expr 'else' expr                       # exprIf
-    |   'match' expr '{' NL* (expr '=>' expr NL*)+ '}'          # exprMatch
+    |   'if' cond=expr 'then' then=expr 'else' else=expr                    # exprIf
+    |   'match' value=expr '{' NL* cases+=matchCase (NL+ cases+=matchCase)* NL* '}'                      # exprMatch
     // Definition
-    |   'let' Identifier '=' NL* expr                           # exprLet
+    |   'let' name=Identifier (':' type=expr) '=' NL* value=expr                           # exprLet
     |   definition                                              # exprDef
     |   'impl' ('[' paramList ']')? expr '{' NL* (definition (NL+ definition)*)? NL* '}' # exprImpl
     // Types
     |   <assoc=right> expr '->' expr                                # exprFunctionType
     |   'enum' '{' NL* enumVariant (NL+ enumVariant)* NL* '}'       # exprEnum
     |   'struct' '{' NL* valueTypePair (NL+ valueTypePair)* NL* '}' # exprStruct
+    ;
+
+matchCase
+    :   pattern=expr '=>' value=expr
     ;
 
 block
@@ -77,10 +85,11 @@ RawStringLiteral: '#' '{' (~["\\\r\n] | CommonCharacter)* '}';
 Equal: '=';
 RightArrow: '->';
 RightDoubleArrow: '=>';
+Colon: ':';
 
-Operator: [+\-/*<>=|&!^%#:]+;
+Operator: [+\-/*<>=&!^%#:]+;
 
-Identifier: [a-zA-Z_][a-zA-Z0-9_]*[']?;
+Identifier: [a-zA-Z][a-zA-Z0-9_]*[']?;
 
 // Whitespaces
 Whitespace: [ \t\r]+ -> skip;
