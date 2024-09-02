@@ -8,13 +8,13 @@ import scala.util.boundary.break
 enum Token {
   case LeftParenthesis
   case RightParenthesis
-  case Var(name: String)
+  case Atom[T](value: T)
   case Op(op: Operator)
 
   override def toString: String = this match {
     case LeftParenthesis => "("
     case RightParenthesis => ")"
-    case Var(name) => name
+    case Atom(value) => value.toString
     case Op(op) => op.symbol
   }
 
@@ -79,12 +79,12 @@ extension (self: Operator.Unary) {
 }
 
 enum Expr {
-  case Var(name: String)
+  case Atom[T](value: T)
   case UnaryExpr(op: Operator.Unary, expr: Expr)
   case BinaryExpr(op: Operator.Binary, lhs: Expr, rhs: Expr)
 
   override def toString: String = this match {
-    case Var(name) => name
+    case Atom(value) => value.toString
     case UnaryExpr(op, expr) => op.kind match {
       case UnaryType.Prefix => s"${op.symbol}${expr.toString}"
       case UnaryType.Postfix => s"${expr.toString}${op.symbol}"
@@ -93,7 +93,7 @@ enum Expr {
   }
 }
 
-class OperatorExpressionParser(tokens: Seq[Token], binaryOperators: Set[Operator.Binary]) {
+class OperatorExpressionParser[T](tokens: Seq[Token], binaryOperators: Set[Operator.Binary]) {
 
   private var currentTokenIndex: Int = 0
 
@@ -116,27 +116,27 @@ class OperatorExpressionParser(tokens: Seq[Token], binaryOperators: Set[Operator
   private def parsePrimary(): Expr = {
     var expr = currentToken match {
       case token: Token.Op =>
-        consumeToken()
+        this.consumeToken()
         token.op match {
           case unary: Operator.Unary => Expr.UnaryExpr(unary, parsePrimary())
           case _ => throw new IllegalArgumentException("Expected a unary operator")
         }
       case Token.LeftParenthesis =>
-        consumeToken()
+        this.consumeToken()
         val expression = parse()
-        if consumeToken() != Token.RightParenthesis then {
+        if this.consumeToken() != Token.RightParenthesis then {
           throw new IllegalArgumentException("Expected ')'")
         }
         expression
-      case token: Token.Var =>
-        consumeToken()
-        Expr.Var(token.name)
+      case token@Token.Atom(value) =>
+        this.consumeToken()
+        Expr.Atom(token.value)
       case _ => throw new IllegalArgumentException(s"Unexpected token: ${currentToken.toString}")
     }
     // Check if the next token is a postfix unary operator
     while !this.isEof && currentToken.isUnaryOperator && currentToken.asUnaryOperator.isPostfix do {
       val postfixOp = currentToken.asUnaryOperator
-      consumeToken()
+      this.consumeToken()
       expr = Expr.UnaryExpr(postfixOp, expr)
     }
     return expr
@@ -153,7 +153,7 @@ class OperatorExpressionParser(tokens: Seq[Token], binaryOperators: Set[Operator
         val binaryOp = lookahead.asBinaryOperator
         if binaryOp < minPrecedenceSet then return lhs
         if lookahead == Token.RightParenthesis || this.isEof then return lhs
-        consumeToken()
+        this.consumeToken()
         var rhs = parsePrimary()
         if currentTokenIndex < tokens.size then {
           lookahead = currentToken
@@ -164,7 +164,7 @@ class OperatorExpressionParser(tokens: Seq[Token], binaryOperators: Set[Operator
               val lookaheadBinaryOp = lookahead.asBinaryOperator
               if {
                 lookaheadBinaryOp > binaryOp ||
-                (lookaheadBinaryOp.isRightAssociative && binaryOp <=> lookaheadBinaryOp)
+                  (lookaheadBinaryOp.isRightAssociative && binaryOp <=> lookaheadBinaryOp)
               } then {
                 rhs = parseExpression(rhs, Set(lookaheadBinaryOp))
                 if this.isEof then break(Expr.BinaryExpr(binaryOp, lhs, rhs))
@@ -182,12 +182,18 @@ class OperatorExpressionParser(tokens: Seq[Token], binaryOperators: Set[Operator
     }
   }
 
-  def parse(): Expr = parseExpression(parsePrimary(), lowestPrecedenceOperators)
+  private def parse(): Expr = parseExpression(parsePrimary(), lowestPrecedenceOperators)
+
+  lazy val expressions: Seq[Expr] = {
+    var expressions = Seq[Expr]()
+    while !this.isEof do {
+      expressions = expressions :+ parse()
+    }
+    expressions
+  }
 
   private enum Precedence {
-    case Tighter
-    case Looser
-    case Equal
+    case Tighter, Looser, Equal
   }
 
   private def comparePrecedence(
@@ -214,8 +220,6 @@ class OperatorExpressionParser(tokens: Seq[Token], binaryOperators: Set[Operator
     if (dfsEquals(op1, Set())) return Precedence.Equal
 
     // Indirect tighter relationship
-
-    // compare op1 and op2, throw if no such partial order
     def tighter(op1: Operator.Binary, op2: Operator.Binary): Boolean = {
       // dfs use graph
       def dfs(op: Operator.Binary, visited: Set[Operator.Binary]): Boolean = {
@@ -329,6 +333,6 @@ object OperatorExpressionParser {
   }
 }
 
-def parseExpr(tokens: Seq[Token], binaryOperators: Set[Operator.Binary]): Expr = {
-  OperatorExpressionParser(tokens, binaryOperators).parse()
+def parseExpressions(tokens: Seq[Token], binaryOperators: Set[Operator.Binary]): Seq[Expr] = {
+  OperatorExpressionParser(tokens, binaryOperators).expressions
 }
