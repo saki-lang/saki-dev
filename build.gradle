@@ -13,6 +13,7 @@ repositories {
 dependencies {
     implementation 'org.scala-lang:scala3-library_3:3.3.1'
     implementation 'commons-collections:commons-collections:3.2.2'
+//    implementation 'org.json4s-native_3.3.1:4.0.7'
     antlr 'org.antlr:antlr4:4.11.1'
     implementation 'org.antlr:antlr4-runtime:4.11.1'
 
@@ -20,8 +21,8 @@ dependencies {
 }
 
 generateGrammarSource {
-    outputDirectory = file("src/main/java/saki/syntax")
-    arguments += ["-visitor", "-long-messages", "-package", "saki.syntax"]
+    outputDirectory = file("src/main/java/saki/grammar")
+    arguments += ["-visitor", "-long-messages", "-package", "saki.grammar"]
 }
 
 test {

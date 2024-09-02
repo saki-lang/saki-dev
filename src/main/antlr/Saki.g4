@@ -2,73 +2,77 @@ grammar Saki;
 
 /* Parser Rules */
 
-startRule: NL* (expr (NL+ expr)*)? NL* EOF;
+file: NL* (exprs+=expr (NL+ exprs+=expr)*)? NL* EOF;
 
 expr
     // Value
     :   value=atom                                                          # exprAtom
     |   '(' value=expr ')'                                                  # exprParen
+    |   '\'(' elements+=expr ',' NL* elements+=expr ')'                     # exprTuple
+    |   '^(' types+=expr ',' NL* types+=expr ')'                            # exprTupleType
     |   func=expr '(' NL* (args+=expr (',' NL* args+=expr)* ','?)? NL* ')'  # exprCall
     |   subject=expr '.' member=Identifier                                  # exprField
     |   '|' paramList '|' body=expr                                         # exprLambda
-//    |   Operator expr                                                       # exprPrefixOp
-//    |   expr Operator                                                       # exprPostfixOp
-//    |   expr Operator expr                                                  # exprBinOp
     |   lhs=expr rhs=expr                                                   # exprSeq
     |   block                                                               # exprBlock
     // Control
-    |   'if' cond=expr 'then' then=expr 'else' else=expr                    # exprIf
+    |   'if' NL* cond=expr NL* 'then' NL* then=expr NL* 'else' NL* else=expr                    # exprIf
     |   'match' value=expr '{' NL* cases+=matchCase (NL+ cases+=matchCase)* NL* '}'                      # exprMatch
     // Definition
     |   'let' name=Identifier (':' type=expr) '=' NL* value=expr                           # exprLet
+    |   'instance' ':' type=expr '=' NL* value=expr     # exprInstance
     |   definition                                              # exprDef
-    |   'impl' ('[' paramList ']')? expr '{' NL* (definition (NL+ definition)*)? NL* '}' # exprImpl
+    |   'impl' ('[' paramList ']')? expr '{' NL* (defs+=definition (NL+ defs+=definition)*)? NL* '}' # exprImpl
     // Types
-    |   <assoc=right> expr '->' expr                                # exprFunctionType
-    |   'enum' '{' NL* enumVariant (NL+ enumVariant)* NL* '}'       # exprEnum
-    |   'struct' '{' NL* valueTypePair (NL+ valueTypePair)* NL* '}' # exprStruct
+    |   <assoc=right> lhs=expr '->' rhs=expr        # exprFunctionType
+    |   <assoc=right> '<' lhs=expr '>' '->' rhs=expr        # exprFunctionTypeImplicit
+    |   'enum' '{' NL* variants+=enumVariant (NL+ variants+=enumVariant)* NL* '}'       # exprEnumType
+    |   'record' (':' super=expr)? '{' NL* valueTypePair (NL+ valueTypePair)* NL* '}' # exprRecordType
+    |   record=expr '@' '{' NL* valueTypePair (NL+ valueTypePair)* NL* '}' # exprRecord
     ;
 
 matchCase
-    :   pattern=expr '=>' value=expr
+    :   pattern=expr (':' type=expr)? '=>' value=expr
+    |   '(' elements+=expr ',' NL* elements+=expr ')' '=>' value=expr
     ;
 
 block
-    :   '{' NL* (expr (NL+ expr)*)? NL* '}' # blockExpr
+    :   '{' NL* (exprs+=expr (NL+ exprs+=expr)*)? NL* '}'
     ;
 
 definition
-    : 'def' Identifier ('[' paramList ']')? ('(' paramList ')')? (':' expr)? '=' NL* expr
+    : 'def' ident=Identifier ('[' implicitParamList=paramList ']')?
+        ('(' explicitParamList=paramList ')')? (':' returnType=expr)? '=' NL* body=expr
     ;
 
 paramList
-    :   (valueTypePair (',' valueTypePair)* ','?)?
+    :   (params+=valueTypePair (',' params+=valueTypePair)* ','?)?
     ;
 
 atom
-    :   literal
-    |   Identifier
-    |   Operator
-    |   '\'Type'
+    :   literal             # atomLiteral
+    |   ident=Identifier    # atomIdentifier
+    |   op=Operator         # atomOperator
+    |   '\'Type'            # atomType
     ;
 
 enumVariant
-    :   Identifier
-    |   Identifier '(' NL* (expr (',' NL* expr)* ','?)? NL* ')'
-    |   Identifier '{' NL* (valueTypePair (',' NL* valueTypePair)* ','?)? NL* '}'
+    :   Identifier                                                                  # enumVariantSimple
+    |   Identifier '(' NL* (elements+=expr (',' NL* elements+=expr)* ','?)? NL* ')'                     # enumVariantTuple
+    |   Identifier '{' NL* (fields+=valueTypePair (',' NL* fields+=valueTypePair)* ','?)? NL* '}'   # enumVariantRecord
     ;
 
 valueTypePair
-    :   Identifier+ ':' expr
+    :   (idents+=Identifier)+ ':' type=expr
     ;
 
 literal
-    :   integral=(Dec | Hex | Oct | Bin)        # literalIntegral
-    |   float=Float                             # literalFloat
-    |   character=CharacterLiteral              # literalCharacter
-    |   regularString=RegularStringLiteral      # literalRegularString
-    |   rawString=RawStringLiteral              # literalRawString
-    |   value=('true' | 'false')                # literalBoolean
+    :   value=(Dec | Hex | Oct | Bin)       # literalInt
+    |   value=Float                         # literalFloat
+    |   value=CharacterLiteral              # literalChar
+    |   value=RegularStringLiteral          # literalRegularString
+    |   value=RawStringLiteral              # literalRawString
+    |   value=('true' | 'false')            # literalBool
     ;
 
 // Literals
@@ -89,7 +93,7 @@ Colon: ':';
 
 Operator: [+\-/*<>=&!^%#:]+;
 
-Identifier: [a-zA-Z][a-zA-Z0-9_]*[']?;
+Identifier: '_' | [a-zA-Z][a-zA-Z0-9_]*[']?;
 
 // Whitespaces
 Whitespace: [ \t\r]+ -> skip;
