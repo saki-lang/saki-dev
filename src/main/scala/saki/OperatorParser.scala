@@ -1,4 +1,4 @@
-package saki
+package saki.optparser
 
 import scala.annotation.targetName
 import scala.collection.mutable
@@ -53,7 +53,7 @@ enum Operator {
   case Unary(override val symbol: String, kind: UnaryType)
   // symbol and partial order of the binary op
   case Binary(
-    override val symbol: String, associativity: Associativity, // precedence: Int,
+    override val symbol: String, associativity: Associativity,
     tighterThan: Set[Binary], sameAs: Set[Binary], looserThan: Set[Binary],
   )
 

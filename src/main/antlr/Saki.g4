@@ -2,7 +2,7 @@ grammar Saki;
 
 /* Parser Rules */
 
-file: NL* (exprs+=expr (NL+ exprs+=expr)*)? NL* EOF;
+program: NL* (exprs+=expr (NL+ exprs+=expr)*)? NL* EOF;
 
 expr
     // Value
@@ -11,9 +11,10 @@ expr
     |   '\'(' elements+=expr ',' NL* elements+=expr ')'                     # exprTuple
     |   '^(' types+=expr ',' NL* types+=expr ')'                            # exprTupleType
     |   func=expr '(' NL* (args+=expr (',' NL* args+=expr)* ','?)? NL* ')'  # exprCall
-    |   subject=expr '.' member=Identifier                                  # exprField
+    |   subject=expr '.' member=Identifier                                  # exprMemberAccess
+    |   record=expr '::' field=Identifier                                 # exprFieldProjection
     |   '|' paramList '|' body=expr                                         # exprLambda
-    |   lhs=expr rhs=expr                                                   # exprSeq
+    //|   lhs=expr rhs=expr                                                   # exprSeq
     |   block                                                               # exprBlock
     // Control
     |   'if' NL* cond=expr NL* 'then' NL* then=expr NL* 'else' NL* else=expr                    # exprIf
@@ -28,12 +29,23 @@ expr
     |   <assoc=right> '<' lhs=expr '>' '->' rhs=expr        # exprFunctionTypeImplicit
     |   'enum' '{' NL* variants+=enumVariant (NL+ variants+=enumVariant)* NL* '}'       # exprEnumType
     |   'record' (':' super=expr)? '{' NL* valueTypePair (NL+ valueTypePair)* NL* '}' # exprRecordType
-    |   record=expr '@' '{' NL* valueTypePair (NL+ valueTypePair)* NL* '}' # exprRecord
+    |   record=expr '@' '{' NL* fieldAssignment (NL+ fieldAssignment)* NL* '}' # exprRecord
     ;
 
 matchCase
-    :   pattern=expr (':' type=expr)? '=>' value=expr
-    |   '(' elements+=expr ',' NL* elements+=expr ')' '=>' value=expr
+    :   pattern (':' type=expr)? '=>' NL* value=expr
+    ;
+
+pattern
+    :   literal             # patternLiteral
+    |   ident=Identifier    # patternVariable
+    |   '(' elements+=pattern (',' NL* elements+=pattern)* ','? ')' # patternTuple
+    |   ident=Identifier '(' NL* (elements+=pattern (',' NL* elements+=pattern)* ','?)? NL* ')' # patternVariant
+    |   record=expr '@' '{' NL* (fields+=patternRecordField (',' NL* fields+=patternRecordField)* ','?)? NL* '}' # patternRecord
+    ;
+
+patternRecordField
+    :   ident=Identifier '=' value=pattern
     ;
 
 block
@@ -41,8 +53,25 @@ block
     ;
 
 definition
-    : 'def' ident=Identifier ('[' implicitParamList=paramList ']')?
-        ('(' explicitParamList=paramList ')')? (':' returnType=expr)? '=' NL* body=expr
+    :   'def' ident=Identifier ('[' implicitParamList=paramList ']')?
+          ('(' explicitParamList=paramList ')')? ':' returnType=expr '=' NL* body=expr
+    ;
+
+operatorDefinition
+    :   'def' 'binary' symbol=OptSymbol associativity=('left-assoc' | 'right-assoc')
+        ('<' NL* operatorPrecedence (',' NL* operatorPrecedence) NL* '>')?
+        ('[' implicitParamList=paramList ']')? '(' explicitParamList=paramList ')'
+        (':' returnType=expr)? '=' NL* body=expr   # binaryOperator
+    |   'def' 'unary' symbol=OptSymbol kind=('prefix' | 'postfix')
+        ('[' implicitParamList=paramList ']')? '(' explicitParamList=paramList ')'
+        (':' returnType=expr)? '=' NL* body=expr    # unaryOperator
+    ;
+
+operatorPrecedence
+    :   (   'tighter' tighterThan+=OptSymbol+
+        |   'looser' looserThan+=OptSymbol+
+        |   'same' sameAs+=OptSymbol+
+        )
     ;
 
 paramList
@@ -52,7 +81,7 @@ paramList
 atom
     :   literal             # atomLiteral
     |   ident=Identifier    # atomIdentifier
-    |   op=Operator         # atomOperator
+    |   op=OptSymbol         # atomOperator
     |   '\'Type'            # atomType
     ;
 
@@ -64,6 +93,10 @@ enumVariant
 
 valueTypePair
     :   (idents+=Identifier)+ ':' type=expr
+    ;
+
+fieldAssignment
+    :   ident=Identifier '=' value=expr
     ;
 
 literal
@@ -91,7 +124,7 @@ RightArrow: '->';
 RightDoubleArrow: '=>';
 Colon: ':';
 
-Operator: [+\-/*<>=&!^%#:]+;
+OptSymbol: [+\-/*<>=&!^%#:]+;
 
 Identifier: '_' | [a-zA-Z][a-zA-Z0-9_]*[']?;
 
