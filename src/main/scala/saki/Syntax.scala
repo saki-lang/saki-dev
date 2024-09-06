@@ -40,24 +40,24 @@ enum Term(val span: SourceSpan) {
 
   case Variable(name: String)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
   case PrimitiveValue(value: syntax.PrimitiveValue)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
-  case Application(function: Term, argument: Term)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
+  case Application(function: Term, applyMode: ApplyMode, argument: Term)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
   case FieldProjection(record: Term, fieldName: String)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
   case Function(param: BoundVariable, applyMode: ApplyMode, body: Term, returnType: Option[Term])(implicit ctx: ParserRuleContext) extends Term(ctx.span)
   case FunctionType(paramType: Term, applyMode: ApplyMode, returnType: Term)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
-  case CodeBlock(statements: List[Term])(implicit ctx: ParserRuleContext) extends Term(ctx.span)
+  case CodeBlock(statements: Seq[Term])(implicit ctx: ParserRuleContext) extends Term(ctx.span)
   case Let(name: String, `type`: Option[Term], value: Term)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
   case If(condition: Term, thenBranch: Term, elseBranch: Option[Term])(implicit ctx: ParserRuleContext) extends Term(ctx.span)
-  case Match(scrutinee: Term, cases: List[MatchCase])(implicit ctx: ParserRuleContext) extends Term(ctx.span)
-  case SumType(cases: List[Term])(implicit ctx: ParserRuleContext) extends Term(ctx.span)
-  case RecordType(fields: List[(String, Term)])(implicit ctx: ParserRuleContext) extends Term(ctx.span)
-  case RecordValue(fields: List[(String, Term)])(implicit ctx: ParserRuleContext) extends Term(ctx.span)
+  case Match(scrutinee: Term, cases: Seq[MatchCase])(implicit ctx: ParserRuleContext) extends Term(ctx.span)
+  case SumType(cases: Seq[Term])(implicit ctx: ParserRuleContext) extends Term(ctx.span)
+  case RecordType(fields: Seq[(String, Term)])(implicit ctx: ParserRuleContext) extends Term(ctx.span)
+  case RecordValue(fields: Seq[(String, Term)])(implicit ctx: ParserRuleContext) extends Term(ctx.span)
   case Universe(level: Int)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
 
   // To s-expression (lisp-like language)
   override def toString: String = this match {
     case Variable(name) => s"(var $span $name)"
     case Term.PrimitiveValue(value) => s"(prim $span $value)"
-    case Application(function, argument) => s"(apply $span $function $argument)"
+    case Application(function, applyMode, argument) => s"(apply $span $function $applyMode $argument)"
     case FieldProjection(record, fieldName) => s"(proj $span $record $fieldName)"
     case Function(param, applyMode, body, returnType) => {
       val paramString = s"(bind ${param.name} ${param.`type`})"
@@ -111,8 +111,8 @@ object MatchCase {
 enum Pattern(val span: SourceSpan) {
   case Literal(value: PrimitiveValue)(implicit ctx: ParserRuleContext) extends Pattern(ctx.span)
   case Variable(name: String)(implicit ctx: ParserRuleContext) extends Pattern(ctx.span)
-  case Variant(name: String, pattern: List[Pattern])(implicit ctx: ParserRuleContext) extends Pattern(ctx.span)
-  case Record(fields: List[(String, Pattern)], `type`: Option[Term])(implicit ctx: ParserRuleContext) extends Pattern(ctx.span)
+  case Variant(name: String, pattern: Seq[Pattern])(implicit ctx: ParserRuleContext) extends Pattern(ctx.span)
+  case Record(fields: Seq[(String, Pattern)], `type`: Option[Term])(implicit ctx: ParserRuleContext) extends Pattern(ctx.span)
 
   override def toString: String = this match {
     case Literal(value) => s"(pattern-literal $span $value)"

@@ -3,20 +3,38 @@ package saki
 import org.antlr.v4.runtime.ParserRuleContext
 import saki.grammar.SakiParser.*
 import saki.grammar.SakiBaseVisitor
-import saki.syntax.*
+import saki.syntax.{Term, *}
 import saki.syntax.PrimitiveValue.*
 import saki.optparser.*
+import saki.syntax.Term.Universe
 
 import scala.jdk.CollectionConverters.*
 
-class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern] {
+class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern | Unit] {
 
   var operators: Map[String, Operator] = Map.empty
 
+  private def getBinaryOperator(symbol: String)(implicit ctx: ParserRuleContext): Operator.Binary = {
+    this.operators.get(symbol) match {
+      case Some(operator: Operator.Binary) => operator
+      case Some(operator: Operator.Unary) => {
+        throw CompileErrorException(ctx, s"Expected binary operator, found unary operator: ${symbol}")
+      }
+      case None => throw CompileErrorException(ctx, s"Undeclared operator: ${symbol}")
+    }
+  }
+
+  private def getOperator(symbol: String)(implicit ctx: ParserRuleContext): Operator = {
+    this.operators.get(symbol) match {
+      case Some(operator) => operator
+      case None => throw CompileErrorException(ctx, s"Undeclared operator: ${symbol}")
+    }
+  }
+
   override def visitProgram(ctx: ProgramContext): Seq[Term] = {
-    ctx.exprs.asScala.flatMap {
-      case ctx: ExprImplContext => visitExprImpl(ctx)
-      case expr => Seq(expr.visit)
+    ctx.stmts.asScala.map(_.visit).flatMap {
+      case stmt: Term => Seq(stmt)
+      case stmts: Seq[Term] => stmts
     }.toSeq
   }
 
@@ -34,21 +52,15 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern] {
       case ctx: ExprLambdaContext => visitExprLambda(ctx)
       // case ctx: ExprSeqContext => visitExprSeq(ctx)
       case ctx: ExprBlockContext => visitExprBlock(ctx)
-      case ctx: ExprLetContext => visitExprLet(ctx)
       case ctx: ExprIfContext => visitExprIf(ctx)
       case ctx: ExprMatchContext => visitExprMatch(ctx)
-      case ctx: ExprInstanceContext => visitExprInstance(ctx)
-      case ctx: ExprDefContext => visitExprDef(ctx)
       case ctx: ExprFunctionTypeContext => visitExprFunctionType(ctx)
       case ctx: ExprFunctionTypeImplicitContext => visitExprFunctionTypeImplicit(ctx)
-      case ctx: ExprEnumTypeContext => visitExprEnumType(ctx)
-      case ctx: ExprImplContext => throw new UnsupportedOperationException("impl exist only in the top scope")
-      case _ => throw new UnsupportedOperationException(s"Unsupported expression: ${self.getText}")
+      case _ => throw CompileErrorException(self, s"Unsupported expression: ${self.getText}")
     }
   }
 
   override def visitExprAtom(ctx: ExprAtomContext): Term = ctx.atom match {
-    case context: AtomTypeContext => visitAtomType(context)
     case context: AtomOperatorContext => visitAtomOperator(context)
     case context: AtomIdentifierContext => visitAtomIdentifier(context)
     case context: AtomLiteralContext => visitAtomLiteral(context)
@@ -78,14 +90,14 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern] {
     given ParserRuleContext = ctx
     val func = ctx.func.visit
     val args = ctx.args.asScala.map(_.visit)
-    args.foldLeft(func) { (acc, arg) => Term.Application(acc, arg) }
+    args.foldLeft(func) { (acc, arg) => Term.Application(acc, ApplyMode.Explicit, arg) }
   }
 
   override def visitExprMemberAccess(ctx: ExprMemberAccessContext): Term = {
     given ParserRuleContext = ctx
     val subject: Term = ctx.subject.visit
     val member: String = ctx.member.getText
-    Term.Application(Term.Variable(member), subject)
+    Term.Application(Term.Variable(member), ApplyMode.Explicit, subject)
   }
 
   override def visitExprFieldProjection(ctx: ExprFieldProjectionContext): Term = {
@@ -99,15 +111,18 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern] {
     given ParserRuleContext = ctx
     val params = ctx.paramList.getParams
     val body = ctx.body.visit
-    functionDefinition(params.map((_, ApplyMode.Explicit)), body)
+    function(params.map((_, ApplyMode.Explicit)), body)
   }
 
   // override def visitExprSeq(ctx: ExprSeqContext): Term = ???
 
   override def visitExprBlock(ctx: ExprBlockContext): Term = {
     given ParserRuleContext = ctx
-    val statements = ctx.block.exprs.asScala.map(_.visit)
-    Term.CodeBlock(statements.toList)
+    val statements = ctx.block.stmts.asScala.map(_.visit)
+    Term.CodeBlock(statements.flatMap {
+      case stmt: Term => Seq(stmt)
+      case stmts: Seq[Term] => stmts
+    }.toList)
   }
 
   override def visitExprIf(ctx: ExprIfContext): Term = {
@@ -130,36 +145,6 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern] {
     Term.Match(scrutinee, cases.toList)
   }
 
-  override def visitExprLet(ctx: ExprLetContext): Term = {
-    given ParserRuleContext = ctx
-    val ty = if ctx.`type` == null then None else Some(ctx.`type`.visit)
-    Term.Let(ctx.name.getText, ty, ctx.value.visit)
-  }
-
-  override def visitExprInstance(ctx: ExprInstanceContext): Term = {
-    given ParserRuleContext = ctx
-    Term.Let("%TYPE_HASH%", Some(ctx.`type`.visit), ctx.value.visit)
-  }
-
-  override def visitExprDef(ctx: ExprDefContext): Term = visitDefinition(ctx.definition)
-
-  override def visitExprImpl(ctx: ExprImplContext): Seq[Term] = {
-    given ParserRuleContext = ctx
-    val sharedImplicitParams = ctx.paramList.getParams
-    val functions = for functionDef <- ctx.defs.asScala yield {
-      val implicitParams = functionDef.implicitParamList.getParams
-      val explicitParams = functionDef.explicitParamList.getParams
-      val returnType = functionDef.returnType.visit
-      val body = functionDef.body.visit
-      val params =
-        sharedImplicitParams.map((_, ApplyMode.Implicit)) ++
-        implicitParams.map((_, ApplyMode.Implicit)) ++
-        explicitParams.map((_, ApplyMode.Explicit))
-      functionDefinition(params, body, Some(returnType))
-    }
-    return functions.toSeq
-  }
-
   override def visitExprFunctionType(ctx: ExprFunctionTypeContext): Term = {
     given ParserRuleContext = ctx
     Term.FunctionType(ctx.lhs.visit, ApplyMode.Explicit, ctx.rhs.visit)
@@ -170,23 +155,119 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern] {
     Term.FunctionType(ctx.lhs.visit, ApplyMode.Implicit, ctx.rhs.visit)
   }
 
-  override def visitExprEnumType(ctx: ExprEnumTypeContext): Term = {
-    given ParserRuleContext = ctx
-    val cases = ctx.variants.asScala.map {
-      case simple: EnumVariantSimpleContext => Term.Variable(simple.getText)
-      case tuple: EnumVariantTupleContext => {
-        val fields = tuple.elements.asScala.zipWithIndex.map { (element, index) =>
-          val fieldName = s"_${index + 1}"
-          (fieldName, element.visit)
-        }
-        Term.RecordType(fields.toList)
-      }
-      case record: EnumVariantRecordContext => {
-        Term.RecordType(record.fields.asScala.flatMap(_.toFields).toList)
-      }
+  // Statement
+
+  extension (self: StmtContext) {
+    private def visit: Term | Seq[Term] = self match {
+      case ctx: StmtExprContext => visitStmtExpr(ctx)
+      case ctx: StmtLetContext => visitStmtLet(ctx)
+      case ctx: StmtInstanceContext => visitStmtInstance(ctx)
+      case ctx: StmtDefContext => visitStmtDef(ctx)
+      case ctx: StmtImplContext => visitStmtImpl(ctx)
+      case ctx: StmtEnumContext => visitStmtEnum(ctx)
     }
-    Term.SumType(cases.toList)
   }
+
+  override def visitStmtExpr(ctx: StmtExprContext): Term = ctx.expr.visit
+
+  override def visitStmtLet(ctx: StmtLetContext): Term = {
+    given ParserRuleContext = ctx
+    val ty = if ctx.`type` == null then None else Some(ctx.`type`.visit)
+    Term.Let(ctx.name.getText, ty, ctx.value.visit)
+  }
+
+  override def visitStmtInstance(ctx: StmtInstanceContext): Term = {
+    given ParserRuleContext = ctx
+    Term.Let("%TYPE_HASH%", Some(ctx.`type`.visit), ctx.value.visit)
+  }
+
+  override def visitStmtDef(ctx: StmtDefContext): Term = visitDefinition(ctx.definition)
+
+  override def visitStmtImpl(ctx: StmtImplContext): Seq[Term] = {
+    given ParserRuleContext = ctx
+    val sharedImplicitParams = ctx.paramList.getParams
+    val functions = for functionDef <- ctx.defs.asScala yield {
+      val implicitParams = functionDef.implicitParamList.getParams
+      val explicitParams = functionDef.explicitParamList.getParams
+      val returnType = functionDef.returnType.visit
+      val body = functionDef.body.visit
+      val params =
+        sharedImplicitParams.map((_, ApplyMode.Implicit)) ++
+          implicitParams.map((_, ApplyMode.Implicit)) ++
+          explicitParams.map((_, ApplyMode.Explicit))
+      function(params, body, Some(returnType))
+    }
+    return functions.toSeq
+  }
+
+  /**
+   *
+   * {{{
+   *     enum Option[T: 'Type] {
+   *         case None
+   *         case Some(T)
+   *     }
+   * }}}
+   *    ====[Converts To]====
+   * {{{
+   *     def $Option::None[T: 'Type] = record {
+   *         _$Option::None: Unit
+   *     }
+   *     def $Option::Some[T: 'Type] = record {
+   *         _$Option::Some: Unit,
+   *         _1: T,
+   *     }
+   *     def Option[T: 'Type]: 'Type = $Option::None[T] | $Option::Some[T]
+   * }}}
+   *
+   *    */
+  override def visitStmtEnum(ctx: StmtEnumContext): Seq[Term] = {
+    given ParserRuleContext = ctx
+
+    case class EnumVariant(name: String, fields: List[(String, Term)], definitions: Seq[Term.Let])
+
+    val enumName = ctx.ident.getText
+    val implicitParams = ctx.implicitParamList.getParams
+    val explicitParams = ctx.explicitParamList.getParams
+    val params = implicitParams.map((_, ApplyMode.Implicit)) ++ explicitParams.map((_, ApplyMode.Explicit))
+    val variants = ctx.variants.asScala.map { variant =>
+      val variantName = "$" + s"$enumName::${variant.ident.getText}"
+      val variantPhantomField = (s"_$variantName", Term.PrimitiveValue(UnitValue))
+      val variantFields = variant.data match {
+        case null => Seq()
+        case tuple: EnumVariantDataTupleContext => {
+          tuple.elements.asScala.zipWithIndex.map { (element, index) => (s"_${index + 1}", element.visit) }
+        }
+        case record: EnumVariantDataRecordContext => record.fields.asScala.flatMap(_.toFields)
+      }
+      val fields = variantPhantomField +: variantFields
+      val recordType = Term.RecordType(fields.toList)
+      val variantFunc = function(params, Term.RecordValue(fields.toList), Some(Term.Universe(0)))
+
+      var variantDefs = Seq(Term.Let(variantName, Some(recordType), variantFunc))
+      if ctx.isOpen != null then {
+        val updatedParams = params.map((param, mode) => (param, ApplyMode.Implicit))
+        val func = function(params, Term.RecordValue(fields.toList), Some(Term.Universe(0)))
+        variantDefs ++= Seq(Term.Let(variant.ident.getText, Some(recordType), func))
+      }
+
+      EnumVariant(variant.ident.getText, fields.toList, variantDefs)
+    }
+
+    val enumFuncBody = Term.SumType(variants.map { variant =>
+      if params.isEmpty then {
+        Term.Variable(variant.name)
+      } else {
+        funcApplication(Term.Variable(variant.name), params.map {
+          case (param, mode) => (Term.Variable(param.name), mode)
+        })
+      }
+    }.toList)
+    val enumFunc = function(params, enumFuncBody, Some(Term.Universe(0)))
+
+    variants.flatMap(_.definitions).toSeq :+ Term.Let(enumName, None, enumFunc)
+  }
+
 
   // Pattern
 
@@ -251,13 +332,28 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern] {
     val name = ctx.ident.getText
     val implicitParams = ctx.implicitParamList.getParams
     val explicitParams = ctx.explicitParamList.getParams
+
+    if ctx.Identifier == null then { // this is an operator definition
+      val operator = getOperator(name)
+      operator match {
+        case Operator.Unary(_, _) => if explicitParams.length != 1 then {
+          throw CompileErrorException(ctx, "Unary operator must have exactly one explicit parameter")
+        }
+        case Operator.Binary(_, _, _, _, _) => if explicitParams.length != 2 then {
+          throw CompileErrorException(ctx, "Binary operator must have exactly two explicit parameters")
+        }
+      }
+    }
+
     val returnType = ctx.returnType.visit
     val body = ctx.body.visit
     val params = implicitParams.map((_, ApplyMode.Implicit)) ++ explicitParams.map((_, ApplyMode.Explicit))
-    Term.Let(name, None, functionDefinition(params, body, Some(returnType)))
+    val func = function(params, body, Some(returnType))
+
+    Term.Let(name, func.asInstanceOf[Term.Function].getType, func)
   }
 
-  override def visitBinaryOperator(ctx: BinaryOperatorContext): Term = {
+  override def visitBinaryOperator(ctx: BinaryOperatorContext): Unit = {
     given ParserRuleContext = ctx
     val associativity = ctx.associativity.getText match {
       case "left-assoc" => Associativity.Left
@@ -267,61 +363,27 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern] {
     val tighterThan = precedenceDecl.flatMap(_.tighterThan.asScala).map(_.getText).toSet
     val looserThan = precedenceDecl.flatMap(_.looserThan.asScala).map(_.getText).toSet
     val sameAs = precedenceDecl.flatMap(_.sameAs.asScala).map(_.getText).toSet
-    val returnType = ctx.returnType.visit
-    val implicitParams = ctx.implicitParamList.getParams
-    val params = ctx.explicitParamList.getParams
-    if params.length != 2 then {
-      throw new IllegalArgumentException("Binary operator must have 2 parameters")
-    } else {
-      def getOperatorsByName(operators: Set[String]): Set[Operator.Binary] = {
-        operators.map { symbol =>
-          this.operators.get(symbol).flatMap {
-            case operator: Operator.Binary => Some(operator)
-            case _ => None
-          }.orNull {
-            throw new IllegalArgumentException(s"Undefined operator: ${symbol}")
-          }
-        }
-      }
-      // Register the operator
-      operators += ctx.symbol.getText -> Operator.Binary(
-        ctx.symbol.getText,
-        associativity,
-        getOperatorsByName(tighterThan),
-        getOperatorsByName(looserThan),
-        getOperatorsByName(sameAs),
-      )
-      // Define the function
-      val func = functionDefinition(
-        implicitParams.map((_, ApplyMode.Implicit)) ++ params.map((_, ApplyMode.Explicit)),
-        ctx.body.visit, Some(returnType),
-      )
-      Term.Let(ctx.symbol.getText, None, func)
-    }
+
+    // Register the operator
+    operators += ctx.symbol.getText -> Operator.Binary(
+      ctx.symbol.getText,
+      associativity,
+      tighterThan.map(getBinaryOperator),
+      looserThan.map(getBinaryOperator),
+      sameAs.map(getBinaryOperator),
+    )
   }
 
-  override def visitUnaryOperator(ctx: UnaryOperatorContext): Term = {
+  override def visitUnaryOperator(ctx: UnaryOperatorContext): Unit = {
     given ParserRuleContext = ctx
     val kind = ctx.kind.getText match {
       case "prefix" => UnaryType.Prefix
       case "postfix" => UnaryType.Postfix
     }
-    val returnType = ctx.returnType.visit
-    val implicitParams = ctx.implicitParamList.getParams
-    val params = ctx.explicitParamList.getParams
-    if params.length != 1 then {
-      throw new IllegalArgumentException("Unary operator must have 1 parameter")
-    } else {
-      operators += ctx.symbol.getText -> Operator.Unary(ctx.symbol.getText, kind)
-      val func = functionDefinition(
-        implicitParams.map((_, ApplyMode.Implicit)) ++ params.map((_, ApplyMode.Explicit)),
-        ctx.body.visit, Some(returnType),
-      )
-      Term.Let(ctx.symbol.getText, None, func)
-    }
+    operators += ctx.symbol.getText -> Operator.Unary(ctx.symbol.getText, kind)
   }
 
-  private def functionDefinition(
+  private def function(
     params: Seq[(BoundVariable, ApplyMode)], body: Term,
     returnType: Option[Term] = None,
   )(implicit ctx: ParserRuleContext): Term = {
@@ -333,6 +395,18 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern] {
         }
         case _ => Term.Function(variable, applyMode, term, returnType)
       }
+    }
+  }
+
+  private def funcApplication(func: Term, args: Seq[(Term, ApplyMode)])(implicit ctx: ParserRuleContext): Term = {
+    args.foldLeft(func) { case (acc, (arg, mode)) => Term.Application(acc, mode, arg) }
+  }
+
+  extension (self: Term.Function) {
+    // Get the type of the function, like String -> Int, not the return type
+    def getType: Option[Term] = self.returnType match {
+      case None => None
+      case Some(returnType) => Some(Term.FunctionType(self.param.`type`, self.applyMode, returnType)(self.span.context))
     }
   }
 
@@ -356,8 +430,6 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern] {
   }
 
   // Atom
-
-  override def visitAtomType(ctx: AtomTypeContext): Term = Term.Universe(0)(ctx)
 
   override def visitAtomIdentifier(ctx: AtomIdentifierContext): Term = Term.Variable(ctx.ident.getText)(ctx)
 

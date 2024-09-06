@@ -2,7 +2,7 @@ grammar Saki;
 
 /* Parser Rules */
 
-program: NL* (exprs+=expr (NL+ exprs+=expr)*)? NL* EOF;
+program: NL* (stmts+=stmt (NL+ stmts+=stmt)*)? NL* EOF;
 
 expr
     // Value
@@ -12,22 +12,17 @@ expr
     |   '^(' types+=expr ',' NL* types+=expr ')'                            # exprTupleType
     |   func=expr '(' NL* (args+=expr (',' NL* args+=expr)* ','?)? NL* ')'  # exprCall
     |   subject=expr '.' member=Identifier                                  # exprMemberAccess
-    |   record=expr '::' field=Identifier                                 # exprFieldProjection
-    |   '|' paramList '|' body=expr                                         # exprLambda
-    //|   lhs=expr rhs=expr                                                   # exprSeq
+    |   record=expr '#' field=Identifier                                    # exprFieldProjection
+    |   enum=Identifier ('[' implicitParamList=paramList ']')? ('(' explicitParamList=paramList ')')? '::' variant=Identifier # exprEnumValue
+    |   '|' paramList '|' '=>'? body=expr                                   # exprLambda
+    //|   lhs=expr rhs=expr                                                 # exprSeq
     |   block                                                               # exprBlock
     // Control
     |   'if' NL* cond=expr NL* 'then' NL* then=expr NL* 'else' NL* else=expr                    # exprIf
     |   'match' value=expr '{' NL* cases+=matchCase (NL+ cases+=matchCase)* NL* '}'                      # exprMatch
-    // Definition
-    |   'let' name=Identifier (':' type=expr) '=' NL* value=expr                           # exprLet
-    |   'instance' ':' type=expr '=' NL* value=expr     # exprInstance
-    |   definition                                              # exprDef
-    |   'impl' ('[' paramList ']')? expr '{' NL* (defs+=definition (NL+ defs+=definition)*)? NL* '}' # exprImpl
     // Types
     |   <assoc=right> lhs=expr '->' rhs=expr        # exprFunctionType
     |   <assoc=right> '<' lhs=expr '>' '->' rhs=expr        # exprFunctionTypeImplicit
-    |   'enum' '{' NL* variants+=enumVariant (NL+ variants+=enumVariant)* NL* '}'       # exprEnumType
     |   'record' (':' super=expr)? '{' NL* valueTypePair (NL+ valueTypePair)* NL* '}' # exprRecordType
     |   record=expr '@' '{' NL* fieldAssignment (NL+ fieldAssignment)* NL* '}' # exprRecord
     ;
@@ -48,29 +43,39 @@ patternRecordField
     :   ident=Identifier '=' value=pattern
     ;
 
+stmt
+    // Definition
+    :   expr                                                                    # stmtExpr
+    |   'let' name=Identifier (':' type=expr) '=' NL* value=expr                # stmtLet
+    |   'instance' ':' type=expr '=' NL* value=expr                             # stmtInstance
+    |   definition                                                              # stmtDef
+    |   'impl' ('[' paramList ']')? type=expr
+            '{' NL* (defs+=definition (NL+ defs+=definition)*)? NL* '}'         # stmtImpl
+    |   isOpen='open' 'enum' ident=Identifier
+            ('[' implicitParamList=paramList ']')? ('(' explicitParamList=paramList ')')?
+            '{' NL* variants+=enumVariant (NL+ variants+=enumVariant)* NL* '}'  # stmtEnum
+    |   operatorDeclaration                                                     # stmtOperator
+    ;
+
 block
-    :   '{' NL* (exprs+=expr (NL+ exprs+=expr)*)? NL* '}'
+    :   '{' NL* (stmts+=stmt (NL+ stmts+=stmt)*)? NL* '}'
     ;
 
 definition
-    :   'def' ident=Identifier ('[' implicitParamList=paramList ']')?
+    :   'def' ident=(Identifier|OptSymbol) ('[' implicitParamList=paramList ']')?
           ('(' explicitParamList=paramList ')')? ':' returnType=expr '=' NL* body=expr
     ;
 
-operatorDefinition
-    :   'def' 'binary' symbol=OptSymbol associativity=('left-assoc' | 'right-assoc')
-        ('<' NL* operatorPrecedence (',' NL* operatorPrecedence) NL* '>')?
-        ('[' implicitParamList=paramList ']')? '(' explicitParamList=paramList ')'
-        (':' returnType=expr)? '=' NL* body=expr   # binaryOperator
-    |   'def' 'unary' symbol=OptSymbol kind=('prefix' | 'postfix')
-        ('[' implicitParamList=paramList ']')? '(' explicitParamList=paramList ')'
-        (':' returnType=expr)? '=' NL* body=expr    # unaryOperator
+operatorDeclaration
+    :   'operator' 'binary' symbol=OptSymbol associativity=('left-assoc' | 'right-assoc')
+        ('{' NL* operatorPrecedence (NL+ operatorPrecedence) NL* '}')?  # binaryOperator
+    |   'operator' symbol=OptSymbol 'unary' kind=('prefix' | 'postfix') # unaryOperator
     ;
 
 operatorPrecedence
-    :   (   'tighter' tighterThan+=OptSymbol+
-        |   'looser' looserThan+=OptSymbol+
-        |   'same' sameAs+=OptSymbol+
+    :   (   'tighter-than' tighterThan+=OptSymbol+
+        |   'looser-than' looserThan+=OptSymbol+
+        |   'same-as' sameAs+=OptSymbol+
         )
     ;
 
@@ -82,13 +87,15 @@ atom
     :   literal             # atomLiteral
     |   ident=Identifier    # atomIdentifier
     |   op=OptSymbol         # atomOperator
-    |   '\'Type'            # atomType
+    ;
+
+enumVariantData
+    :   '(' NL* (elements+=expr (',' NL* elements+=expr)* ','?)? NL* ')'                # enumVariantDataTuple
+    |   '{' NL* (fields+=valueTypePair (',' NL* fields+=valueTypePair)* ','?)? NL* '}'  # enumVariantDataRecord
     ;
 
 enumVariant
-    :   Identifier                                                                  # enumVariantSimple
-    |   Identifier '(' NL* (elements+=expr (',' NL* elements+=expr)* ','?)? NL* ')'                     # enumVariantTuple
-    |   Identifier '{' NL* (fields+=valueTypePair (',' NL* fields+=valueTypePair)* ','?)? NL* '}'   # enumVariantRecord
+    :   ident=Identifier data=enumVariantData?
     ;
 
 valueTypePair
@@ -126,7 +133,7 @@ Colon: ':';
 
 OptSymbol: [+\-/*<>=&!^%#:]+;
 
-Identifier: '_' | [a-zA-Z][a-zA-Z0-9_]*[']?;
+Identifier: '_' | ['a-zA-Z][a-zA-Z0-9_]*[']?;
 
 // Whitespaces
 Whitespace: [ \t\r]+ -> skip;
