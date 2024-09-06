@@ -2,7 +2,7 @@ package saki.syntax
 
 import org.antlr.v4.runtime.ParserRuleContext
 import saki.*
-import saki.SourceSpan
+import util.*
 
 enum PrimitiveValue {
   case UnitValue

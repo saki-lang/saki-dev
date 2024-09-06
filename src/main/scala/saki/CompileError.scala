@@ -1,6 +1,7 @@
 package saki
 
 import org.antlr.v4.runtime.ParserRuleContext
+import util.*
 
 case class CompileError(message: String, span: SourceSpan, file: Option[String]) {
   override def toString: String = s"CompileError: $message at $span"

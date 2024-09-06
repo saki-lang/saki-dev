@@ -3,32 +3,52 @@ package saki
 import org.antlr.v4.runtime.ParserRuleContext
 import saki.grammar.SakiParser.*
 import saki.grammar.SakiBaseVisitor
-import saki.syntax.{Term, *}
+import saki.syntax.*
 import saki.syntax.PrimitiveValue.*
 import saki.optparser.*
 import saki.syntax.Term.Universe
+import util.*
 
 import scala.jdk.CollectionConverters.*
 
 class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern | Unit] {
 
-  var operators: Map[String, Operator] = Map.empty
+  var symbols: ScopedMap[String, Operator | String] = ScopedMap.empty
 
   private def getBinaryOperator(symbol: String)(implicit ctx: ParserRuleContext): Operator.Binary = {
-    this.operators.get(symbol) match {
+    this.symbols.get(symbol) match {
       case Some(operator: Operator.Binary) => operator
-      case Some(operator: Operator.Unary) => {
-        throw CompileErrorException(ctx, s"Expected binary operator, found unary operator: ${symbol}")
-      }
+      case Some(operator: Operator.Unary) => throw CompileErrorException(ctx, s"Expected binary operator, found unary operator: ${symbol}")
+      case Some(symbol) => throw CompileErrorException(ctx, s"Expected binary operator, found non-operator: ${symbol}")
       case None => throw CompileErrorException(ctx, s"Undeclared operator: ${symbol}")
     }
   }
 
   private def getOperator(symbol: String)(implicit ctx: ParserRuleContext): Operator = {
-    this.operators.get(symbol) match {
-      case Some(operator) => operator
+    this.symbols.get(symbol) match {
+      case Some(operator: Operator) => operator
+      case Some(symbol) => throw CompileErrorException(ctx, s"Expected operator, found non-operator: ${symbol}")
       case None => throw CompileErrorException(ctx, s"Undeclared operator: ${symbol}")
     }
+  }
+
+  private def registerSymbol(symbol: String, subject: Operator | Option[Nothing] = None)(
+    implicit ctx: ParserRuleContext
+  ): Unit = subject match {
+    case operator: Operator => { // Operator can only be declared once
+      if this.symbols.contains(symbol) then {
+        throw CompileErrorException(ctx, s"Operator redeclaration: ${symbol}")
+      }
+      this.symbols += symbol -> operator
+    }
+    case _ => this.symbols += symbol -> symbol
+  }
+
+  private def withInScope[T](block: => T): T = {
+    this.symbols = this.symbols.enter
+    val result = block
+    this.symbols = this.symbols.exit
+    result
   }
 
   override def visitProgram(ctx: ProgramContext): Seq[Term] = {
@@ -116,7 +136,7 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern | Unit] {
 
   // override def visitExprSeq(ctx: ExprSeqContext): Term = ???
 
-  override def visitExprBlock(ctx: ExprBlockContext): Term = {
+  override def visitExprBlock(ctx: ExprBlockContext): Term = withInScope {
     given ParserRuleContext = ctx
     val statements = ctx.block.stmts.asScala.map(_.visit)
     Term.CodeBlock(statements.flatMap {
@@ -365,13 +385,13 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern | Unit] {
     val sameAs = precedenceDecl.flatMap(_.sameAs.asScala).map(_.getText).toSet
 
     // Register the operator
-    operators += ctx.symbol.getText -> Operator.Binary(
+    registerSymbol(ctx.symbol.getText, Operator.Binary(
       ctx.symbol.getText,
       associativity,
       tighterThan.map(getBinaryOperator),
       looserThan.map(getBinaryOperator),
       sameAs.map(getBinaryOperator),
-    )
+    ))
   }
 
   override def visitUnaryOperator(ctx: UnaryOperatorContext): Unit = {
@@ -380,7 +400,7 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern | Unit] {
       case "prefix" => UnaryType.Prefix
       case "postfix" => UnaryType.Postfix
     }
-    operators += ctx.symbol.getText -> Operator.Unary(ctx.symbol.getText, kind)
+    registerSymbol(ctx.symbol.getText, Operator.Unary(ctx.symbol.getText, kind))
   }
 
   private def function(
