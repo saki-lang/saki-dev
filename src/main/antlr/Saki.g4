@@ -11,8 +11,7 @@ expr
     |   '\'(' elements+=expr ',' NL* elements+=expr ')'                     # exprTuple
     |   '^(' types+=expr ',' NL* types+=expr ')'                            # exprTupleType
     |   func=expr '(' NL* (args+=expr (',' NL* args+=expr)* ','?)? NL* ')'  # exprCall
-    |   subject=expr '.' member=Identifier                                  # exprMemberAccess
-    |   record=expr '#' field=Identifier                                    # exprFieldProjection
+    |   subject=expr '.' field=Identifier                                   # exprProjection
     |   enum=Identifier ('[' implicitParamList=paramList ']')? ('(' explicitParamList=paramList ')')? '::' variant=Identifier # exprEnumValue
     |   '|' paramList '|' '=>'? body=expr                                   # exprLambda
     //|   lhs=expr rhs=expr                                                 # exprSeq

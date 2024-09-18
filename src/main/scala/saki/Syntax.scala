@@ -41,7 +41,7 @@ enum Term(val span: SourceSpan) {
   case Variable(name: String)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
   case PrimitiveValue(value: syntax.PrimitiveValue)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
   case Application(function: Term, applyMode: ApplyMode, argument: Term)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
-  case FieldProjection(record: Term, fieldName: String)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
+  case Projection(record: Term, fieldName: String)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
   case Function(param: BoundVariable, applyMode: ApplyMode, body: Term, returnType: Option[Term])(implicit ctx: ParserRuleContext) extends Term(ctx.span)
   case FunctionType(paramType: Term, applyMode: ApplyMode, returnType: Term)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
   case CodeBlock(statements: Seq[Term])(implicit ctx: ParserRuleContext) extends Term(ctx.span)
@@ -58,7 +58,7 @@ enum Term(val span: SourceSpan) {
     case Variable(name) => s"(var $span $name)"
     case Term.PrimitiveValue(value) => s"(prim $span $value)"
     case Application(function, applyMode, argument) => s"(apply $span $function $applyMode $argument)"
-    case FieldProjection(record, fieldName) => s"(proj $span $record $fieldName)"
+    case Projection(record, fieldName) => s"(proj $span $record $fieldName)"
     case Function(param, applyMode, body, returnType) => {
       val paramString = s"(bind ${param.name} ${param.`type`})"
       val returnTypeStr = returnType.map(_.toString).getOrElse("undef")

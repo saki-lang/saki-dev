@@ -65,8 +65,7 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern | Unit] {
       case ctx: ExprAtomContext => visitExprAtom(ctx)
       case ctx: ExprParenContext => visitExprParen(ctx)
       case ctx: ExprCallContext => visitExprCall(ctx)
-      case ctx: ExprMemberAccessContext => visitExprMemberAccess(ctx)
-      case ctx: ExprFieldProjectionContext => visitExprFieldProjection(ctx)
+      case ctx: ExprProjectionContext => visitExprProjection(ctx)
       case ctx: ExprTupleTypeContext => visitExprTupleType(ctx)
       case ctx: ExprTupleContext => visitExprTuple(ctx)
       case ctx: ExprLambdaContext => visitExprLambda(ctx)
@@ -113,18 +112,11 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern | Unit] {
     args.foldLeft(func) { (acc, arg) => Term.Application(acc, ApplyMode.Explicit, arg) }
   }
 
-  override def visitExprMemberAccess(ctx: ExprMemberAccessContext): Term = {
+  override def visitExprProjection(ctx: ExprProjectionContext): Term = {
     given ParserRuleContext = ctx
     val subject: Term = ctx.subject.visit
-    val member: String = ctx.member.getText
-    Term.Application(Term.Variable(member), ApplyMode.Explicit, subject)
-  }
-
-  override def visitExprFieldProjection(ctx: ExprFieldProjectionContext): Term = {
-    given ParserRuleContext = ctx
-    val record: Term = ctx.record.visit
     val field: String = ctx.field.getText
-    Term.FieldProjection(record, field)
+    Term.Projection(subject, field)
   }
 
   override def visitExprLambda(ctx: ExprLambdaContext): Term = {
