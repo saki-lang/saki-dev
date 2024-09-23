@@ -4,16 +4,34 @@ import saki.fail
 
 import scala.annotation.targetName
 
+case class Context(
+  values: Map[String, Value] = Map.empty,
+  types: Map[String, Value] = Map.empty,
+) {
+  def names: Set[String] = this.values.keySet
+
+  def addVariable(name: String, `type`: Value): Context = {
+    val value = Value.Neutral(NeutralValue.Variable(name))
+    this.copy(values = this.values + (name -> value), types = this.types + (name -> `type`))
+  }
+
+  @targetName("addVariable")
+  def +(entry: (String, Value)): Context = this.addVariable(entry._1, entry._2)
+
+}
+
 case class TypeTerm(`type`: Expr) {
   def expr: Expr = this.`type`
   def subst(name: String, substTo: Expr): TypeTerm = TypeTerm(this.`type`.subst(name, substTo))
-  def normalize: TypeTerm = TypeTerm(this.`type`.normalize)
+  def normalize(implicit ctx: Context): TypeTerm = TypeTerm(this.`type`.normalize)
   def alphaEquivalent(other: TypeTerm, boundVariables: Map[String, String]): Boolean = {
     this.`type`.alphaEquivalent(other.`type`, boundVariables)
   }
+  def eval(implicit ctx: Context): Value = this.`type`.eval
 }
 
-type Env = Map[String, Expr]
+type ExprEnv = Map[String, Expr]
+type ValueEnv = Map[String, Value]
 
 enum Expr {
   case Variable(name: String)
@@ -24,36 +42,41 @@ enum Expr {
 
   def toType: TypeTerm = TypeTerm(this)
 
-  def inferType(implicit env: Map[String, Expr]): TypeTerm = this match {
-    case Variable(name) => env(name).toType
-    case Type(level) => TypeTerm(Type(level + 1))
+  def inferType(implicit ctx: Context): Value = this match {
+    case Variable(name) => ctx.types(name)
+    case Type(level) => Value.Type(level)
     case FuncType(paramName, paramType, returnType) => {
-      val paramTypeUniverse = paramType.expr.universeLevel(env)
-      // add param to env
-      given Env = env + (paramName -> paramType.expr)
-      // infer returnType
+      val paramTypeUniverse = paramType.expr.universeLevel(ctx)
+      // add param to the context
+      given Context = ctx + (paramName -> paramType.eval(ctx))
+      // infer returnType type with param in the context
       val returnTypeUniverse = returnType.expr.universeLevel
       // return type level is max of param and returnType
-      TypeTerm(Type(paramTypeUniverse.max(returnTypeUniverse)))
+      Value.Type(paramTypeUniverse.max(returnTypeUniverse))
     }
     case Lambda(paramName, paramType, body) => {
-      val paramTypeUniverse = paramType.expr.universeLevel(env)
-      given Env = env + (paramName -> paramType.expr)
-      val returnTypeUniverse = body.inferType.expr.universeLevel
-      TypeTerm(Type(paramTypeUniverse.max(returnTypeUniverse)))
+      val _ = paramType.expr.universeLevel(ctx) // check if paramType is a type
+      val paramTypeValue = paramType.eval(ctx)
+      // add param to the context
+      given newCtx: Context = ctx + (paramName -> paramType.eval(ctx))
+      val returnTypeValue = body.inferType
+      val returnTypeExpr = returnTypeValue.toExpr
+      Value.FuncType(paramTypeValue, arg => {
+        returnTypeExpr.eval(newCtx + (paramName -> arg))
+      })
     }
     case Application(func, arg) => {
-      val funcType: Expr = func.inferType(env).expr
-      val argType: Expr = arg.inferType(env).expr
-      funcType.normalize match {
-        case FuncType(paramName, paramType, returnType) => {
-          if (paramType.expr == argType) {
-            returnType.subst(paramName, arg)
+      val funcType: Value = func.inferType
+      val argType: Value = arg.inferType
+      funcType match {
+        case Value.FuncType(paramType, returnTypeClosure) => {
+          if paramType.alphaEquals(ctx, argType) then {
+            returnTypeClosure(arg.eval)
           } else {
-            throw new Exception("Type mismatch")
+            fail(s"Type mismatch: $paramType != $argType")
           }
         }
-        case _ => throw new Exception("Not a function")
+        case _ => fail("Not a function")
       }
     }
   }
@@ -68,9 +91,9 @@ enum Expr {
     case _ => throw new Exception("Not a type")
   }
 
-  def universeLevel(implicit env: Env): Int = {
-    this.inferType(env).normalize.expr match {
-      case Type(level) => level
+  def universeLevel(implicit ctx: Context): Int = {
+    this.inferType match {
+      case Value.Type(level) => level
       case _ => throw new Exception("Not a type")
     }
   }
@@ -110,24 +133,7 @@ enum Expr {
     case Application(func, arg) => func.isVariableOccurred(name) || arg.isVariableOccurred(name)
   }
 
-  def normalize: Expr = this match {
-    case Variable(_) => this
-    case Type(_) => this
-    case FuncType(paramName, paramType, returnType) => {
-      FuncType(paramName, paramType.normalize, returnType.normalize)
-    }
-    case Lambda(paramName, paramType, body) => {
-      Lambda(paramName, paramType.normalize, body.normalize)
-    }
-    case Application(func, arg) => {
-      func.normalize match {
-        case Lambda(paramName, paramType, body) => {
-          body.subst(paramName, arg).normalize
-        }
-        case func => Application(func, arg.normalize)
-      }
-    }
-  }
+  def normalize(implicit ctx: Context): Expr = this.eval.toExpr
 
   def alphaEquivalent(other: Expr, boundVariables: Map[String, String]): Boolean = (this, other) match {
     case (Variable(name1), Variable(name2)) => boundVariables.get(name1) match {
@@ -149,10 +155,86 @@ enum Expr {
     case _ => false
   }
 
-  @targetName("alphaEquals")
   def ===(other: Expr): Boolean = {
-    this.normalize.alphaEquivalent(other.normalize, Map.empty)
+    this.alphaEquivalent(other, Map.empty)
+  }
+
+  def eval(implicit ctx: Context): Value = this match {
+    case Variable(name) => ctx.values(name)
+    case Type(level) => Value.Type(level)
+    case FuncType(paramName, paramType, returnType) => {
+      Value.FuncType(paramType.eval, (arg: Value) => {
+        given Context = ctx + (paramName -> arg)
+        returnType.eval
+      })
+    }
+    case Lambda(paramName, paramType, body) => {
+      Value.Lambda(paramType.eval, (arg: Value) => {
+        given Context = ctx + (paramName -> arg)
+        body.eval
+      })
+    }
+    case Application(func, arg) => {
+      val funcValue = func.eval
+      val argValue = arg.eval
+      funcValue match {
+        case Value.Lambda(paramType, bodyClosure) => bodyClosure(argValue)
+        case Value.Neutral(funcNeutral) => Value.Neutral(NeutralValue.Application(funcNeutral, argValue))
+        case _ => fail("Not a function")
+      }
+    }
   }
 }
 
+enum Value {
+  case Neutral(neutral: NeutralValue)
+  case Type(level: Int)
+  case FuncType(paramType: Value, returnTypeClosure: Value => Value)
+  case Lambda(paramType: Value, bodyClosure: Value => Value)
 
+  private def generateName(implicit ctx: Context, prefix: String): String = {
+    // prefix + "0", "1", ...
+    Iterator.from(0).map(i => s"$prefix$i").find(!ctx.names.contains(_)).get
+  }
+
+  def toExpr(implicit ctx: Context): Expr = this match {
+    case Neutral(neutral) => neutral.toExpr
+    case Type(level) => Expr.Type(level)
+    case FuncType(paramType, returnTypeClosure) => {
+      val paramName = generateName(ctx, "dep_")
+      val paramValue = NeutralValue.Variable(paramName).toValue
+      Expr.FuncType(
+        paramName,
+        paramType = TypeTerm(paramType.toExpr),
+        returnType = TypeTerm(
+          returnTypeClosure(paramValue).toExpr(ctx + (paramName -> paramValue))
+        )
+      )
+    }
+    case Lambda(paramType, bodyClosure) => {
+      val paramName = generateName(ctx, "param_")
+      val paramValue = NeutralValue.Variable(paramName).toValue
+      Expr.Lambda(
+        paramName,
+        paramType = TypeTerm(paramType.toExpr),
+        body = bodyClosure(paramValue).toExpr(ctx + (paramName -> paramValue))
+      )
+    }
+  }
+
+  def alphaEquals(implicit ctx: Context, other: Value): Boolean = {
+    this.toExpr === other.toExpr
+  }
+}
+
+enum NeutralValue {
+  case Variable(name: String)
+  case Application(func: NeutralValue, arg: Value)
+
+  def toValue: Value = Value.Neutral(this)
+
+  def toExpr(implicit ctx: Context): Expr = this match {
+    case Variable(name) => Expr.Variable(name)
+    case Application(func, arg) => Expr.Application(func.toExpr, arg.toExpr)
+  }
+}
