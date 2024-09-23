@@ -1,7 +1,6 @@
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
-import saki.Visitor
 import saki.grammar.{SakiLexer, SakiParser}
-import saki.syntax.Term
+import saki.surface.{Term, Visitor}
 
 val exampleCode =
 """

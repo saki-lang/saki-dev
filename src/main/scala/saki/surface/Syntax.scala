@@ -1,10 +1,9 @@
-package saki.syntax
+package saki.surface
 
 import org.antlr.v4.runtime.ParserRuleContext
-import saki.*
 import util.*
 
-enum PrimitiveValue {
+enum LiteralValue {
   case UnitValue
   case BoolValue(value: Boolean)
   case IntValue(value: Int)
@@ -39,7 +38,7 @@ enum ApplyMode {
 enum Term(val span: SourceSpan) {
 
   case Variable(name: String)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
-  case PrimitiveValue(value: syntax.PrimitiveValue)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
+  case PrimitiveValue(value: LiteralValue)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
   case Application(function: Term, applyMode: ApplyMode, argument: Term)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
   case Projection(record: Term, fieldName: String)(implicit ctx: ParserRuleContext) extends Term(ctx.span)
   case Function(param: BoundVariable, applyMode: ApplyMode, body: Term, returnType: Option[Term])(implicit ctx: ParserRuleContext) extends Term(ctx.span)
@@ -109,7 +108,7 @@ object MatchCase {
 }
 
 enum Pattern(val span: SourceSpan) {
-  case Literal(value: PrimitiveValue)(implicit ctx: ParserRuleContext) extends Pattern(ctx.span)
+  case Literal(value: LiteralValue)(implicit ctx: ParserRuleContext) extends Pattern(ctx.span)
   case Variable(name: String)(implicit ctx: ParserRuleContext) extends Pattern(ctx.span)
   case Variant(name: String, pattern: Seq[Pattern])(implicit ctx: ParserRuleContext) extends Pattern(ctx.span)
   case Record(fields: Seq[(String, Pattern)], `type`: Option[Term])(implicit ctx: ParserRuleContext) extends Pattern(ctx.span)

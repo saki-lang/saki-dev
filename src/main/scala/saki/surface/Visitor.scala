@@ -1,12 +1,11 @@
-package saki
+package saki.surface
 
 import org.antlr.v4.runtime.ParserRuleContext
-import saki.grammar.SakiParser.*
+import saki.CompileErrorException
 import saki.grammar.SakiBaseVisitor
-import saki.syntax.*
-import saki.syntax.PrimitiveValue.*
-import saki.optparser.*
-import saki.syntax.Term.Universe
+import saki.grammar.SakiParser.*
+import LiteralValue.*
+import Term.Universe
 import util.*
 
 import scala.jdk.CollectionConverters.*
@@ -297,13 +296,13 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern | Unit] {
     given ParserRuleContext = ctx
     val valueString = ctx.literal.getText
     val value = ctx.literal match {
-      case _: LiteralBoolContext => PrimitiveValue.BoolValue(valueString.toBoolean)
-      case _: LiteralCharContext => PrimitiveValue.CharValue(valueString.charAt(1))
-      case _: LiteralFloatContext => PrimitiveValue.FloatValue(valueString.toFloat)
-      case _: LiteralIntContext => PrimitiveValue.IntValue(valueString.toInt)
-      case _: LiteralRegularStringContext => PrimitiveValue.StringValue(valueString.substring(1, valueString.length - 1))
+      case _: LiteralBoolContext => LiteralValue.BoolValue(valueString.toBoolean)
+      case _: LiteralCharContext => LiteralValue.CharValue(valueString.charAt(1))
+      case _: LiteralFloatContext => LiteralValue.FloatValue(valueString.toFloat)
+      case _: LiteralIntContext => LiteralValue.IntValue(valueString.toInt)
+      case _: LiteralRegularStringContext => LiteralValue.StringValue(valueString.substring(1, valueString.length - 1))
       case _: LiteralRawStringContext => {
-        PrimitiveValue.StringValue(valueString.stripPrefix("#").stripPrefix("{").stripSuffix("}"))
+        LiteralValue.StringValue(valueString.stripPrefix("#").stripPrefix("{").stripSuffix("}"))
       }
     }
     Pattern.Literal(value)

@@ -23,3 +23,7 @@ object CompileErrorException {
     new CompileErrorException(Seq(CompileError(context, message)))
   }
 }
+
+def TODO(message: String = ""): Nothing = throw new Exception(s"TODO: $message")
+
+def fail(message: String): Nothing = throw new Exception(message)

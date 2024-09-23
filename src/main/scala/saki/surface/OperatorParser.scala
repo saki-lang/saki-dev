@@ -1,4 +1,4 @@
-package saki.optparser
+package saki.surface
 
 import scala.annotation.targetName
 import scala.collection.mutable
