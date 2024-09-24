@@ -4,9 +4,11 @@ import org.antlr.v4.runtime.ParserRuleContext
 import saki.CompileErrorException
 import saki.grammar.SakiBaseVisitor
 import saki.grammar.SakiParser.*
-import LiteralValue.*
 import Term.Universe
 import util.*
+
+import saki.core.Literal as LiteralValue
+import saki.core.Literal.*
 
 import scala.jdk.CollectionConverters.*
 

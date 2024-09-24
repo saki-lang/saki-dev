@@ -2,24 +2,9 @@ package saki.surface
 
 import org.antlr.v4.runtime.ParserRuleContext
 import util.*
+import saki.core
 
-enum LiteralValue {
-  case UnitValue
-  case BoolValue(value: Boolean)
-  case IntValue(value: Int)
-  case FloatValue(value: Float)
-  case CharValue(value: Char)
-  case StringValue(value: String)
-
-  override def toString: String = this match {
-    case UnitValue => "unit"
-    case BoolValue(value) => value.toString
-    case IntValue(value) => value.toString + 'i'
-    case FloatValue(value) => value.toString + 'f'
-    case CharValue(value) => s"'${value.toString}'"
-    case StringValue(value) => s""""$value""""
-  }
-}
+type LiteralValue = core.Literal
 
 case class BoundVariable(name: String, `type`: Term)
 
