@@ -25,5 +25,3 @@ object CompileErrorException {
 }
 
 def TODO(message: String = ""): Nothing = throw new Exception(s"TODO: $message")
-
-def fail(message: String): Nothing = throw new Exception(message)

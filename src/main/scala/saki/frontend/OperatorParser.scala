@@ -1,4 +1,4 @@
-package saki.surface
+package saki.frontend
 
 import scala.annotation.targetName
 import scala.collection.mutable
