@@ -124,29 +124,34 @@ enum Value {
 type Type = Value
 
 object Value {
-  def stuckLocal(level: VarLevel): Value.Neutral = Neutral(Head.Var(level), List.empty)
+  def stuckLocal(level: Level): Value.Neutral = Neutral(Head.Var(level), List.empty)
 }
 
-opaque type VarLevel = Int
-opaque type MetaLevel = Int
+opaque type Index = Int
+opaque type Level = Int
 
-object VarLevel {
-  val zero: VarLevel = 0
-  def apply(level: Int): VarLevel = level
+object Index {
+  val zero: Level = 0
+  def apply(index: Int): Index = index
 }
 
-extension (level: VarLevel) {
-  def increment: VarLevel = level + 1
+extension (level: Level) {
+  def increment: Level = level + 1
   def value: Int = level
   @targetName("plus")
-  def +(offset: VarLevel): VarLevel = level + offset
+  def +(offset: Level): Level = level + offset
   @targetName("minus")
-  def -(offset: VarLevel): VarLevel = level - offset
+  def -(offset: Level): Level = level - offset
+  def toIndex(implicit ctx: Context): Index = ctx.level - level - 1
 }
 
-object MetaLevel {
-  val zero: MetaLevel = 0
-  def apply(level: Int): MetaLevel = level
+extension (index: Index) {
+  def toLevel(implicit ctx: Context): Level = ctx.level - index - 1
+}
+
+object Level {
+  val zero: Level = 0
+  def apply(level: Int): Level = level
 }
 
 enum Head {
@@ -161,7 +166,7 @@ enum Head {
    * makes them ideal for representing values. We'll convert these back into
    * indices during read-back.
    */
-  case Var(level: VarLevel)
+  case Var(level: Level)
 
   /**
    * Metavariable index.
@@ -170,12 +175,12 @@ enum Head {
    * eventually fill in during elaboration. They can also be used to stand for
    * 'holes' in the concrete syntax, to support type-directed editing.
    */
-  case Meta(index: MetaLevel)
+  case Meta(level: Level)
 
   // also known as `quote` in other implementations
   def toExpr(implicit ctx: Context): CoreExpr = this match {
-    case Var(varLevel) => CoreExpr.Variable(ctx.level - varLevel - VarLevel(1))
-    case Meta(index) => CoreExpr.Meta(index)
+    case Var(varLevel) => CoreExpr.Variable(varLevel.toIndex)
+    case Meta(level) => CoreExpr.Meta(level)
   }
 }
 

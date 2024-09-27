@@ -4,8 +4,8 @@ trait CoreSyntax
 enum CoreExpr extends CoreSyntax {
   case Primitive(value: Literal)
   case PrimitiveType(`type`: LiteralType)
-  case Variable(index: VarLevel)
-  case Meta(level: MetaLevel)
+  case Variable(index: Index)
+  case Meta(level: Level)
   case Universe(level: Int)
   case Let(name: String, value: CoreExpr, body: CoreExpr)
   case Pi(paramName: String, paramType: CoreExpr, returnType: CoreExpr)
