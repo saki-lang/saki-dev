@@ -8,8 +8,8 @@ object Normalize {
   type RenameMap = Map[Var.Local, Var.Local]
 
   extension (ctx: Context) {
-    def withParam[R](param: Var.Local)(body: Context => R): R = {
-      body(ctx + (param -> Term.Ref(param)))
+    private def withParam[R](param: Var.Local)(action: Context => R): R = {
+      action(ctx + (param -> Term.Ref(param)))
     }
   }
   
@@ -37,9 +37,9 @@ object Normalize {
       }
 
       case Term.FunctionCall(fnRef, args) => {
-        val fn = fnRef.definition
+        val fn = fnRef.definition.get
         val argsNorm = args.map(_.normalize(ctx))
-        given Context = fn.telescopeVars.zip(argsNorm).foldLeft(ctx) {
+        given Context = fn.arguments.zip(argsNorm).foldLeft(ctx) {
           case (acc, (param, arg)) => acc + (param -> arg)
         }
         fn.body.fold( // Either[Term, Pattern.ClauseSet[Term]]
@@ -90,12 +90,12 @@ extension (self: Term) {
     }
 
     case Term.Pi(param, codomain) => {
-      val withParam: RenameMap = map + (param -> Var.Local(param.name))
+      val withParam: RenameMap = map + (param.ident -> Var.Local(param.name))
       Term.Pi(param, codomain.rename(withParam))
     }
 
     case Term.Sigma(param, codomain) => {
-      val withParam: RenameMap = map + (param -> Var.Local(param.name))
+      val withParam: RenameMap = map + (param.ident -> Var.Local(param.name))
       Term.Sigma(param, codomain.rename(withParam))
     }
 

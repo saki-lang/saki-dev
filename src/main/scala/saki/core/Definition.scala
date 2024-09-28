@@ -1,55 +1,53 @@
 package saki.core
 
-case class Param[Type](ident: Var.Local, `type`: Type)
+case class Param[Type](ident: Var.Local, `type`: Type) {
+  def name: String = ident.name
+}
 
-type Telescope[T] = Seq[Param[T]]
+type ParamList[T] = Seq[Param[T]]
 
 trait FnLike[T] {
-  def telescope: Telescope[T]
+  def params: ParamList[T]
   def resultType: T
-  def telescopeVars: Seq[Var.Local] = telescope.map(_.ident)
-  def telescopeRefs: Seq[Term.Ref] = telescopeVars.map(Term.Ref.apply)
+  def arguments: Seq[Var.Local] = params.map(_.ident)
 }
 
-enum Signature(telescope: Telescope[Term], result: Term) {
-  case Function(telescope: Telescope[Term], result: Term) extends Signature(telescope, result)
-  case Inductive(telescope: Telescope[Term], result: Term) extends Signature(telescope, result)
-  case Constructor(telescope: Telescope[Term], result: Term) extends Signature(telescope, result)
-  case Contract(telescope: Telescope[Term], result: Term) extends Signature(telescope, result)
+extension (arguments: Seq[Var.Local]) {
+  def refs: Seq[Term.Ref] = arguments.map(Term.Ref.apply)
 }
 
-enum Definition(ident: Var.Defined[? <: Definition]) extends FnLike[Term] {
+case class Signature(params: ParamList[Term], resultType: Type) extends FnLike[Term]
+
+enum Definition(val ident: Var.Defined[? <: Definition]) extends FnLike[Type] {
   case Function(
-    ident: Var.Defined[Function], telescope: Telescope[Term],
-    override val resultType: Term,
+    override val ident: Var.Defined[Function],
+    params: ParamList[Term],
+    override val resultType: Type,
     body: Either[Term, Pattern.ClauseSet[Term]],
   ) extends Definition(ident)
 
   case Inductive(
-    ident: Var.Defined[Inductive], telescope: Telescope[Term], constructors: Seq[Constructor],
+    override val ident: Var.Defined[Inductive],
+    params: ParamList[Term],
+    constructors: Seq[Constructor],
   ) extends Definition(ident)
 
   case Constructor(
-    ident: Var.Defined[Constructor], owner: Var.Defined[Inductive], telescope: Telescope[Term],
+    override val ident: Var.Defined[Constructor],
+    owner: Var.Defined[Inductive],
+    params: ParamList[Term],
   ) extends Definition(ident)
 
   case Contract(
-    ident: Var.Defined[Contract], telescope: Telescope[Term],
-    override val resultType: Term,
+    override val ident: Var.Defined[Contract],
+    params: ParamList[Term],
+    override val resultType: Type,
   ) extends Definition(ident)
 
-  def resultType: Term = this match {
+  def resultType: Type = this match {
     case Function(_, _, resultType, _) => resultType
     case Inductive(_, _, _) => Term.unitType
-    case Constructor(_, owner, _) => Term.InductiveCall(owner, owner.definition.telescopeRefs)
+    case Constructor(_, owner, _) => Term.InductiveCall(owner, owner.definition.get.arguments.refs)
     case Contract(_, _, resultType) => resultType
   }
-}
-
-object Definition {
-  sealed trait ConstructorExtension {
-    def owner: Var.Defined[Definition.Inductive]
-    def result: Term = ???
-  }
-
 }
