@@ -1,5 +1,8 @@
 package saki.core
 
+import saki.core
+import saki.core.pattern.{ClauseSet, Pattern, UnresolvedClause}
+
 case class Param[Type](ident: Var.Local, `type`: Type) {
   def name: String = ident.name
 }
@@ -23,7 +26,7 @@ enum Definition(val ident: Var.Defined[? <: Definition]) extends FnLike[Type] {
     override val ident: Var.Defined[Function],
     params: ParamList[Term],
     override val resultType: Type,
-    body: Either[Term, Pattern.ClauseSet[Term]],
+    body: Either[Term, ClauseSet[Term]],
   ) extends Definition(ident)
 
   case Inductive(
@@ -49,5 +52,39 @@ enum Definition(val ident: Var.Defined[? <: Definition]) extends FnLike[Type] {
     case Inductive(_, _, _) => Term.unitType
     case Constructor(_, owner, _) => Term.InductiveCall(owner, owner.definition.get.arguments.refs)
     case Contract(_, _, resultType) => resultType
+  }
+}
+
+enum PristineDefinition(
+  val ident: Var.Defined[? <: Definition], 
+  val params: ParamList[Expr]
+) {
+  case Function(
+    override val ident: Var.Defined[Definition.Function],
+    override val params: ParamList[Expr],
+    resultType: Expr,
+    body: PristineDefinition.FunctionBody,
+  ) extends PristineDefinition(ident, params)
+
+  case Inductive(
+    override val ident: Var.Defined[Definition.Inductive],
+    override val params: ParamList[Expr],
+  ) extends PristineDefinition(ident, params)
+
+  case Constructor(
+    override val ident: Var.Defined[Definition.Constructor],
+    owner: Var.Defined[Definition.Inductive],
+    override val params: ParamList[Expr],
+  ) extends PristineDefinition(ident, params)
+}
+
+object PristineDefinition {
+
+  private type CoreExpr = core.Expr
+
+  enum FunctionBody {
+    case Expr(body: CoreExpr)
+    case Clauses(clauses: ClauseSet[CoreExpr])
+    case UnresolvedClauses(clauses: Seq[UnresolvedClause])
   }
 }

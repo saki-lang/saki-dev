@@ -1,5 +1,7 @@
 package util
 
+import scala.annotation.targetName
+
 class ScopedMap[K, +V] private(
   private val stack: List[Map[K, V]] = List(Map.empty)
 ) extends Map[K, V] {
@@ -8,7 +10,8 @@ class ScopedMap[K, +V] private(
 
   def exit: ScopedMap[K, V] = if (stack.tail.isEmpty) this else new ScopedMap(stack.tail)
 
-  override def +[V1 >: V](kv: (K, V1)): ScopedMap[K, V1] = updated(kv._1, kv._2)
+  @targetName("plus")
+  def :+[V1 >: V](kv: (K, V1)): ScopedMap[K, V1] = updated(kv._1, kv._2)
 
   override def get(key: K): Option[V] = {
     stack.collectFirst { case map if map.contains(key) => map(key) }
@@ -28,4 +31,5 @@ class ScopedMap[K, +V] private(
 object ScopedMap {
   def empty[K, V]: ScopedMap[K, V] = ScopedMap()
   def apply[K, V](elems: (K, V)*): ScopedMap[K, V] = new ScopedMap(List(elems.toMap))
+  def apply[K, V](elems: Map[K, V]): ScopedMap[K, V] = new ScopedMap(List(elems))
 }

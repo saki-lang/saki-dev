@@ -1,6 +1,7 @@
 package saki.core
 
 import saki.core.Normalize.{Context, RenameMap}
+import saki.core.pattern.tryMatch
 
 object Normalize {
 
@@ -45,7 +46,7 @@ object Normalize {
         fn.body.fold( // Either[Term, Pattern.ClauseSet[Term]]
           term => term.normalize,
           pattern => {
-            PatternMatching.unfold(pattern, args).map(_.normalize).getOrElse(Term.FunctionCall(fnRef, argsNorm))
+            pattern.tryMatch(args).map(_.normalize).getOrElse(Term.FunctionCall(fnRef, argsNorm))
           }
         )
       }
