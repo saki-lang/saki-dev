@@ -1,6 +1,6 @@
-package saki.core.pattern
+package saki.core.syntax
 
-import saki.core.{Expr, Term, Var}
+import saki.core.typing.{Resolve, buildSubstMap}
 
 extension (clauses: Seq[Clause[Term]]) {
   /**

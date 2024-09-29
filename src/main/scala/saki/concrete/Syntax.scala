@@ -4,7 +4,7 @@ import org.antlr.v4.runtime.ParserRuleContext
 import util.*
 import saki.core
 
-type LiteralValue = core.Literal
+type LiteralValue = core.syntax.Literal
 
 case class BoundVariable(name: String, `type`: Term)
 

@@ -1,6 +1,7 @@
-package saki.core.pattern
+package saki.core.typing
 
-import saki.core.{Definition, Expr, Param, ParamList, PristineDefinition, TypeError, Var}
+import saki.core.TypeError
+import saki.core.syntax.*
 import util.SourceSpan
 
 object Resolve {

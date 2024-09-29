@@ -2,13 +2,11 @@ package saki.concrete
 
 import org.antlr.v4.runtime.ParserRuleContext
 import saki.CompileErrorException
+import saki.core.syntax.Literal as LiteralValue
+import saki.core.syntax.Literal.*
 import saki.grammar.SakiBaseVisitor
 import saki.grammar.SakiParser.*
-import Term.Universe
 import util.*
-
-import saki.core.Literal as LiteralValue
-import saki.core.Literal.*
 
 import scala.jdk.CollectionConverters.*
 

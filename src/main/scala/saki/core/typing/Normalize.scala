@@ -1,6 +1,6 @@
-package saki.core
+package saki.core.typing
 
-import saki.core.pattern.tryMatch
+import saki.core.syntax.*
 
 object Normalize {
 

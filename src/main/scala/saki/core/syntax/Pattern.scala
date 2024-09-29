@@ -1,6 +1,6 @@
-package saki.core.pattern
+package saki.core.syntax
 
-import saki.core.*
+import saki.core.typing.{Match, Resolve}
 import util.SourceSpan
 
 enum Pattern(val span: SourceSpan) {
@@ -29,11 +29,11 @@ enum Pattern(val span: SourceSpan) {
   }
 
   def buildSubstMap(term: Term): Option[Map[Var.Local, Term]] = {
-    PatternMatching.buildSubstMap(this, term)
+    Match.buildSubstMap(this, term)
   }
 
   def matchWith(term: Term): Map[Var.Local, Type] = {
-    PatternMatching.matchPattern(this, term)
+    Match.matchPattern(this, term)
   }
 }
 

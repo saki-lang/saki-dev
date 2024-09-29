@@ -1,4 +1,6 @@
-package saki.core
+package saki.core.typing
+
+import saki.core.syntax.Term
 
 private[core] object Unify {
 

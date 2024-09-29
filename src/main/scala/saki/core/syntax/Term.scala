@@ -1,6 +1,7 @@
-package saki.core
+package saki.core.syntax
 
-import saki.core.Normalize.{Context, RenameMap}
+import saki.core.typing.Normalize.{Context, RenameMap}
+import saki.core.typing.{Normalize, Unify}
 
 enum Var {
 

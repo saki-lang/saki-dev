@@ -1,8 +1,7 @@
-package saki.core
+package saki.core.syntax
 
-import saki.core
-import saki.core.Elaborate.Context
-import saki.core.pattern.{Clause, Resolve, UnresolvedClause}
+import saki.core.typing.Elaborate.Context
+import saki.core.typing.{Elaborate, Resolve}
 
 case class Param[Type](ident: Var.Local, `type`: Type) {
   def name: String = ident.name
@@ -94,7 +93,7 @@ enum PristineDefinition(
 
 object PristineDefinition {
 
-  private type CoreExpr = core.Expr
+  private type CoreExpr = Expr
 
   enum FunctionBody {
     case Expr(body: CoreExpr)

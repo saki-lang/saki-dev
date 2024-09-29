@@ -1,4 +1,4 @@
-package saki.core
+package saki.core.syntax
 
 enum Literal {
   case UnitValue

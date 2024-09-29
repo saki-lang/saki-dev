@@ -1,6 +1,7 @@
-package saki.core
+package saki.core.typing
 
-import saki.core.pattern.Clause
+import saki.core.TypeError
+import saki.core.syntax.*
 import util.unreachable
 
 private[core] object Elaborate {

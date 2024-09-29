@@ -1,8 +1,9 @@
-package saki.core.pattern
+package saki.core.typing
 
-import saki.core.*
+import saki.core.{PatternError, SizeError, TypeError}
+import saki.core.syntax.*
 
-private[core] object PatternMatching {
+private[core] object Match {
 
   def matchPattern(pattern: Pattern, `type`: Type): Map[Var.Local, Type] = pattern match {
 
@@ -75,6 +76,6 @@ private[core] object PatternMatching {
 
 extension (patterns: Seq[Pattern]) {
   def buildSubstMap(terms: Seq[Term]): Option[Map[Var.Local, Term]] = {
-    PatternMatching.buildSubstMap(patterns, terms)
+    Match.buildSubstMap(patterns, terms)
   }
 }

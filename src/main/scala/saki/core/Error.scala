@@ -1,6 +1,6 @@
 package saki.core
 
-import saki.core.pattern.Pattern
+import saki.core.syntax.{Pattern, Term}
 import util.SourceSpan
 
 trait Error {

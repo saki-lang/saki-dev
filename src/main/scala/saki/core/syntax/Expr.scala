@@ -1,6 +1,6 @@
-package saki.core
+package saki.core.syntax
 
-import saki.core.pattern.Resolve
+import saki.core.typing.{Elaborate, Resolve}
 import util.SourceSpan
 
 enum Expr(val span: SourceSpan) {
@@ -67,6 +67,6 @@ enum Expr(val span: SourceSpan) {
   def synth(implicit ctx: Elaborate.Context): Elaborate.Synth = Elaborate.synth(this)
 
   def elaborate(expected: Type)(implicit ctx: Elaborate.Context): Term = Elaborate.elaborate(this, expected)
-  
+
   def resolve(implicit ctx: Resolve.Context): Expr = Resolve.resolveExpr(this)
 }
