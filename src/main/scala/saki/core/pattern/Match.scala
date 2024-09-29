@@ -1,8 +1,8 @@
 package saki.core.pattern
 
-import saki.core.{Elaborate, Expr, Param, PatternError, SizeError, Term, Type, TypeError, Var}
+import saki.core.*
 
-object PatternMatching {
+private[core] object PatternMatching {
 
   def matchPattern(pattern: Pattern, `type`: Type): Map[Var.Local, Type] = pattern match {
 

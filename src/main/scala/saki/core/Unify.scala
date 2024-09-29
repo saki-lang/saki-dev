@@ -1,6 +1,6 @@
 package saki.core
 
-object Unify {
+private[core] object Unify {
 
   // TODO: Do we need to consider subtypes here?
   infix def unify(lhs: Term, rhs: Term): Boolean = (lhs, rhs) match {
@@ -49,15 +49,4 @@ object Unify {
 
     case _ => false
   }
-}
-
-extension (self: Term) {
-
-  def unify(that: Term): Boolean = Unify.unify(self, that)
-
-  /**
-   * Unify by eta conversion
-   * (λx. M) N ~> M[x := N]
-   */
-  private def etaUnify(lambda: Term.Lambda): Boolean = Unify.unify(lambda.body, self.apply(Term.Ref(lambda.param)))
 }

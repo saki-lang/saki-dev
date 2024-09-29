@@ -1,6 +1,5 @@
 package saki.core
 
-import saki.core.Normalize.{Context, RenameMap}
 import saki.core.pattern.tryMatch
 
 object Normalize {
@@ -73,15 +72,9 @@ object Normalize {
     }
     // end of normalizeTerm
   }
-  
-}
 
-extension (self: Term) {
-
-  def normalize(implicit ctx: Context): Term = Normalize.normalizeTerm(self, ctx)
-
-  def rename(implicit map: RenameMap): Term = self match {
-    case Term.Primitive(_) | Term.PrimitiveType(_) | Term.Universe => self
+  def renameTerm(term: Term)(implicit map: RenameMap): Term = term match {
+    case Term.Primitive(_) | Term.PrimitiveType(_) | Term.Universe => term
 
     case Term.Ref(variable) => Term.Ref(map.getOrElse(variable, variable))
 
@@ -116,4 +109,5 @@ extension (self: Term) {
 
     case Term.Projection(record, field) => Term.Projection(record.rename, field)
   }
+
 }

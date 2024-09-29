@@ -1,7 +1,8 @@
 package saki.core
 
 import saki.core
-import saki.core.pattern.{Clause, Pattern, UnresolvedClause}
+import saki.core.Elaborate.Context
+import saki.core.pattern.{Clause, Resolve, UnresolvedClause}
 
 case class Param[Type](ident: Var.Local, `type`: Type) {
   def name: String = ident.name
@@ -25,7 +26,7 @@ enum Definition(
   val ident: Var.Defined[? <: Definition],
   val signature: Signature,
 ) extends FnLike[Type] {
-  
+
   case Function(
     override val ident: Var.Defined[Function],
     override val signature: Signature,
@@ -85,6 +86,10 @@ enum PristineDefinition(
     owner: PristineDefinition.Constructor,
     override val params: ParamList[Expr],
   ) extends PristineDefinition(ident, params)
+
+  def resolve: PristineDefinition = Resolve.resolvePristineDefinition(this)
+
+  def synth(implicit ctx: Context): Definition = Elaborate.synthDefinition(this)
 }
 
 object PristineDefinition {
@@ -96,4 +101,5 @@ object PristineDefinition {
     case Clauses(clauses: Seq[Clause[CoreExpr]])
     case UnresolvedClauses(clauses: Seq[UnresolvedClause])
   }
+
 }

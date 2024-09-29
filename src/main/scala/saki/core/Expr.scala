@@ -1,5 +1,6 @@
 package saki.core
 
+import saki.core.pattern.Resolve
 import util.SourceSpan
 
 enum Expr(val span: SourceSpan) {
@@ -62,4 +63,10 @@ enum Expr(val span: SourceSpan) {
    * `Type` | `Type^1` | `Type^2` | ...
    */
   case Universe()(implicit span: SourceSpan) extends Expr(span)
+
+  def synth(implicit ctx: Elaborate.Context): Elaborate.Synth = Elaborate.synth(this)
+
+  def elaborate(expected: Type)(implicit ctx: Elaborate.Context): Term = Elaborate.elaborate(this, expected)
+  
+  def resolve(implicit ctx: Resolve.Context): Expr = Resolve.resolveExpr(this)
 }

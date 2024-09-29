@@ -1,5 +1,7 @@
 package saki.core
 
+import saki.core.Normalize.{Context, RenameMap}
+
 enum Var {
 
   case Defined[Def <: Definition](
@@ -16,9 +18,9 @@ enum Var {
 }
 
 extension (self: Var.Defined[?]) {
-  
+
   def signature: Signature = self.definition.get.signature
-  
+
   def call: Term = self.definition match {
     case Some(_: Definition.Function) =>
       Term.FunctionCall(self.asInstanceOf[Var.Defined[Definition.Function]],  self.signature.arguments.refs)
@@ -91,13 +93,21 @@ enum Term {
     case Lambda(param, body) => s"λ(${param.name}) => $body"
     case Projection(record, field) => s"$record.$field"
   }
+
+  def unify(that: Term): Boolean = Unify.unify(this, that)
+
+  /**
+   * Unify by eta conversion
+   * (λx. M) N ~> M[x := N]
+   */
+  def etaUnify(lambda: Term.Lambda): Boolean = Unify.unify(lambda.body, this.apply(Term.Ref(lambda.param)))
+
+  def normalize(implicit ctx: Context): Term = Normalize.normalizeTerm(this, ctx)
+
+  def rename(implicit map: RenameMap): Term = Normalize.renameTerm(this)
 }
 
 type Type = Term
-
-trait Typed {
-  def `type`: Type
-}
 
 extension (params: Seq[Param[Term]]) {
   def buildPiType(body: Term): Term = params.foldRight(body) {
@@ -107,10 +117,6 @@ extension (params: Seq[Param[Term]]) {
   def buildLambda(body: Term): Term = params.map(_.ident).foldRight(body) {
     case (param, body) => Term.Lambda(param, body)
   }
-}
-
-extension (self: Term.Pi) {
-  def codomainApplied(term: Term): Term = self.codomain.subst(self.param.ident, term)
 }
 
 object Term {

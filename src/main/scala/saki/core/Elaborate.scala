@@ -3,7 +3,7 @@ package saki.core
 import saki.core.pattern.Clause
 import util.unreachable
 
-object Elaborate {
+private[core] object Elaborate {
 
   case class Context(
     definitions: Map[Var.Defined[?], Definition],
@@ -22,7 +22,7 @@ object Elaborate {
     }
   }
 
-  private[core] def elaborate(expr: Expr, expectedType: Type)(implicit ctx: Context): Term = expr match {
+  def elaborate(expr: Expr, expectedType: Type)(implicit ctx: Context): Term = expr match {
     case Expr.Lambda(lambdaParam, body) => {
       // Check that expectedType is a Pi type
       expectedType.normalize(Map.empty) match {
@@ -48,7 +48,7 @@ object Elaborate {
     def normalize: Synth = copy(term = term.normalize(Map.empty), `type` = `type`.normalize(Map.empty))
   }
 
-  private[core] def synth(expr: Expr)(implicit ctx: Context): Synth = (expr match {
+  def synth(expr: Expr)(implicit ctx: Context): Synth = (expr match {
 
     case Expr.Universe() => Synth(Term.Universe, Term.Universe)
 
@@ -163,9 +163,4 @@ object Elaborate {
   def synthParams(paramExprs: Seq[Param[Expr]])(implicit ctx: Context): Seq[Param[Term]] = {
     paramExprs.map { param => Param(param.ident, param.`type`.elaborate(Term.Universe)) }
   }
-}
-
-extension (self: Expr) {
-  def synth(implicit ctx: Elaborate.Context): Elaborate.Synth = Elaborate.synth(self)
-  def elaborate(expected: Type)(implicit ctx: Elaborate.Context): Term = Elaborate.elaborate(self, expected)
 }

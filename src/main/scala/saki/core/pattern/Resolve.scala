@@ -1,29 +1,29 @@
 package saki.core.pattern
 
-import saki.core.{Expr, Param, ParamList, PristineDefinition, TypeError, Var}
+import saki.core.{Definition, Expr, Param, ParamList, PristineDefinition, TypeError, Var}
 import util.SourceSpan
 
-private[pattern] type ResolvingContext = Map[String, Var]
+object Resolve {
 
-extension (ctx: ResolvingContext) {
+  type Context = Map[String, Var]
 
-  def add(variable: Var): ResolvingContext = ctx + (variable.name -> variable)
-
-  def withVariable[R](variable: Var)(action: ResolvingContext => R): R = {
-    action(ctx.add(variable))
+  object Context {
+    def apply(): Resolve.Context = Map.empty
+    def apply(env: Map[String, Var]): Resolve.Context = env
+    def empty: Resolve.Context = Map.empty
   }
-}
 
-object ResolvingContext {
-  def apply(): ResolvingContext = Map.empty
-  def apply(env: Map[String, Var]): ResolvingContext = env
-  def empty: ResolvingContext = Map.empty
-}
+  extension (ctx: Context) {
+    def add(variable: Var): Resolve.Context = ctx + (variable.name -> variable)
 
-extension (self: Expr) {
-  def resolve(implicit ctx: ResolvingContext): Expr = {
-    given span: SourceSpan = self.span
-    self match {
+    def withVariable[R](variable: Var)(action: Resolve.Context => R): R = {
+      action(ctx.add(variable))
+    }
+  }
+
+  def resolveExpr(expr: Expr)(implicit ctx: Resolve.Context): Expr = {
+    given span: SourceSpan = expr.span
+    expr match {
 
       case Expr.Universe() => Expr.Universe()
       case Expr.Primitive(value) => Expr.Primitive(value)
@@ -57,26 +57,23 @@ extension (self: Expr) {
       case Expr.RecordType(fields) => Expr.RecordType(fields.view.mapValues(_.resolve).toMap)
     }
   }
-}
 
-extension (params: ParamList[Expr]) {
-  def resolve(ctx: ResolvingContext): (ParamList[Expr], ResolvingContext) = {
-    params.foldLeft((Seq.empty: ParamList[Expr], ctx)) {
-      case ((params, ctx), param) => {
-        val resolvedParam = Param(param.ident, param.`type`.resolve(ctx))
-        (params :+ resolvedParam, ctx.add(resolvedParam.ident))
+  extension (params: ParamList[Expr]) {
+    def resolve(ctx: Resolve.Context): (ParamList[Expr], Resolve.Context) = {
+      params.foldLeft((Seq.empty: ParamList[Expr], ctx)) {
+        case ((params, ctx), param) => {
+          val resolvedParam = Param(param.ident, param.`type`.resolve(ctx))
+          (params :+ resolvedParam, ctx.add(resolvedParam.ident))
+        }
       }
     }
   }
-}
 
-extension (self: PristineDefinition) {
-
-  private def resolve: PristineDefinition = {
-    var global: ResolvingContext = ResolvingContext.empty
+  def resolvePristineDefinition(pristineDefinition: PristineDefinition): PristineDefinition = {
+    var global: Resolve.Context = Resolve.Context.empty
 
     import PristineDefinition.FunctionBody
-    val resolvedDefinition: PristineDefinition = self match {
+    val resolvedDefinition: PristineDefinition = pristineDefinition match {
 
       case PristineDefinition.Function(ident, params, resultType, body) => {
         val (resolvedParams, ctxWithParam) = params.resolve(global)
@@ -113,4 +110,32 @@ extension (self: PristineDefinition) {
     resolvedDefinition
   }
 
+  def resolveUnresolvedPattern(
+    unresolvedPattern: UnresolvedPattern, span: SourceSpan
+  )(implicit ctx: Resolve.Context): (Pattern, Resolve.Context) = {
+    given SourceSpan = span
+    ctx.get(unresolvedPattern.name) match {
+      // If the variable is already defined, then it should be a constructor.
+      // TODO: literals and records
+      case Some(variable: Var.Defined[?]) if unresolvedPattern.patterns.nonEmpty => {
+        val (resolvedPatterns, updatedContext) = unresolvedPattern.patterns.foldLeft((List.empty[Pattern], ctx)) {
+          case ((resolvedPatterns, context), pattern) => {
+            val (resolved, newCtx) = pattern.resolve(context)
+            (resolvedPatterns :+ resolved, newCtx)
+          }
+        }
+        val pattern = Pattern.Cons(
+          cons = variable.asInstanceOf[Var.Defined[Definition.Constructor]],
+          patterns = resolvedPatterns
+        )
+        (pattern, updatedContext)
+      }
+
+      // Otherwise, it should be a new introduced variable.
+      case _ => {
+        val variable: Var.Local = Var.Local(unresolvedPattern.name)
+        (Pattern.Bind(variable), ctx.updated(unresolvedPattern.name, variable))
+      }
+    }
+  }
 }

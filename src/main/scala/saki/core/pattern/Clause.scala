@@ -20,10 +20,9 @@ extension (clauses: Seq[Clause[Term]]) {
  */
 case class Clause[T](patterns: Seq[Pattern], body: T)
 
-case class UnresolvedClause(patterns: Seq[Pattern.Unresolved], body: Expr) {
-
+case class UnresolvedClause(patterns: Seq[UnresolvedPattern], body: Expr) {
   def resolve(implicit env: Map[String, Var]): Clause[Expr] = {
-    val (resolvedPatterns, ctx) = this.patterns.foldLeft((List.empty[Pattern], ResolvingContext(env))) {
+    val (resolvedPatterns, ctx) = this.patterns.foldLeft((List.empty[Pattern], Resolve.Context(env))) {
       case ((resolvedPatterns, context), pattern) => {
         val (resolved, newCtx) = pattern.resolve(context)
         (resolvedPatterns :+ resolved, newCtx)
@@ -32,5 +31,4 @@ case class UnresolvedClause(patterns: Seq[Pattern.Unresolved], body: Expr) {
     val body = this.body.resolve(ctx)
     Clause(resolvedPatterns, body)
   }
-
 }
