@@ -7,35 +7,63 @@ program: NL* (stmts+=stmt (NL+ stmts+=stmt)*)? NL* EOF;
 expr
     // Value
     :   value=atom                                                          # exprAtom
-    |   '(' value=expr ')'                                                  # exprParen
+    |   func=expr '(' NL* argList NL* ')'                                   # exprCall
+    |   func=expr '[' NL* argList NL* ']'                                   # exprImplicitCall
+    |   '(' value=blockExpr ')'                                             # exprParen
     |   '\'(' elements+=expr ',' NL* elements+=expr ')'                     # exprTuple
     |   '^(' types+=expr ',' NL* types+=expr ')'                            # exprTupleType
-    |   func=expr '(' NL* (args+=expr (',' NL* args+=expr)* ','?)? NL* ')'  # exprCall
+    |   inductive=Identifier
+        ('(' NL* indExplicitArgList=argList NL* ')')?
+        ('[' NL* indImplicitArgList=argList NL* ']')?
+        '::' constructor=Identifier ('(' NL* consArgList=argList NL* ')')?          # exprConstructorCall
+    |   '(' paramList ')' (':' type=expr) '=>' body=blockExpr                   # exprLambda
+    |   func=expr ('|' untypedParamList '|' (':' type=Identifier)?)? body=block  # exprCallWithLambda
     |   subject=expr '.' field=Identifier                                   # exprProjection
-    |   enum=Identifier ('[' implicitParamList=paramList ']')? ('(' explicitParamList=paramList ')')? '::' variant=Identifier # exprEnumValue
-    |   '|' paramList '|' '=>'? body=expr                                   # exprLambda
-    //|   lhs=expr rhs=expr                                                 # exprSeq
-    |   block                                                               # exprBlock
+    |   lhs=expr rhs=expr                                                 # exprSeq
     // Control
-    |   'if' NL* cond=expr NL* 'then' NL* then=expr NL* 'else' NL* else=expr                    # exprIf
+    |   'if' NL* cond=blockExpr NL* 'then' NL* then=blockExpr NL* 'else' NL* else=blockExpr                    # exprIf
     |   'match' value=expr '{' NL* cases+=matchCase (NL+ cases+=matchCase)* NL* '}'                      # exprMatch
     // Types
-    |   <assoc=right> lhs=expr '->' rhs=expr        # exprFunctionType
-    |   <assoc=right> '<' lhs=expr '>' '->' rhs=expr        # exprFunctionTypeImplicit
+    |   <assoc=right> lhs=expr '->' rhs=expr                                    # exprArrowType
+    |   <assoc=right> '∀' '(' arg=expr ':' type=expr ')' '->' rhs=expr          # exprPiType
+    |   <assoc=right> '∃' '(' arg=expr ':' type=expr ')' '->' rhs=expr          # exprSigmaType
+    |   <assoc=right> '[' lhs=expr ']' '->' rhs=expr                            # exprImplicitArrowType
+    |   <assoc=right> '∀' '[' arg=expr ':' type=expr ']' '->' rhs=expr          # exprImplicitPiType
     |   'record' (':' super=expr)? '{' NL* valueTypePair (NL+ valueTypePair)* NL* '}' # exprRecordType
     |   record=expr '@' '{' NL* fieldAssignment (NL+ fieldAssignment)* NL* '}' # exprRecord
     ;
 
+blockExpr
+    :   expr
+    |   block
+    ;
+
+argList
+    :   (args+=expr (',' NL* args+=expr)* ','?)?
+    ;
+
 matchCase
-    :   pattern (':' type=expr)? '=>' NL* value=expr
+    :   'case' clauses+=matchClause (NL* '|' clauses+=matchClause)* NL* '=>' NL* value=expr
+    ;
+
+matchClause
+    :   pattern (':' type=expr)?
     ;
 
 pattern
     :   literal             # patternLiteral
+    |   '`' value=expr '`'  # patternValue
     |   ident=Identifier    # patternVariable
-    |   '(' elements+=pattern (',' NL* elements+=pattern)* ','? ')' # patternTuple
-    |   ident=Identifier '(' NL* (elements+=pattern (',' NL* elements+=pattern)* ','?)? NL* ')' # patternVariant
+    |   (inductive=Identifier
+         ('(' NL* indExplicitArgList=argList NL* ')')?
+         ('[' NL* indImplicitArgList=argList NL* ']')? '::')?
+            constructor=Identifier ('(' NL* argList NL* ')')?   # patternConstructor
+    |   '(' NL* patternList NL* ')' # patternTuple
     |   record=expr '@' '{' NL* (fields+=patternRecordField (',' NL* fields+=patternRecordField)* ','?)? NL* '}' # patternRecord
+    ;
+
+patternList
+    :   patterns+=pattern (',' NL* patterns+=pattern)* ','?
     ;
 
 patternRecordField
@@ -45,14 +73,11 @@ patternRecordField
 stmt
     // Definition
     :   expr                                                                    # stmtExpr
-    |   'let' name=Identifier (':' type=expr) '=' NL* value=expr                # stmtLet
-    |   'instance' ':' type=expr '=' NL* value=expr                             # stmtInstance
+    |   'let' name=Identifier (':' type=expr) '=' NL* value=blockExpr           # stmtLet
+    |   'instance' ':' type=expr '=' NL* value=blockExpr                        # stmtInstance
     |   definition                                                              # stmtDef
     |   'impl' ('[' paramList ']')? type=expr
             '{' NL* (defs+=definition (NL+ defs+=definition)*)? NL* '}'         # stmtImpl
-    |   isOpen='open' 'enum' ident=Identifier
-            ('[' implicitParamList=paramList ']')? ('(' explicitParamList=paramList ')')?
-            '{' NL* variants+=enumVariant (NL+ variants+=enumVariant)* NL* '}'  # stmtEnum
     |   operatorDeclaration                                                     # stmtOperator
     ;
 
@@ -61,8 +86,26 @@ block
     ;
 
 definition
-    :   'def' ident=(Identifier|OptSymbol) ('[' implicitParamList=paramList ']')?
-          ('(' explicitParamList=paramList ')')? ':' returnType=expr '=' NL* body=expr
+    :   'def' ident=definitionIdentifier ('[' implicitParamList=paramList ']')?
+          ('(' explicitParamList=paramList ')')? ':' returnType=expr '=' NL* body=definitionBody    # defGeneral
+    |   'type' ident=Identifier ('[' implicitParamList=paramList ']')?
+          ('(' explicitParamList=paramList ')')? '=' NL* body=definitionBody            # defType
+    ;
+
+definitionIdentifier
+    :   Identifier
+    |   '(' OptSymbol ')'
+    ;
+
+definitionBody
+    :   blockExpr                                                            # defBodyExpr
+    |   'inductive' ('(' NL* inductiveParams+=Identifier (',' NL* inductiveParams+=Identifier)* ','? NL* ')')?
+            NL* '{' NL* (cases+=inductiveCase (NL+ cases+=inductiveCase)*)? NL* '}' # defBodyInductive
+    ;
+
+inductiveCase
+    :   ident=Identifier ':' type=expr                                                          # inductiveCaseType
+    |   ident=Identifier ('(' NL* (elements+=expr (',' NL* elements+=expr)* ','?)? NL* ')')?    # inductiveCaseValue
     ;
 
 operatorDeclaration
@@ -82,27 +125,28 @@ paramList
     :   (params+=valueTypePair (',' params+=valueTypePair)* ','?)?
     ;
 
+untypedParamList
+    :   (params+=untypedParam (',' params+=untypedParam)* ','?)?
+    ;
+
+untypedParam
+    :   (idents+=Identifier)+ (':' type=expr)?
+    ;
+
 atom
-    :   literal             # atomLiteral
+    :   'self'              # atomSelf
+    |   literal             # atomLiteral
     |   ident=Identifier    # atomIdentifier
     |   op=OptSymbol         # atomOperator
     ;
 
-enumVariantData
-    :   '(' NL* (elements+=expr (',' NL* elements+=expr)* ','?)? NL* ')'                # enumVariantDataTuple
-    |   '{' NL* (fields+=valueTypePair (',' NL* fields+=valueTypePair)* ','?)? NL* '}'  # enumVariantDataRecord
-    ;
-
-enumVariant
-    :   ident=Identifier data=enumVariantData?
-    ;
-
 valueTypePair
-    :   (idents+=Identifier)+ ':' type=expr
+    :   'self' (':' type=expr)?             # valueTypePairSelf
+    |   (idents+=Identifier)+ ':' type=expr # valueTypePairTyped
     ;
 
 fieldAssignment
-    :   ident=Identifier '=' value=expr
+    :   ident=Identifier '=' value=blockExpr
     ;
 
 literal
@@ -132,7 +176,10 @@ Colon: ':';
 
 OptSymbol: [+\-/*<>=&!^%#:]+;
 
-Identifier: '_' | ['a-zA-Z][a-zA-Z0-9_]*[']?;
+PiSymbol: '∀' | 'Π';
+SigmaSymbol: '∃' | 'Σ';
+
+Identifier: ValueIdent | TypeIdent | ContractIdent;
 
 // Whitespaces
 Whitespace: [ \t\r]+ -> skip;
@@ -149,6 +196,20 @@ LineComment
 NL: '\n' | '\r' '\n'?;
 
 /* Fragments */
+
+// camelCaseWithEnglishOrGreekLetters with optional postfix single quotation
+fragment ValueIdent: [a-z]+([A-Za-zα-ωΑ-Ω])*('\'')*;
+
+// A single blackboard bold letter or PascalCase
+fragment TypeIdent: PascalCase | BlackboardBoldLetter;
+
+// Quoted PascalCase: A PascalCase with a prefixed single quotation
+fragment ContractIdent: '\''TypeIdent;
+
+fragment PascalCase: [A-Z][a-zA-Z]*;
+
+// Blackboard bold letters (𝔸 - 𝕫)
+fragment BlackboardBoldLetter: [𝔸𝔹ℂ𝔻𝔼𝔽𝔾ℍ𝕀𝕁𝕂𝕃𝕄ℕ𝕆ℙℚℝ𝕊𝕋𝕌𝕍𝕎𝕏𝕐ℤ];
 
 fragment HexDigit: [0-9] | [A-F] | [a-f];
 fragment ExponentPart: [eE] ('+' | '-')? [0-9] ('_'* [0-9])*;
