@@ -5,11 +5,6 @@ import util.SourceSpan
 
 enum Pattern(val span: SourceSpan) {
   
-  case Unresolved(
-    name: String,
-    patterns: Seq[Unresolved],
-  )(implicit span: SourceSpan) extends Pattern(span)
-
   case Primitive(
     value: Literal,
   )(implicit span: SourceSpan) extends Pattern(span)
@@ -27,7 +22,6 @@ enum Pattern(val span: SourceSpan) {
 
   override def toString: String = {
     this match {
-      case Unresolved(name, patterns) => s"$name ${patterns.mkString(" ")}"
       case Primitive(value) => value.toString
       case Bind(binding) => binding.name
       case Cons(cons, patterns) => s"${cons.name} ${patterns.mkString(" ")}"
@@ -37,36 +31,43 @@ enum Pattern(val span: SourceSpan) {
   def buildSubstMap(term: Term): Option[Map[Var.Local, Term]] = {
     PatternMatching.buildSubstMap(this, term)
   }
+  
+  def matchWith(term: Term): Map[Var.Local, Type] = {
+    PatternMatching.matchPattern(this, term)
+  }
+}
 
-  def resolve(implicit ctx: ResolvingContext): (Pattern, ResolvingContext) = this match {
-    case Unresolved(name, patterns) => {
-      ctx.get(name) match {
-        
-        // If the variable is already defined, then it should be a constructor.
-        // TODO: literals and records
-        case Some(variable: Var.Defined[?]) if patterns.nonEmpty => {
-          val (resolvedPatterns, updatedContext) = patterns.foldLeft((List.empty[Pattern], ctx)) {
-            case ((resolvedPatterns, context), pattern) => {
-              val (resolved, newCtx) = pattern.resolve(context)
-              (resolvedPatterns :+ resolved, newCtx)
-            }
+object Pattern {
+  
+  case class Unresolved(
+    name: String, 
+    patterns: Seq[Unresolved]
+  )(implicit span: SourceSpan) {
+    
+    def resolve(implicit ctx: ResolvingContext): (Pattern, ResolvingContext) = ctx.get(name) match {
+      // If the variable is already defined, then it should be a constructor.
+      // TODO: literals and records
+      case Some(variable: Var.Defined[?]) if patterns.nonEmpty => {
+        val (resolvedPatterns, updatedContext) = patterns.foldLeft((List.empty[Pattern], ctx)) {
+          case ((resolvedPatterns, context), pattern) => {
+            val (resolved, newCtx) = pattern.resolve(context)
+            (resolvedPatterns :+ resolved, newCtx)
           }
-          val pattern = Pattern.Cons(
-            cons = variable.asInstanceOf[Var.Defined[Definition.Constructor]],
-            patterns = resolvedPatterns
-          )
-          (pattern, updatedContext)
         }
-        
-        // Otherwise, it should be a new introduced variable.
-        case _ => {
-          val variable: Var.Local = Var.Local(name)
-          (Pattern.Bind(variable), ctx.updated(name, variable))
-        }
+        val pattern = Pattern.Cons(
+          cons = variable.asInstanceOf[Var.Defined[Definition.Constructor]],
+          patterns = resolvedPatterns
+        )
+        (pattern, updatedContext)
+      }
+
+      // Otherwise, it should be a new introduced variable.
+      case _ => {
+        val variable: Var.Local = Var.Local(name)
+        (Pattern.Bind(variable), ctx.updated(name, variable))
       }
     }
     
-    // It is already resolved, just return it.
-    case _ => (this, ctx)
   }
+  
 }

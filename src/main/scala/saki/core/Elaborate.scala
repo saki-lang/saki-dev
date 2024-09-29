@@ -1,5 +1,8 @@
 package saki.core
 
+import saki.core.pattern.Clause
+import util.unreachable
+
 object Elaborate {
 
   case class Context(
@@ -10,12 +13,16 @@ object Elaborate {
       action(copy(locals = locals.updated(local, `type`)))
     }
 
+    private[Elaborate] def withLocals[R](locals: Map[Var.Local, Type])(action: Context => R): R = {
+      action(copy(locals = this.locals ++ locals))
+    }
+
     def getDefinition(name: String): Option[Definition] = definitions.collectFirst {
       case (varDef, definition) if varDef.name == name => definition
     }
   }
 
-  def elaborate(expr: Expr, expectedType: Type)(implicit ctx: Context): Term = expr match {
+  private[core] def elaborate(expr: Expr, expectedType: Type)(implicit ctx: Context): Term = expr match {
     case Expr.Lambda(lambdaParam, body) => {
       // Check that expectedType is a Pi type
       expectedType.normalize(Map.empty) match {
@@ -41,11 +48,13 @@ object Elaborate {
     def normalize: Synth = copy(term = term.normalize(Map.empty), `type` = `type`.normalize(Map.empty))
   }
 
-  def synth(expr: Expr)(implicit ctx: Context): Synth = (expr match {
+  private[core] def synth(expr: Expr)(implicit ctx: Context): Synth = (expr match {
+
+    case Expr.Universe() => Synth(Term.Universe, Term.Universe)
 
     case Expr.Primitive(value) => Synth(Term.Primitive(value), Term.PrimitiveType(value.ty))
 
-    case Expr.PrimitiveType(ty) => Synth(Term.PrimitiveType(ty), Term.Universe(0))
+    case Expr.PrimitiveType(ty) => Synth(Term.PrimitiveType(ty), Term.Universe)
 
     case Expr.Resolved(ref) => ref match {
       case definitionVar: Var.Defined[?] => definitionVar.definition match {
@@ -96,23 +105,67 @@ object Elaborate {
   }).normalize
 
   private def synthDependentType(param: Param[Expr], result: Expr)(implicit ctx: Context): Synth = {
-    val (paramType, paramTypeType) = param.`type`.synth.unpack
-    val (codomain, codomainType) = ctx.withLocal(param.ident, paramType) { result.synth(_).unpack }
+    val (paramType, _) = param.`type`.synth.unpack
+    val (codomain, _) = ctx.withLocal(param.ident, paramType) { result.synth(_).unpack }
     Synth(
       term = Term.Sigma(Param(param.ident, paramType), codomain),
-      `type` = Term.Universe(Math.max(paramTypeType.universeLevel, codomainType.universeLevel))
+      `type` = Term.Universe
     )
+  }
+
+  def synthClause(
+    clause: Clause[Expr], params: Seq[Param[Term]], resultType: Type
+  )(implicit ctx: Context): Clause[Term] = {
+    val map = clause.patterns.zip(params).foldLeft(Map.empty: Map[Var.Local, Type]) {
+      case (subst, (pattern, param)) => subst ++ pattern.matchWith(param.`type`)
+    }
+    val body = ctx.withLocals(map) {
+      elaborate(clause.body, resultType)
+    }
+    Clause(clause.patterns, body)
+  }
+
+  def synthDefinition(definition: PristineDefinition)(implicit ctx: Context): Definition = definition match {
+
+    case PristineDefinition.Function(ident, paramExprs, resultTypeExpr, pristineBody) => {
+      val resultType = resultTypeExpr.elaborate(Term.Universe)
+      val params = synthParams(paramExprs)
+      ctx.withLocals(params.map(param => param.ident -> param.`type`).toMap) {
+        implicit ctx => {
+          import PristineDefinition.FunctionBody
+          val signature = Signature(params, resultType)
+          val body: Either[Term, Seq[Clause[Term]]] = pristineBody match {
+            case FunctionBody.Expr(expr) => Left(expr.elaborate(resultType))
+            case FunctionBody.Clauses(clauses) => {
+              Right(clauses.map(clause => synthClause(clause, params, resultType)))
+              // TODO: classify clauses
+            }
+            case FunctionBody.UnresolvedClauses(_) => unreachable
+          }
+          Definition.Function(ident, signature, params, resultType, body)
+        }
+      }
+    }
+
+    case inductive: PristineDefinition.Inductive => {
+      val params = synthParams(inductive.params)
+      val constructors: Seq[Definition.Constructor] = inductive.constructors.map { constructor =>
+        // FIXME: the return type of a constructor should be the inductive type
+        val signature = Signature(params, Term.Universe)
+        Definition.Constructor(constructor.ident, signature, inductive.ident, params)
+      }
+      Definition.Inductive(inductive.ident, Signature(params, Term.Universe), params, constructors)
+    }
+
+    case PristineDefinition.Constructor(_, _, _) => unreachable
+  }
+
+  def synthParams(paramExprs: Seq[Param[Expr]])(implicit ctx: Context): Seq[Param[Term]] = {
+    paramExprs.map { param => Param(param.ident, param.`type`.elaborate(Term.Universe)) }
   }
 }
 
 extension (self: Expr) {
   def synth(implicit ctx: Elaborate.Context): Elaborate.Synth = Elaborate.synth(self)
-  def infer(implicit ctx: Elaborate.Context, expected: Type): Term = Elaborate.elaborate(self, expected)
-}
-
-extension (self: Term) {
-  def universeLevel: Int = self match {
-    case Term.Universe(level) => level
-    case _ => throw new Exception("Not a universe")
-  }
+  def elaborate(expected: Type)(implicit ctx: Elaborate.Context): Term = Elaborate.elaborate(self, expected)
 }

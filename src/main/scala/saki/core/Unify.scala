@@ -6,9 +6,9 @@ object Unify {
   infix def unify(lhs: Term, rhs: Term): Boolean = (lhs, rhs) match {
 
     // Trivial cases
+    case (Term.Universe, Term.Universe) => true
     case (Term.Primitive(lit1), Term.Primitive(lit2)) => lit1 == lit2
     case (Term.PrimitiveType(ty1), Term.PrimitiveType(ty2)) => ty1 == ty2
-    case (Term.Universe(level1), Term.Universe(level2)) => level1 == level2
     case (Term.Ref(ref1), Term.Ref(ref2)) => ref1 == ref2
 
     // Lambda

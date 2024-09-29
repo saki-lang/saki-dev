@@ -26,6 +26,18 @@ object TypeError {
   }
 }
 
+case class SizeError(message: String, span: Option[InfoSpan] = None) extends Exception with Error {
+  override def toString: String = message
+  def raise: Nothing = throw this
+  def withSpan(span: SourceSpan, info: String): SizeError = SizeError(message, Some(InfoSpan(span, info)))
+}
+
+object SizeError {
+  def mismatch(expected: Int, actual: Int, span: SourceSpan): Nothing = {
+    throw SizeError("Size mismatch", Some(InfoSpan(span, s"expected $expected, found $actual")))
+  }
+}
+
 case class PatternError(message: String, span: Option[InfoSpan] = None) extends Exception with Error {
   override def toString: String = message
   def raise: Nothing = throw this

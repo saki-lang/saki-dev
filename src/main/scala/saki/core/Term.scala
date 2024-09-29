@@ -4,19 +4,21 @@ enum Var {
 
   case Defined[Def <: Definition](
     override val name: String,
-    signature: Signature,
-    definition: Option[Def] = None
+    definition: Option[Def] = None,
   )
 
   case Local(override val name: String)
 
   def name: String = this match {
-    case Defined(name, _, _) => name
+    case Defined(name, _) => name
     case Local(name) => name
   }
 }
 
 extension (self: Var.Defined[?]) {
+  
+  def signature: Signature = self.definition.get.signature
+  
   def call: Term = self.definition match {
     case Some(_: Definition.Function) =>
       Term.FunctionCall(self.asInstanceOf[Var.Defined[Definition.Function]],  self.signature.arguments.refs)
@@ -41,6 +43,7 @@ extension (variable: Var.Defined[Definition.Constructor]) {
 
 enum Term {
 
+  case Universe
   case Primitive(value: Literal)
   case PrimitiveType(`type`: LiteralType)
   case Ref(variable: Var.Local)
@@ -54,7 +57,6 @@ enum Term {
   case ApplyOnce(fn: Term, arg: Term)
   case Lambda(param: Var.Local, body: Term)
   case Projection(record: Term, field: String)
-  case Universe(level: Int)
 
   def subst(variable: Var.Local, term: Term): Term = this.subst(Map(variable -> term))
 
@@ -73,6 +75,7 @@ enum Term {
   }
 
   override def toString: String = this match {
+    case Universe => s"#Universe"
     case Primitive(value) => value.toString
     case PrimitiveType(ty) => ty.toString
     case Ref(variable) => variable.name
@@ -87,7 +90,6 @@ enum Term {
     case ApplyOnce(fn, arg) => s"$fn($arg)"
     case Lambda(param, body) => s"λ(${param.name}) => $body"
     case Projection(record, field) => s"$record.$field"
-    case Universe(level) => s"Type^$level"
   }
 }
 

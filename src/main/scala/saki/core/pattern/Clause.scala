@@ -2,15 +2,13 @@ package saki.core.pattern
 
 import saki.core.{Expr, Term, Var}
 
-case class ClauseSet[T](clauses: Seq[Clause[T]])
-
-extension (clauseSet: ClauseSet[Term]) {
+extension (clauses: Seq[Clause[Term]]) {
   /**
    * Try to match the given arguments with the clause set.
    * Return the body of the first matching clause.
    */
   def tryMatch(args: Seq[Term]): Option[Term] = {
-    clauseSet.clauses.collectFirst { clause =>
+    clauses.collectFirst { clause =>
       val substOpt = clause.patterns.buildSubstMap(args)
       substOpt.map(subst => clause.body.subst(subst))
     }.flatten

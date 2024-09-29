@@ -1,13 +1,13 @@
 package saki.core.pattern
 
 import saki.core.{Expr, Param, ParamList, PristineDefinition, TypeError, Var}
-import util.{ScopedMap, SourceSpan}
+import util.SourceSpan
 
-private[pattern] type ResolvingContext = ScopedMap[String, Var]
+private[pattern] type ResolvingContext = Map[String, Var]
 
 extension (ctx: ResolvingContext) {
 
-  def add(variable: Var): ResolvingContext = ctx :+ (variable.name, variable)
+  def add(variable: Var): ResolvingContext = ctx + (variable.name -> variable)
 
   def withVariable[R](variable: Var)(action: ResolvingContext => R): R = {
     action(ctx.add(variable))
@@ -15,8 +15,9 @@ extension (ctx: ResolvingContext) {
 }
 
 object ResolvingContext {
-  def apply(): ResolvingContext = ScopedMap.empty
-  def apply(env: Map[String, Var]): ResolvingContext = ScopedMap(env)
+  def apply(): ResolvingContext = Map.empty
+  def apply(env: Map[String, Var]): ResolvingContext = env
+  def empty: ResolvingContext = Map.empty
 }
 
 extension (self: Expr) {
@@ -24,9 +25,9 @@ extension (self: Expr) {
     given span: SourceSpan = self.span
     self match {
 
+      case Expr.Universe() => Expr.Universe()
       case Expr.Primitive(value) => Expr.Primitive(value)
       case Expr.PrimitiveType(ty) => Expr.PrimitiveType(ty)
-      case Expr.Universe(level) => Expr.Universe(level)
 
       case Expr.Resolved(ref) => Expr.Resolved(ref)
       case Expr.Unresolved(name) => ctx.get(name) match {
@@ -58,16 +59,58 @@ extension (self: Expr) {
   }
 }
 
-extension (self: PristineDefinition) {
-
-  private def resolveParam: (ParamList[Expr], ResolvingContext) = {
-    self.params.foldLeft((Seq.empty: ParamList[Expr], ResolvingContext())) {
+extension (params: ParamList[Expr]) {
+  def resolve(ctx: ResolvingContext): (ParamList[Expr], ResolvingContext) = {
+    params.foldLeft((Seq.empty: ParamList[Expr], ctx)) {
       case ((params, ctx), param) => {
         val resolvedParam = Param(param.ident, param.`type`.resolve(ctx))
-        (params :+ resolvedParam, ctx.add(param.ident))
+        (params :+ resolvedParam, ctx.add(resolvedParam.ident))
       }
     }
   }
+}
 
-  private def resolve(implicit ctx: ResolvingContext): PristineDefinition = ???
+extension (self: PristineDefinition) {
+
+  private def resolve: PristineDefinition = {
+    var global: ResolvingContext = ResolvingContext.empty
+
+    import PristineDefinition.FunctionBody
+    val resolvedDefinition: PristineDefinition = self match {
+
+      case PristineDefinition.Function(ident, params, resultType, body) => {
+        val (resolvedParams, ctxWithParam) = params.resolve(global)
+        // register the function name to global context
+        global += (ident.name -> ident)
+        // add the function name to the context for recursive calls
+        val bodyCtx = ctxWithParam + (ident.name -> ident)
+        val resolvedBody = body match {
+          case FunctionBody.Expr(expr) => FunctionBody.Expr(expr.resolve(bodyCtx))
+          case FunctionBody.Clauses(clauses) => FunctionBody.Clauses(clauses)
+          case FunctionBody.UnresolvedClauses(clauses) => FunctionBody.Clauses(clauses.map(_.resolve(bodyCtx)))
+        }
+        PristineDefinition.Function(ident, resolvedParams, resultType.resolve(bodyCtx), resolvedBody)
+      }
+
+      // TODO: constructors should be resolved only in the context of the inductive type
+      // TODO: Remove this match arm (?)
+      case PristineDefinition.Constructor(ident, owner, params) => {
+        val (resolvedParams, _) = params.resolve(global)
+        global += (ident.name -> ident)
+        PristineDefinition.Constructor(ident, owner, resolvedParams)
+      }
+
+      case PristineDefinition.Inductive(ident, params, constructors) => {
+        val (resolvedParams, _) = params.resolve(global)
+        global += (ident.name -> ident)
+        val resolvedConstructors: Seq[PristineDefinition.Constructor] = constructors.map { constructor =>
+          val (resolvedConsParams, _) = constructor.params.resolve(global)
+          PristineDefinition.Constructor(constructor.ident, constructor.owner, resolvedConsParams)
+        }
+        PristineDefinition.Inductive(ident, resolvedParams, resolvedConstructors)
+      }
+    }
+    resolvedDefinition
+  }
+
 }

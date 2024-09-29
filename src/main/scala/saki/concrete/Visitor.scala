@@ -40,9 +40,9 @@ class Visitor extends SakiBaseVisitor[Term | Seq[Term] | Pattern | Unit] {
       if this.symbols.contains(symbol) then {
         throw CompileErrorException(ctx, s"Operator redeclaration: ${symbol}")
       }
-      this.symbols :+ symbol -> operator
+      this.symbols + (symbol -> operator)
     }
-    case _ => this.symbols :+ symbol -> symbol
+    case _ => this.symbols + (symbol -> symbol)
   }
 
   private def withInScope[T](block: => T): T = {

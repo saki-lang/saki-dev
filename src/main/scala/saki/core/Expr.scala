@@ -61,5 +61,5 @@ enum Expr(val span: SourceSpan) {
    * Universe level.
    * `Type` | `Type^1` | `Type^2` | ...
    */
-  case Universe(level: Int)(implicit span: SourceSpan) extends Expr(span)
+  case Universe()(implicit span: SourceSpan) extends Expr(span)
 }

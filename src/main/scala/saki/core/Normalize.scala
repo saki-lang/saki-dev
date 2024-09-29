@@ -19,7 +19,7 @@ object Normalize {
     given Context = ctx
     term match {
 
-      case Term.Primitive(_) | Term.PrimitiveType(_) | Term.Universe(_) => term
+      case Term.Primitive(_) | Term.PrimitiveType(_) | Term.Universe => term
 
       case Term.Ref(variable) => ctx.get(variable).map(_.rename.normalize).getOrElse(term)
 
@@ -43,7 +43,7 @@ object Normalize {
         given Context = fn.arguments.zip(argsNorm).foldLeft(ctx) {
           case (acc, (param, arg)) => acc + (param -> arg)
         }
-        fn.body.fold( // Either[Term, Pattern.ClauseSet[Term]]
+        fn.body.fold( // Either[Term, Seq[Clause[Term]]]
           term => term.normalize,
           pattern => {
             pattern.tryMatch(args).map(_.normalize).getOrElse(Term.FunctionCall(fnRef, argsNorm))
@@ -81,7 +81,7 @@ extension (self: Term) {
   def normalize(implicit ctx: Context): Term = Normalize.normalizeTerm(self, ctx)
 
   def rename(implicit map: RenameMap): Term = self match {
-    case Term.Primitive(_) | Term.PrimitiveType(_) | Term.Universe(_) => self
+    case Term.Primitive(_) | Term.PrimitiveType(_) | Term.Universe => self
 
     case Term.Ref(variable) => Term.Ref(map.getOrElse(variable, variable))
 
