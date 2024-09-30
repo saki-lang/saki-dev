@@ -1,5 +1,6 @@
 package saki.core.typing
 
+import scala.collection.Seq
 import saki.core.PatternError
 import saki.core.syntax.*
 

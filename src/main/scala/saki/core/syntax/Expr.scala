@@ -1,5 +1,6 @@
 package saki.core.syntax
 
+import scala.collection.Seq
 import saki.core.typing.{Elaborate, Resolve}
 import saki.util.SourceSpan
 

@@ -1,5 +1,6 @@
 package saki.core.syntax
 
+import scala.collection.Seq
 import saki.core.typing.Elaborate.Context
 import saki.core.typing.{Elaborate, Resolve}
 
@@ -101,7 +102,7 @@ enum PristineDefinition(
     override val ident: Var.Defined[Definition.Function],
     override val params: ParamList[Expr],
     resultType: Expr,
-    body: PristineDefinition.FunctionBody,
+    body: PristineDefinition.FunctionBody, // TODO: change to Expr
   ) extends PristineDefinition(ident, params)
 
   case Inductive(
@@ -112,7 +113,7 @@ enum PristineDefinition(
 
   case Constructor(
     override val ident: Var.Defined[Definition.Constructor],
-    owner: PristineDefinition.Constructor,
+    owner: PristineDefinition.Inductive,
     override val params: ParamList[Expr],
   ) extends PristineDefinition(ident, params)
 

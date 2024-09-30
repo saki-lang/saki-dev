@@ -1,11 +1,14 @@
 package saki.concrete.syntax
 
 import org.antlr.v4.runtime.ParserRuleContext
-import saki.core
-import saki.core.syntax.Param
-import saki.core.syntax.Definition as CoreDefinition
-import saki.core.syntax.PristineDefinition as CorePristineDefinition
+import saki.core.syntax.{
+  Param, Var,
+  Definition as CoreDefinition,
+  PristineDefinition as CorePristineDefinition
+}
 import saki.util.{SourceSpan, span, unreachable}
+
+import scala.collection.mutable
 
 enum Definition(implicit ctx: ParserRuleContext) extends SyntaxTree[CorePristineDefinition] {
 
@@ -16,15 +19,44 @@ enum Definition(implicit ctx: ParserRuleContext) extends SyntaxTree[CorePristine
   case Function(
     override val ident: String,
     params: Seq[Param[Expr]],
+    resultType: Expr,
     body: Expr,
   )(implicit ctx: ParserRuleContext)
 
   case Inductive(
     override val ident: String,
+    params: Seq[Param[Expr]],
     constructors: Seq[Constructor],
   )(implicit ctx: ParserRuleContext)
 
-  override def emit: CorePristineDefinition = ???
+  override def emit: CorePristineDefinition = this match {
+
+    case Function(name, paramsExpr, resultType, body) => {
+      val params = paramsExpr.map(param => param.map(_.emit))
+      val ident: Var.Defined[CoreDefinition.Function] = Var.Defined(name)
+      CorePristineDefinition.Function(
+        ident, params, resultType.emit,
+        CorePristineDefinition.FunctionBody.Expr(body.emit)
+      )
+    }
+
+    case Inductive(name, paramsExpr, constructorsExpr) => {
+      val constructors: mutable.ListBuffer[CorePristineDefinition.Constructor] = mutable.ListBuffer()
+      val ident: Var.Defined[CoreDefinition.Inductive] = Var.Defined(name)
+      val params = paramsExpr.map(param => param.map(_.emit))
+      val inductive: CorePristineDefinition.Inductive = {
+        CorePristineDefinition.Inductive(ident, params, constructors)
+      }
+      constructors ++= constructorsExpr.map {
+        case Constructor(name, params) => {
+          val ident: Var.Defined[CoreDefinition.Constructor] = Var.Defined(name)
+          val resolvedParams = params.map(param => param.map(_.emit))
+          CorePristineDefinition.Constructor(ident, inductive, resolvedParams)
+        }
+      }
+      return inductive
+    }
+  }
 
 }
 
