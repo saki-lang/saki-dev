@@ -1,7 +1,7 @@
 package saki.core.syntax
 
 import saki.core.typing.{Elaborate, Resolve}
-import util.SourceSpan
+import saki.util.SourceSpan
 
 enum Expr(val span: SourceSpan) {
 
@@ -17,7 +17,7 @@ enum Expr(val span: SourceSpan) {
    * Application of a function to an argument.
    * `fn arg` | `fn(arg)`
    */
-  case Apply(fn: Expr, arg: Expr)(implicit span: SourceSpan) extends Expr(span)
+  case Apply(fn: Expr, arg: Argument[Expr])(implicit span: SourceSpan) extends Expr(span)
 
   /**
    * Projection of a field from a record.

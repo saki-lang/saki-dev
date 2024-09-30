@@ -1,7 +1,7 @@
 package saki.core.syntax
 
 import saki.core.typing.{Match, Resolve}
-import util.SourceSpan
+import saki.util.SourceSpan
 
 enum Pattern(val span: SourceSpan) {
 

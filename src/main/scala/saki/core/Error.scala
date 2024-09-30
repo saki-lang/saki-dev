@@ -1,7 +1,7 @@
 package saki.core
 
 import saki.core.syntax.{Pattern, Term}
-import util.SourceSpan
+import saki.util.SourceSpan
 
 trait Error {
   def message: String

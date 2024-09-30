@@ -1,6 +1,5 @@
 package saki.core.syntax
 
-import saki.core.syntax.Param.ApplyMode
 import saki.core.typing.Elaborate.Context
 import saki.core.typing.{Elaborate, Resolve}
 
@@ -10,23 +9,35 @@ case class Param[Type](
   applyMode: ApplyMode = ApplyMode.Explicit,
 ) {
   def name: String = ident.name
+  def map[NewType](transform: Type => NewType): Param[NewType] = {
+    copy(`type` = transform(`type`))
+  }
 }
 
-object Param {
-  enum ApplyMode {
-    case Explicit
-    case Implicit
-    case Instance
+enum ApplyMode {
+  case Explicit
+  case Implicit
+  case Instance
 
-    override def toString: String = this match {
-      case Explicit => "explicit"
-      case Implicit => "implicit"
-      case Instance => "instance"
-    }
+  override def toString: String = this match {
+    case Explicit => "explicit"
+    case Implicit => "implicit"
+    case Instance => "instance"
   }
 }
 
 type ParamList[T] = Seq[Param[T]]
+
+case class Argument[Value](
+  value: Value,
+  applyMode: ApplyMode = ApplyMode.Explicit,
+) {
+  def map[NewValue](transform: Value => NewValue): Argument[NewValue] = {
+    copy(value = transform(value))
+  }
+}
+
+type ArgList[Value] = Seq[Argument[Value]]
 
 trait FnLike[T] {
   def params: ParamList[T]

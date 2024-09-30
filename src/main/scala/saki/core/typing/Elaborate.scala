@@ -2,7 +2,7 @@ package saki.core.typing
 
 import saki.core.TypeError
 import saki.core.syntax.*
-import util.unreachable
+import saki.util.unreachable
 
 private[core] object Elaborate {
 
@@ -58,7 +58,7 @@ private[core] object Elaborate {
     case Expr.PrimitiveType(ty) => Synth(Term.PrimitiveType(ty), Term.Universe)
 
     case Expr.Resolved(ref) => ref match {
-      case definitionVar: Var.Defined[?] => definitionVar.definition match {
+      case definitionVar: Var.Defined[? <: Definition] => definitionVar.definition match {
         case None => Synth(
           term = definitionVar.signature.params.buildLambda(definitionVar.call),
           `type` = definitionVar.signature.params.buildPiType(definitionVar.signature.resultType)
@@ -94,6 +94,22 @@ private[core] object Elaborate {
           case _ => TypeError.error(s"Method not found: $member", expr.span)
         }
         Synth(Term.FunctionCall(method.ident, Seq(term)), method.resultType)
+      }
+    }
+
+    case Expr.Apply(fnExpr, argExpr) => {
+      val (fn, fnType) = fnExpr.synth.normalize.unpack
+      fnType match {
+        case Term.Pi(param, codomain) => {
+          ctx.withLocal(param.ident, param.`type`) { ctx =>
+            val (arg, argType) = argExpr.value.synth(ctx).normalize.unpack
+            if !(argType unify param.`type`) then {
+              TypeError.mismatch(param.`type`.toString, argType.toString, argExpr.value.span)
+            }
+            Synth(fn.apply(arg), codomain.subst(param.ident, arg))
+          }
+        }
+        case _ => TypeError.error("Expected a function type", fnExpr.span)
       }
     }
 

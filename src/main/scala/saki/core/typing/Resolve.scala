@@ -2,7 +2,7 @@ package saki.core.typing
 
 import saki.core.TypeError
 import saki.core.syntax.*
-import util.SourceSpan
+import saki.util.SourceSpan
 
 object Resolve {
 
@@ -50,7 +50,7 @@ object Resolve {
         Expr.Sigma(resolvedParam, ctx.withVariable(resolvedParam.ident) { codomain.resolve })
       }
 
-      case Expr.Apply(fn, arg) => Expr.Apply(fn.resolve, arg.resolve)
+      case Expr.Apply(fn, arg) => Expr.Apply(fn.resolve, Argument(arg.value.resolve, arg.applyMode))
       case Expr.Elimination(obj, member) => Expr.Elimination(obj.resolve, member)
       case Expr.Lambda(param, body) => Expr.Lambda(param, ctx.withVariable(param) { body.resolve })
 
