@@ -18,7 +18,7 @@ enum Var {
   }
 }
 
-extension (self: Var.Defined[?]) {
+extension (self: Var.Defined[? <: Definition]) {
 
   def signature: Signature = self.definition.get.signature
 

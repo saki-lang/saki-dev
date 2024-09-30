@@ -1,10 +1,29 @@
 package saki.core.syntax
 
+import saki.core.syntax.Param.ApplyMode
 import saki.core.typing.Elaborate.Context
 import saki.core.typing.{Elaborate, Resolve}
 
-case class Param[Type](ident: Var.Local, `type`: Type) {
+case class Param[Type](
+  ident: Var.Local,
+  `type`: Type,
+  applyMode: ApplyMode = ApplyMode.Explicit,
+) {
   def name: String = ident.name
+}
+
+object Param {
+  enum ApplyMode {
+    case Explicit
+    case Implicit
+    case Instance
+
+    override def toString: String = this match {
+      case Explicit => "explicit"
+      case Implicit => "implicit"
+      case Instance => "instance"
+    }
+  }
 }
 
 type ParamList[T] = Seq[Param[T]]
