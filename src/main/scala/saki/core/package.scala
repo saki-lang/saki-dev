@@ -6,6 +6,8 @@ export core.{
   Argument,
   ArgList,
   ApplyMode,
+  Pattern,
+  Clause,
 }
 
 package object core

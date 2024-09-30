@@ -48,7 +48,7 @@ enum Expr(val span: SourceSpan) {
 
   case Match(
     scrutinee: Expr,
-    cases: Seq[Clause[Expr]]
+    clauses: Seq[Clause[Expr]]
   )(implicit span: SourceSpan) extends Expr(span)
 
   case Hole(

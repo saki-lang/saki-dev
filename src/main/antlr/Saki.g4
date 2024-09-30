@@ -2,7 +2,11 @@ grammar Saki;
 
 /* Parser Rules */
 
-program: NL* (stmts+=stmt (NL+ stmts+=stmt)*)? NL* EOF;
+program: NL* (instructions+=instruction (NL+ instructions+=instruction)*)? NL* EOF;
+
+moduleElement
+    :
+    ;
 
 expr
     // Value
@@ -13,9 +17,9 @@ expr
     |   '\'(' elements+=expr ',' NL* elements+=expr ')'                     # exprTuple
     |   '^(' types+=expr ',' NL* types+=expr ')'                            # exprTupleType
     |   inductive=Identifier
-        ('(' NL* indExplicitArgList=argList NL* ')')?
         ('[' NL* indImplicitArgList=argList NL* ']')?
-        '::' constructor=Identifier ('(' NL* consArgList=argList NL* ')')?          # exprConstructorCall
+        ('(' NL* indExplicitArgList=argList NL* ')')?
+        '::' constructor=Identifier                         # exprConstructor
     |   '(' paramList ')' (':' type=expr) '=>' body=blockExpr                   # exprLambda
     |   func=expr ('|' untypedParamList '|' (':' type=Identifier)?)? body=block  # exprCallWithLambda
     |   subject=expr '.' field=Identifier                                   # exprProjection
@@ -70,19 +74,19 @@ patternRecordField
     :   ident=Identifier '=' value=pattern
     ;
 
-stmt
+instruction
     // Definition
-    :   expr                                                                    # stmtExpr
-    |   'let' name=Identifier (':' type=expr) '=' NL* value=blockExpr           # stmtLet
-    |   'instance' ':' type=expr '=' NL* value=blockExpr                        # stmtInstance
-    |   definition                                                              # stmtDef
+    :   expr                                                                    # instructionExpr
+    |   'let' name=Identifier (':' type=expr) '=' NL* value=blockExpr           # instructionLet
+    |   'instance' ':' type=expr '=' NL* value=blockExpr                        # instructionInstance
+    |   definition                                                              # instructionDef
     |   'impl' ('[' paramList ']')? type=expr
-            '{' NL* (defs+=definition (NL+ defs+=definition)*)? NL* '}'         # stmtImpl
-    |   operatorDeclaration                                                     # stmtOperator
+            '{' NL* (defs+=definition (NL+ defs+=definition)*)? NL* '}'         # instructionImpl
+    |   operatorDeclaration                                                     # instructionOperator
     ;
 
 block
-    :   '{' NL* (stmts+=stmt (NL+ stmts+=stmt)*)? NL* '}'
+    :   '{' NL* (instrs+=instruction (NL+ instructions+=instruction)*)? NL* '}'
     ;
 
 definition
@@ -100,12 +104,12 @@ definitionIdentifier
 definitionBody
     :   blockExpr                                                            # defBodyExpr
     |   'inductive' ('(' NL* inductiveParams+=Identifier (',' NL* inductiveParams+=Identifier)* ','? NL* ')')?
-            NL* '{' NL* (cases+=inductiveCase (NL+ cases+=inductiveCase)*)? NL* '}' # defBodyInductive
+            NL* '{' NL* (cases+=inductiveCons (NL+ cases+=inductiveCons)*)? NL* '}' # defBodyInductive
     ;
 
-inductiveCase
-    :   ident=Identifier ':' type=expr                                                          # inductiveCaseType
-    |   ident=Identifier ('(' NL* (elements+=expr (',' NL* elements+=expr)* ','?)? NL* ')')?    # inductiveCaseValue
+inductiveCons
+    :   isFlat='flat'? ident=Identifier ':' type=expr                                                          # inductiveConsType
+    |   isFlat='flat'? ident=Identifier ('(' NL* (elements+=expr (',' NL* elements+=expr)* ','?)? NL* ')')?    # inductiveConsValue
     ;
 
 operatorDeclaration
