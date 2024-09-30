@@ -18,11 +18,13 @@ extension (clauses: Seq[Clause[Term]]) {
 /**
  * A clause (case) in a pattern matching expression.
  */
-case class Clause[T](patterns: Seq[Pattern], body: T)
+case class Clause[T](patterns: Seq[Pattern[Term]], body: T) {
+  def map[U](f: T => U): Clause[U] = Clause(patterns, f(body))
+}
 
 case class UnresolvedClause(patterns: Seq[UnresolvedPattern], body: Expr) {
   def resolve(implicit env: Map[String, Var]): Clause[Expr] = {
-    val (resolvedPatterns, ctx) = this.patterns.foldLeft((List.empty[Pattern], Resolve.Context(env))) {
+    val (resolvedPatterns, ctx) = this.patterns.foldLeft((List.empty[Pattern[Term]], Resolve.Context(env))) {
       case ((resolvedPatterns, context), pattern) => {
         val (resolved, newCtx) = pattern.resolve(context)
         (resolvedPatterns :+ resolved, newCtx)

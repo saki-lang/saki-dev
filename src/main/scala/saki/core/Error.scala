@@ -26,6 +26,22 @@ object TypeError {
   }
 }
 
+case class ValueError(message: String, span: Option[InfoSpan] = None) extends Exception with Error {
+  override def toString: String = message
+  def raise: Nothing = throw this
+  def withSpan(span: SourceSpan, info: String): ValueError = ValueError(message, Some(InfoSpan(span, info)))
+}
+
+object ValueError {
+  def error(info: String, span: SourceSpan): Nothing = {
+    throw ValueError("Value error", Some(InfoSpan(span, info)))
+  }
+
+  def missingField(name: String, record: Term.RecordType, span: SourceSpan): Nothing = {
+    throw ValueError("Missing field", Some(InfoSpan(span, s"missing field $name in $record")))
+  }
+}
+
 case class SizeError(message: String, span: Option[InfoSpan] = None) extends Exception with Error {
   override def toString: String = message
   def raise: Nothing = throw this
@@ -46,14 +62,14 @@ case class PatternError(message: String, span: Option[InfoSpan] = None) extends 
 
 object PatternError {
   def mismatch(expected: String, actual: String, span: SourceSpan): Nothing = {
-    throw PatternError("Pattern mismatch", Some(InfoSpan(span, s"expected $expected, found $actual")))
+    throw PatternError("Pattern[Term] mismatch", Some(InfoSpan(span, s"expected $expected, found $actual")))
   }
 
   def noMatch(value: String, span: SourceSpan): Nothing = {
     throw PatternError("No matched pattern", Some(InfoSpan(span, s"no matched pattern with $value")))
   }
   
-  def unexpected(pattern: Pattern, term: Term, span: SourceSpan): Nothing = {
+  def unexpected(pattern: Pattern[Term], term: Term, span: SourceSpan): Nothing = {
     throw PatternError("Unexpected pattern", Some(InfoSpan(span, s"expected $pattern, found $term")))
   }
 }

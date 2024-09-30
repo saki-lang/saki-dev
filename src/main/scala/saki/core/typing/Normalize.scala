@@ -115,6 +115,10 @@ object Normalize {
       Term.ConstructorCall(cons, args.map(_.rename), inductiveArgs.map(_.rename))
     }
 
+    case Term.Match(scrutinee, clauses) => {
+      Term.Match(scrutinee.rename, clauses.map(clause => clause.map(_.rename)))
+    }
+
     case Term.Projection(record, field) => Term.Projection(record.rename, field)
   }
 

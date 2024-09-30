@@ -58,6 +58,10 @@ object Resolve {
         returnType = returnType,
       )
 
+      case Expr.Match(scrutinee, clauses) => { // TODO: double check
+        Expr.Match(scrutinee.resolve, clauses.map(clause => clause.map(_.resolve)))
+      }
+
       case Expr.Record(fields) => Expr.Record(fields.view.mapValues(_.resolve).toMap)
       case Expr.RecordType(fields) => Expr.RecordType(fields.view.mapValues(_.resolve).toMap)
 
@@ -118,13 +122,13 @@ object Resolve {
 
   def resolveUnresolvedPattern(
     unresolvedPattern: UnresolvedPattern, span: SourceSpan
-  )(implicit ctx: Resolve.Context): (Pattern, Resolve.Context) = {
+  )(implicit ctx: Resolve.Context): (Pattern[Term], Resolve.Context) = {
     given SourceSpan = span
     ctx.get(unresolvedPattern.name) match {
       // If the variable is already defined, then it should be a constructor.
       // TODO: literals and records
       case Some(variable: Var.Defined[?]) if unresolvedPattern.patterns.nonEmpty => {
-        val (resolvedPatterns, updatedContext) = unresolvedPattern.patterns.foldLeft((List.empty[Pattern], ctx)) {
+        val (resolvedPatterns, updatedContext) = unresolvedPattern.patterns.foldLeft((List.empty[Pattern[Term]], ctx)) {
           case ((resolvedPatterns, context), pattern) => {
             val (resolved, newCtx) = pattern.resolve(context)
             (resolvedPatterns :+ resolved, newCtx)

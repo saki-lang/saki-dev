@@ -1,11 +1,11 @@
 package saki.core.typing
 
-import saki.core.{PatternError, SizeError, TypeError}
+import saki.core.{PatternError, SizeError, TypeError, ValueError}
 import saki.core.syntax.*
 
 private[core] object Match {
 
-  def matchPattern(pattern: Pattern, `type`: Type): Map[Var.Local, Type] = pattern match {
+  def matchPattern(pattern: Pattern[Term], `type`: Type): Map[Var.Local, Type] = pattern match {
 
     case Pattern.Primitive(_) => Map.empty
     case Pattern.Bind(binding) => Map(binding -> `type`)
@@ -37,14 +37,30 @@ private[core] object Match {
       PatternError.mismatch("Inductive", `type`.toString, pattern.span)
     }
 
-    // TODO: record pattern
+    case Pattern.Typed(pattern, ty) => matchPattern(pattern, ty)
+
+    case Pattern.Record(fields) if `type`.isInstanceOf[Term.RecordType] => {
+      val recordType = `type`.asInstanceOf[Term.RecordType]
+      fields.foldLeft(Map.empty: Map[Var.Local, Type]) {
+        case (subst, (name, pattern)) => {
+          val field = recordType.fields.getOrElse(name, {
+            ValueError.missingField(name, recordType, pattern.span)
+          })
+          subst ++ matchPattern(pattern, field)
+        }
+      }
+    }
+
+    case Pattern.Record(_) => {
+      PatternError.mismatch("Record", `type`.toString, pattern.span)
+    }
   }
 
   /**
    * Build a substitution map from a pattern and a term.
    * When a match fails, return None.
    */
-  def buildSubstMap(pattern: Pattern, term: Term): Option[Map[Var.Local, Term]] = pattern match {
+  def buildSubstMap(pattern: Pattern[Term], term: Term): Option[Map[Var.Local, Term]] = pattern match {
     case Pattern.Primitive(value) if term.isInstanceOf[Term.Primitive] => {
       val primitive = term.asInstanceOf[Term.Primitive]
       if value == primitive.value then Some(Map.empty) else None
@@ -65,16 +81,16 @@ private[core] object Match {
    * Build a substitution map from a sequence of patterns and terms.
    * All patterns must match the corresponding terms.
    */
-  def buildSubstMap(patterns: Seq[Pattern], terms: Seq[Term]): Option[Map[Var.Local, Term]] = {
+  def buildSubstMap(patterns: Seq[Pattern[Term]], terms: Seq[Term]): Option[Map[Var.Local, Term]] = {
     patterns.zip(terms).foldLeft(Some(Map.empty): Option[Map[Var.Local, Term]]) {
-      case (Some(subst), (pattern, term)) => pattern.buildSubstMap(term).map(subst ++ _)
+      case (Some(subst), (pattern, term)) => buildSubstMap(pattern, term).map(subst ++ _)
       case _ => None
     }
   }
 
 }
 
-extension (patterns: Seq[Pattern]) {
+extension (patterns: Seq[Pattern[Term]]) {
   def buildSubstMap(terms: Seq[Term]): Option[Map[Var.Local, Term]] = {
     Match.buildSubstMap(patterns, terms)
   }
