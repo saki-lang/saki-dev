@@ -24,12 +24,18 @@ private[core] object Elaborate {
   }
 
   def elaborate(expr: Expr, expectedType: Type)(implicit ctx: Context): Term = expr match {
-    case Expr.Lambda(lambdaParam, body) => {
+    case Expr.Lambda(lambdaParam, body, returnType) => {
       // Check that expectedType is a Pi type
       expectedType.normalize(Map.empty) match {
         case piType: Term.Pi => Term.Lambda(
-          param = lambdaParam,
-          body = ctx.withLocal(lambdaParam, piType.param.`type`) { elaborate(body, piType.codomain) }
+          param = lambdaParam.ident,
+          body = ctx.withLocal(lambdaParam.ident, piType.param.`type`) {
+            // Check that the body type is the same as the codomain of the Pi type
+            returnType.map(_.synth.term unify piType.codomain) match {
+              case Some(false) => TypeError.mismatch(piType.codomain.toString, returnType.get.toString, expr.span)
+              case _ => body.elaborate(piType.codomain)
+            }
+          }
         )
         case ty => TypeError.mismatch("Π (x : A) -> B", ty.toString, expr.span)
       }
@@ -111,6 +117,25 @@ private[core] object Elaborate {
         }
         case _ => TypeError.error("Expected a function type", fnExpr.span)
       }
+    }
+
+    case Expr.Match(scrutinee, clauses) => {
+      val (scrutineeTerm, scrutineeType) = scrutinee.synth.normalize.unpack
+      val clausesSynth = clauses.map {
+        clause => Clause(clause.patterns, clause.body.synth)
+      }
+      if !clausesSynth.map(_.body.`type`).forall(_ unify scrutineeType) then {
+        TypeError.error("Clauses have different types", expr.span)
+      }
+      Synth(
+        term = Term.Match(
+          scrutinee = scrutineeTerm,
+          clauses = clausesSynth.map {
+            case Clause(patterns, body) => Clause(patterns, body.term)
+          }
+        ),
+        `type` = scrutineeType
+      )
     }
 
     case Expr.Pi(param, result) => synthDependentType(param, result)

@@ -52,10 +52,15 @@ object Resolve {
 
       case Expr.Apply(fn, arg) => Expr.Apply(fn.resolve, Argument(arg.value.resolve, arg.applyMode))
       case Expr.Elimination(obj, member) => Expr.Elimination(obj.resolve, member)
-      case Expr.Lambda(param, body) => Expr.Lambda(param, ctx.withVariable(param) { body.resolve })
+      case Expr.Lambda(param, body, returnType) => Expr.Lambda(
+        param = Param(param.ident, param.`type`.map(_.resolve)),
+        body = ctx.withVariable(param.ident) { body.resolve },
+        returnType = returnType,
+      )
 
       case Expr.Record(fields) => Expr.Record(fields.view.mapValues(_.resolve).toMap)
       case Expr.RecordType(fields) => Expr.RecordType(fields.view.mapValues(_.resolve).toMap)
+
     }
   }
 

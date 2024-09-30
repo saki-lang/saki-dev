@@ -48,6 +48,10 @@ object PatternError {
   def mismatch(expected: String, actual: String, span: SourceSpan): Nothing = {
     throw PatternError("Pattern mismatch", Some(InfoSpan(span, s"expected $expected, found $actual")))
   }
+
+  def noMatch(value: String, span: SourceSpan): Nothing = {
+    throw PatternError("No matched pattern", Some(InfoSpan(span, s"no matched pattern with $value")))
+  }
   
   def unexpected(pattern: Pattern, term: Term, span: SourceSpan): Nothing = {
     throw PatternError("Unexpected pattern", Some(InfoSpan(span, s"expected $pattern, found $term")))

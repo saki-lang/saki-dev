@@ -1,5 +1,6 @@
 package saki.core.typing
 
+import saki.core.PatternError
 import saki.core.syntax.*
 
 object Normalize {
@@ -44,8 +45,8 @@ object Normalize {
         }
         fn.body.fold( // Either[Term, Seq[Clause[Term]]]
           term => term.normalize,
-          pattern => {
-            pattern.tryMatch(args).map(_.normalize).getOrElse(Term.FunctionCall(fnRef, argsNorm))
+          clauses => { // TODO: remove, match is supported as an expression
+            clauses.tryMatch(args).map(_.normalize).getOrElse(Term.FunctionCall(fnRef, argsNorm))
           }
         )
       }
@@ -54,6 +55,13 @@ object Normalize {
 
       case Term.ConstructorCall(cons, args, inductiveArgs) => {
         Term.ConstructorCall(cons, args.map(_.normalize), inductiveArgs.map(_.normalize))
+      }
+
+      case Term.Match(scrutinee, clauses) => {
+        val scrutineeNorm = scrutinee.normalize
+        clauses.tryMatch(Seq(scrutineeNorm)).map(_.normalize).getOrElse {
+          PatternError.noMatch(scrutineeNorm.toString, clauses.head.patterns.head.span)
+        }
       }
 
       case Term.Record(fields) => Term.Record(fields.view.mapValues(_.normalize).toMap)

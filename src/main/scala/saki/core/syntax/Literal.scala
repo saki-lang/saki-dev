@@ -27,6 +27,12 @@ enum Literal {
   }
 }
 
+object Literal {
+  def unit: Literal = UnitValue
+  def trueValue: Literal = BoolValue(true)
+  def falseValue: Literal = BoolValue(false)
+}
+
 enum LiteralType {
   case NothingType
   case UnitType

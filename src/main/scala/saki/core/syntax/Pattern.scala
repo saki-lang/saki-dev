@@ -18,6 +18,11 @@ enum Pattern(val span: SourceSpan) {
     patterns: Seq[Pattern],
   )(implicit span: SourceSpan) extends Pattern(span)
 
+  case Typed(
+    pattern: Pattern,
+    `type`: Type,
+  )(implicit span: SourceSpan) extends Pattern(span)
+
   given SourceSpan = span
 
   override def toString: String = {

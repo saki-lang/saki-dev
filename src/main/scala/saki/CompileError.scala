@@ -1,7 +1,7 @@
 package saki
 
 import org.antlr.v4.runtime.ParserRuleContext
-import util.*
+import saki.util.{SourceSpan, span}
 
 case class CompileError(message: String, span: SourceSpan, file: Option[String]) {
   override def toString: String = s"CompileError: $message at $span"
@@ -23,5 +23,3 @@ object CompileErrorException {
     new CompileErrorException(Seq(CompileError(context, message)))
   }
 }
-
-def TODO(message: String = ""): Nothing = throw new Exception(s"TODO: $message")
