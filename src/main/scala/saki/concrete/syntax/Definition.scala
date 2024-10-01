@@ -1,14 +1,14 @@
 package saki.concrete.syntax
 
 import org.antlr.v4.runtime.ParserRuleContext
-import saki.core.syntax.{
-  Param, Var,
-  Definition as CoreDefinition,
-  PristineDefinition as CorePristineDefinition
-}
-import saki.util.{SourceSpan, span, unreachable}
+import saki.concrete.span
+import saki.concrete.syntax.Definition.Constructor
+import saki.core.SourceSpan
+import saki.core.syntax.{Param, Var, Definition as CoreDefinition, PristineDefinition as CorePristineDefinition}
+import saki.util.unreachable
 
 import scala.collection.mutable
+import scala.collection.Seq
 
 enum Definition(implicit ctx: ParserRuleContext) extends SyntaxTree[CorePristineDefinition] {
 
@@ -60,15 +60,17 @@ enum Definition(implicit ctx: ParserRuleContext) extends SyntaxTree[CorePristine
 
 }
 
-case class Constructor(
+object Definition {
+  case class Constructor(
   ident: String,
   params: Seq[Param[Expr]],
-)(implicit ctx: ParserRuleContext) extends SyntaxTree[CorePristineDefinition.Constructor] {
+  )(implicit ctx: ParserRuleContext) extends SyntaxTree[CorePristineDefinition.Constructor] {
 
-  override def span: SourceSpan = ctx.span
+    override def span: SourceSpan = ctx.span
 
-  @deprecated
-  override def emit: CorePristineDefinition.Constructor = {
-    unreachable("Constructor should only be emitted in the context of an inductive definition")
+    @deprecated
+    override def emit: CorePristineDefinition.Constructor = {
+      unreachable("Constructor should only be emitted in the context of an inductive definition")
+    }
   }
 }

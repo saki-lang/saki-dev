@@ -1,8 +1,9 @@
 package saki.core.syntax
 
-import scala.collection.Seq
+import saki.core.SourceSpan
 import saki.core.typing.{Match, Resolve}
-import saki.util.SourceSpan
+
+import scala.collection.Seq
 
 enum Pattern[T](val span: SourceSpan) {
 
@@ -42,6 +43,16 @@ enum Pattern[T](val span: SourceSpan) {
     }
   }
 
+  def map[U](f: T => U): Pattern[U] = {
+    this match {
+      case Primitive(value) => Pattern.Primitive(value)
+      case Bind(binding) => Pattern.Bind(binding)
+      case Cons(cons, patterns) => Pattern.Cons(cons, patterns.map(_.map(f)))
+      case Typed(pattern, ty) => Pattern.Typed(pattern.map(f), f(ty))
+      case Record(fields) => Pattern.Record(fields.map((name, pattern) => (name, pattern.map(f))))
+    }
+  }
+
 }
 
 extension (self: Pattern[Term]) {
@@ -56,9 +67,9 @@ extension (self: Pattern[Term]) {
 
 case class UnresolvedPattern(
   name: String,
-  patterns: Seq[UnresolvedPattern]
+  patterns: Seq[UnresolvedPattern],
 )(implicit span: SourceSpan) {
-  def resolve(implicit ctx: Resolve.Context): (Pattern[Term], Resolve.Context) = {
+  def resolve[T](implicit ctx: Resolve.Context): (Pattern[T], Resolve.Context) = {
     Resolve.resolveUnresolvedPattern(this, span)
   }
 }

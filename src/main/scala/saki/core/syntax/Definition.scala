@@ -117,9 +117,27 @@ enum PristineDefinition(
     override val params: ParamList[Expr],
   ) extends PristineDefinition(ident, params)
 
-  def resolve: PristineDefinition = Resolve.resolvePristineDefinition(this)
+  def resolve(implicit ctx: Resolve.Context): (PristineDefinition, Resolve.Context) = {
+    Resolve.resolvePristineDefinition(this)
+  }
 
   def synth(implicit ctx: Context): Definition = Elaborate.synthDefinition(this)
+
+  override def toString: String = this match {
+    case Function(ident, params, resultType, body) => {
+      val paramsStr = params.map(_.toString).mkString("(", ", ", ")")
+      s"Function $ident$paramsStr: $resultType = $body"
+    }
+    case Inductive(ident, params, constructors) => {
+      val paramsStr = params.map(_.toString).mkString("(", ", ", ")")
+      val constructorsStr = constructors.map(_.toString).mkString("\n")
+      s"Inductive $ident$paramsStr\n$constructorsStr"
+    }
+    case Constructor(ident, _, params) => {
+      val paramsStr = params.map(_.toString).mkString("(", ", ", ")")
+      s"Constructor $ident$paramsStr"
+    }
+  }
 }
 
 object PristineDefinition {

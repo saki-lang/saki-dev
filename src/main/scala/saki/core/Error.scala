@@ -1,13 +1,16 @@
 package saki.core
 
-import saki.util.SourceSpan
-
 trait Error {
   def message: String
   def span: Option[InfoSpan]
 }
 
-case class InfoSpan(span: SourceSpan, info: String)
+case class SourceSpan(start: Int, end: Int)
+
+case class InfoSpan(span: SourceSpan, info: String) {
+  def start: Int = span.start
+  def end: Int = span.end
+}
 
 case class TypeError(message: String, span: Option[InfoSpan] = None) extends Exception with Error {
   override def toString: String = message
@@ -70,5 +73,17 @@ object PatternError {
   
   def unexpected(pattern: Pattern[Term], term: Term, span: SourceSpan): Nothing = {
     throw PatternError("Unexpected pattern", Some(InfoSpan(span, s"expected $pattern, found $term")))
+  }
+}
+
+case class UnsupportedError(message: String, span: Option[InfoSpan] = None) extends Exception with Error {
+  override def toString: String = message
+  def raise: Nothing = throw this
+  def withSpan(span: SourceSpan, info: String): UnsupportedError = UnsupportedError(message, Some(InfoSpan(span, info)))
+}
+
+object UnsupportedError {
+  def unsupported(feature: String, span: SourceSpan): Nothing = {
+    throw UnsupportedError("Unsupported feature", Some(InfoSpan(span, s"unsupported $feature")))
   }
 }

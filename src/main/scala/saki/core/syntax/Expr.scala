@@ -1,8 +1,9 @@
 package saki.core.syntax
 
-import scala.collection.Seq
+import saki.core.SourceSpan
 import saki.core.typing.{Elaborate, Resolve}
-import saki.util.SourceSpan
+
+import scala.collection.Seq
 
 enum Expr(val span: SourceSpan) {
 
@@ -88,7 +89,7 @@ enum Expr(val span: SourceSpan) {
    * Record instance.
    * `^{ field1 = expr1, field2 = expr2, ... }`
    */
-  case Record(
+  case Record( // TODO: record type
     fields: Map[String, Expr]
   )(implicit span: SourceSpan) extends Expr(span)
 

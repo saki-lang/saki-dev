@@ -1,9 +1,15 @@
 package saki.concrete.syntax
 
 import org.antlr.v4.runtime.ParserRuleContext
-import saki.core.{ApplyMode, LiteralType, Param, Expr as CoreExpr}
+import saki.concrete.span
+import saki.core.{
+  ApplyMode, LiteralType,
+  Param, SourceSpan,
+  Expr as CoreExpr
+}
 import saki.core.syntax.*
-import saki.util.{SourceSpan, span}
+
+import scala.collection.Seq
 
 enum Expr(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] {
 
@@ -30,7 +36,7 @@ enum Expr(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] {
 
   case FunctionCall(
     function: Expr,
-    arguments: Seq[(Expr, ApplyMode)]
+    arguments: Seq[Argument[Expr]],
   )(implicit ctx: ParserRuleContext)
 
   case Constructor(
@@ -46,6 +52,11 @@ enum Expr(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] {
   )(implicit ctx: ParserRuleContext)
 
   case Pi(
+    param: Param[Expr],
+    codomain: Expr,
+  )(implicit ctx: ParserRuleContext)
+
+  case Sigma(
     param: Param[Expr],
     codomain: Expr,
   )(implicit ctx: ParserRuleContext)
@@ -70,7 +81,8 @@ enum Expr(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] {
   )(implicit ctx: ParserRuleContext)
 
   case RecordValue(
-    fields: Seq[(String, Expr)]
+    fields: Seq[(String, Expr)],
+    `type`: Expr,
   )(implicit ctx: ParserRuleContext)
 
   given SourceSpan = ctx.span
@@ -90,6 +102,8 @@ enum Expr(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] {
     }
 
     case Pi(param, codomain) => CoreExpr.Pi(param.map(_.emit), codomain.emit)
+
+    case Sigma(param, codomain) => CoreExpr.Sigma(param.map(_.emit), codomain.emit)
 
     case CodeBlock(statements) => {
       val returnValue = statements.last match {
@@ -131,7 +145,7 @@ enum Expr(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] {
     case Elimination(value, member) => CoreExpr.Elimination(value.emit, member)
 
     case FunctionCall(function, arguments) => {
-      val args = arguments.map { (arg, mode) => Argument(arg.emit, mode) }
+      val args = arguments.map { case Argument(arg, mode) => Argument(arg.emit, mode) }
       args.foldLeft(function.emit) { case (fn, arg) => CoreExpr.Apply(fn, arg) }
     }
 
@@ -146,7 +160,7 @@ enum Expr(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] {
       fields.map { (name, ty) => (name, ty.emit) }.toMap
     )
 
-    case RecordValue(fields) => CoreExpr.Record(
+    case RecordValue(fields, ty) => CoreExpr.Record(
       fields.map { (name, value) => (name, value.emit) }.toMap
     )
   }

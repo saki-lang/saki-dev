@@ -5,7 +5,7 @@ import scala.collection.mutable
 import scala.util.boundary
 import scala.util.boundary.break
 
-object OperatorParser {
+object SeqExprParser:
 
   enum Token {
     case LeftParenthesis
@@ -340,5 +340,4 @@ object OperatorParser {
     OperatorExpressionParser(tokens, binaryOperators).expressions
   }
 
-}
-
+end SeqExprParser

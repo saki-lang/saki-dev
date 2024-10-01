@@ -19,6 +19,11 @@ enum Var {
   }
 }
 
+extension (str: String) {
+  def toLocalVar: Var.Local = Var.Local(str)
+  def toDefinedVar[Def <: Definition]: Var.Defined[Def] = Var.Defined(str)
+}
+
 extension (self: Var.Defined[? <: Definition]) {
 
   def signature: Signature = self.definition.get.signature

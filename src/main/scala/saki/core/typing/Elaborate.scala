@@ -3,12 +3,13 @@ package saki.core.typing
 import scala.collection.Seq
 import saki.core.TypeError
 import saki.core.syntax.*
+import saki.core.syntax.matchWith
 import saki.util.unreachable
 
 private[core] object Elaborate {
 
   case class Context(
-    definitions: Map[Var.Defined[?], Definition],
+    definitions: Map[Var.Defined[? <: Definition], Definition],
     locals: Map[Var.Local, Type],
   ) {
     private[Elaborate] def withLocal[R](local: Var.Local, `type`: Type)(action: Context => R): R = {
@@ -22,6 +23,10 @@ private[core] object Elaborate {
     def getDefinition(name: String): Option[Definition] = definitions.collectFirst {
       case (varDef, definition) if varDef.name == name => definition
     }
+  }
+  
+  object Context {
+    def empty: Context = Context(Map.empty, Map.empty)
   }
 
   def elaborate(expr: Expr, expectedType: Type)(implicit ctx: Context): Term = expr match {
@@ -122,17 +127,18 @@ private[core] object Elaborate {
 
     case Expr.Match(scrutinee, clauses) => {
       val (scrutineeTerm, scrutineeType) = scrutinee.synth.normalize.unpack
-      val clausesSynth = clauses.map {
-        clause => Clause(clause.patterns, clause.body.synth)
+      val clausesSynth = clauses.map { clause =>
+        val patterns = clause.patterns.map(pattern => pattern.map(_.synth.term))
+        (patterns, clause.body.synth)
       }
-      if !clausesSynth.map(_.body.`type`).forall(_ unify scrutineeType) then {
+      if !clausesSynth.map(_._2.`type`).forall(_ unify scrutineeType) then {
         TypeError.error("Clauses have different types", expr.span)
       }
       Synth(
         term = Term.Match(
           scrutinee = scrutineeTerm,
           clauses = clausesSynth.map {
-            case Clause(patterns, body) => Clause(patterns, body.term)
+            case (patterns, bodySynth) => Clause(patterns, bodySynth.term)
           }
         ),
         `type` = scrutineeType
@@ -159,13 +165,14 @@ private[core] object Elaborate {
   def synthClause(
     clause: Clause[Expr], params: Seq[Param[Term]], resultType: Type
   )(implicit ctx: Context): Clause[Term] = {
-    val map = clause.patterns.zip(params).foldLeft(Map.empty: Map[Var.Local, Type]) {
+    val patterns = clause.patterns.map(pattern => pattern.map(_.synth.term))
+    val map = patterns.zip(params).foldLeft(Map.empty: Map[Var.Local, Type]) {
       case (subst, (pattern, param)) => subst ++ pattern.matchWith(param.`type`)
     }
     val body = ctx.withLocals(map) {
       elaborate(clause.body, resultType)
     }
-    Clause(clause.patterns, body)
+    Clause(patterns, body)
   }
 
   def synthDefinition(definition: PristineDefinition)(implicit ctx: Context): Definition = definition match {

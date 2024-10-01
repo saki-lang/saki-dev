@@ -2,10 +2,15 @@ grammar Saki;
 
 /* Parser Rules */
 
-program: NL* (instructions+=instruction (NL+ instructions+=instruction)*)? NL* EOF;
+program
+    : NL* (entities+=moduleEntity (NL+ entities+=moduleEntity)*)? NL* EOF
+    ;
 
-moduleElement
-    :
+moduleEntity
+    :   definition                                                              # moduleEntityDef
+    |   'impl' ('[' paramList ']')? type=expr
+            '{' NL* (defs+=definition (NL+ defs+=definition)*)? NL* '}'         # moduleEntityImpl
+    |   operatorDeclaration                                                     # moduleEntityOpDecl
     ;
 
 expr
@@ -17,29 +22,29 @@ expr
     |   '\'(' elements+=expr ',' NL* elements+=expr ')'                     # exprTuple
     |   '^(' types+=expr ',' NL* types+=expr ')'                            # exprTupleType
     |   inductive=Identifier
-        ('[' NL* indImplicitArgList=argList NL* ']')?
-        ('(' NL* indExplicitArgList=argList NL* ')')?
+        ('[' NL* implicitArgList=argList NL* ']')?
+        ('(' NL* explicitArgList=argList NL* ')')?
         '::' constructor=Identifier                         # exprConstructor
-    |   '(' paramList ')' (':' type=expr) '=>' body=blockExpr                   # exprLambda
-    |   func=expr ('|' untypedParamList '|' (':' type=Identifier)?)? body=block  # exprCallWithLambda
-    |   subject=expr '.' field=Identifier                                   # exprProjection
-    |   lhs=expr rhs=expr                                                 # exprSeq
+    |   '(' lambdaParamList=paramList ')' (':' returnType=expr)? '=>' body=blockExpr                   # exprLambda
+    |   func=expr ('|' lambdaParamList=untypedParamList '|' (':' returnType=expr)?)? body=block  # exprCallWithLambda
+    |   subject=expr '.' member=Identifier ('[' implicitArgList=argList ']')?     # exprElimination
+//    |   lhs=expr rhs=expr                                                 # exprSeq
     // Control
     |   'if' NL* cond=blockExpr NL* 'then' NL* then=blockExpr NL* 'else' NL* else=blockExpr                    # exprIf
     |   'match' value=expr '{' NL* cases+=matchCase (NL+ cases+=matchCase)* NL* '}'                      # exprMatch
     // Types
-    |   <assoc=right> lhs=expr '->' rhs=expr                                    # exprArrowType
-    |   <assoc=right> '∀' '(' arg=expr ':' type=expr ')' '->' rhs=expr          # exprPiType
-    |   <assoc=right> '∃' '(' arg=expr ':' type=expr ')' '->' rhs=expr          # exprSigmaType
-    |   <assoc=right> '[' lhs=expr ']' '->' rhs=expr                            # exprImplicitArrowType
-    |   <assoc=right> '∀' '[' arg=expr ':' type=expr ']' '->' rhs=expr          # exprImplicitPiType
-    |   'record' (':' super=expr)? '{' NL* valueTypePair (NL+ valueTypePair)* NL* '}' # exprRecordType
-    |   record=expr '@' '{' NL* fieldAssignment (NL+ fieldAssignment)* NL* '}' # exprRecord
+    |   <assoc=right> domain=expr '->' codomain=expr                                    # exprArrowType
+    |   <assoc=right> '[' domain=expr ']' '->' codomain=expr                            # exprImplicitArrowType
+    |   <assoc=right> '∀' '(' param=Identifier ':' domain=expr ')' '->' codomain=expr          # exprPiType
+    |   <assoc=right> '∀' '[' param=Identifier ':' domain=expr ']' '->' codomain=expr          # exprImplicitPiType
+    |   <assoc=right> '∃' '(' param=Identifier ':' domain=expr ')' '->' codomain=expr          # exprSigmaType
+    |   'record' (':' super=expr)? '{' NL* fields+=identTypePair (NL+ fields+=identTypePair)* NL* '}' # exprRecordType
+    |   recordType=expr '^' '{' NL* fields+=fieldAssignment (NL+ fields+=fieldAssignment)* NL* '}' # exprRecord
     ;
 
 blockExpr
-    :   expr
-    |   block
+    :   expr        # blockExprExpr
+    |   block       # blockExprBlock
     ;
 
 argList
@@ -47,11 +52,12 @@ argList
     ;
 
 matchCase
-    :   'case' clauses+=matchClause (NL* '|' clauses+=matchClause)* NL* '=>' NL* value=expr
+    :   'case' clauses+=matchClause (NL* '|' clauses+=matchClause)* NL* '=>' NL* body=expr
     ;
 
 matchClause
-    :   pattern (':' type=expr)?
+    :   pattern (':' type=expr)?    # matchClauseSingle
+    |   '(' NL* patternList NL* ')' (':' type=expr)?    # matchClauseTuple
     ;
 
 pattern
@@ -61,7 +67,7 @@ pattern
     |   (inductive=Identifier
          ('(' NL* indExplicitArgList=argList NL* ')')?
          ('[' NL* indImplicitArgList=argList NL* ']')? '::')?
-            constructor=Identifier ('(' NL* argList NL* ')')?   # patternConstructor
+            constructor=Identifier ('(' NL* consPatternList=patternList NL* ')')?   # patternConstructor
     |   '(' NL* patternList NL* ')' # patternTuple
     |   record=expr '@' '{' NL* (fields+=patternRecordField (',' NL* fields+=patternRecordField)* ','?)? NL* '}' # patternRecord
     ;
@@ -74,19 +80,15 @@ patternRecordField
     :   ident=Identifier '=' value=pattern
     ;
 
-instruction
+statement
     // Definition
-    :   expr                                                                    # instructionExpr
-    |   'let' name=Identifier (':' type=expr) '=' NL* value=blockExpr           # instructionLet
-    |   'instance' ':' type=expr '=' NL* value=blockExpr                        # instructionInstance
-    |   definition                                                              # instructionDef
-    |   'impl' ('[' paramList ']')? type=expr
-            '{' NL* (defs+=definition (NL+ defs+=definition)*)? NL* '}'         # instructionImpl
-    |   operatorDeclaration                                                     # instructionOperator
+    :   expr                                                                    # statementExpr
+    |   'let' name=Identifier (':' type=expr) '=' NL* value=blockExpr           # statementLet
+    |   'instance' ':' type=expr '=' NL* value=blockExpr                        # statementInstance
     ;
 
 block
-    :   '{' NL* (instrs+=instruction (NL+ instructions+=instruction)*)? NL* '}'
+    :   '{' NL* (statements+=statement (NL+ statements+=statement)*)? NL* '}'
     ;
 
 definition
@@ -97,19 +99,23 @@ definition
     ;
 
 definitionIdentifier
-    :   Identifier
-    |   '(' OptSymbol ')'
+    :   string=Identifier            # defIdentString
+    |   '(' operator=OptSymbol ')'  # defIdentOperator
     ;
 
 definitionBody
     :   blockExpr                                                            # defBodyExpr
     |   'inductive' ('(' NL* inductiveParams+=Identifier (',' NL* inductiveParams+=Identifier)* ','? NL* ')')?
-            NL* '{' NL* (cases+=inductiveCons (NL+ cases+=inductiveCons)*)? NL* '}' # defBodyInductive
+            NL* '{' NL* (constructors+=inductiveCons (NL+ constructors+=inductiveCons)*)? NL* '}' # defBodyInductive
     ;
 
 inductiveCons
     :   isFlat='flat'? ident=Identifier ':' type=expr                                                          # inductiveConsType
-    |   isFlat='flat'? ident=Identifier ('(' NL* (elements+=expr (',' NL* elements+=expr)* ','?)? NL* ')')?    # inductiveConsValue
+    |   isFlat='flat'? ident=Identifier ('(' NL* (elements+=inductiveTupleElement (',' NL* elements+=inductiveTupleElement)* ','?)? NL* ')')?    # inductiveConsTuple
+    ;
+
+inductiveTupleElement
+    :   (ident=Identifier ':')? type=expr
     ;
 
 operatorDeclaration
@@ -126,7 +132,7 @@ operatorPrecedence
     ;
 
 paramList
-    :   (params+=valueTypePair (',' params+=valueTypePair)* ','?)?
+    :   (params+=identTypePair (',' params+=identTypePair)* ','?)?
     ;
 
 untypedParamList
@@ -134,7 +140,7 @@ untypedParamList
     ;
 
 untypedParam
-    :   (idents+=Identifier)+ (':' type=expr)?
+    :   ident=Identifier (':' type=expr)?
     ;
 
 atom
@@ -144,9 +150,8 @@ atom
     |   op=OptSymbol         # atomOperator
     ;
 
-valueTypePair
-    :   'self' (':' type=expr)?             # valueTypePairSelf
-    |   (idents+=Identifier)+ ':' type=expr # valueTypePairTyped
+identTypePair
+    :   (idents+=Identifier)+ ':' type=expr
     ;
 
 fieldAssignment

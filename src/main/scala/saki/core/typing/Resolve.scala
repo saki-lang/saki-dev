@@ -3,7 +3,7 @@ package saki.core.typing
 import scala.collection.Seq
 import saki.core.TypeError
 import saki.core.syntax.*
-import saki.util.SourceSpan
+import saki.core.SourceSpan
 
 object Resolve {
 
@@ -80,9 +80,12 @@ object Resolve {
     }
   }
 
-  def resolvePristineDefinition(pristineDefinition: PristineDefinition): PristineDefinition = {
-    var global: Resolve.Context = Resolve.Context.empty
-
+  def resolvePristineDefinition(
+    pristineDefinition: PristineDefinition
+  )(implicit ctx: Resolve.Context): (PristineDefinition, Resolve.Context) = {
+    
+    var global: Resolve.Context = ctx
+    
     import PristineDefinition.FunctionBody
     val resolvedDefinition: PristineDefinition = pristineDefinition match {
 
@@ -118,20 +121,20 @@ object Resolve {
         PristineDefinition.Inductive(ident, resolvedParams, resolvedConstructors)
       }
     }
-    resolvedDefinition
+    (resolvedDefinition, global)
   }
 
-  def resolveUnresolvedPattern(
+  def resolveUnresolvedPattern[T](
     unresolvedPattern: UnresolvedPattern, span: SourceSpan
-  )(implicit ctx: Resolve.Context): (Pattern[Term], Resolve.Context) = {
+  )(implicit ctx: Resolve.Context): (Pattern[T], Resolve.Context) = {
     given SourceSpan = span
     ctx.get(unresolvedPattern.name) match {
       // If the variable is already defined, then it should be a constructor.
       // TODO: literals and records
       case Some(variable: Var.Defined[?]) if unresolvedPattern.patterns.nonEmpty => {
-        val (resolvedPatterns, updatedContext) = unresolvedPattern.patterns.foldLeft((List.empty[Pattern[Term]], ctx)) {
+        val (resolvedPatterns, updatedContext) = unresolvedPattern.patterns.foldLeft((List.empty[Pattern[T]], ctx)) {
           case ((resolvedPatterns, context), pattern) => {
-            val (resolved, newCtx) = pattern.resolve(context)
+            val (resolved, newCtx) = pattern.resolve[T](context)
             (resolvedPatterns :+ resolved, newCtx)
           }
         }
