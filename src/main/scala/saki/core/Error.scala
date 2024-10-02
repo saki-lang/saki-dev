@@ -36,6 +36,10 @@ object SymbolError {
   def undefined(name: String, span: SourceSpan): Nothing = {
     throw TypeError("Symbol undefined", Some(InfoSpan(span, s"symbol $name undefined")))
   }
+
+  def notConstructor(name: String, span: SourceSpan): Nothing = {
+    throw TypeError("Symbol not a constructor", Some(InfoSpan(span, s"symbol $name is not a constructor")))
+  }
 }
 
 case class ValueError(message: String, span: Option[InfoSpan] = None) extends Exception with Error {
@@ -51,6 +55,10 @@ object ValueError {
 
   def missingField(name: String, record: Term.RecordType, span: SourceSpan): Nothing = {
     throw ValueError("Missing field", Some(InfoSpan(span, s"missing field $name in $record")))
+  }
+
+  def mismatch(expected: String, actual: String, span: SourceSpan): Nothing = {
+    throw ValueError("Value mismatch", Some(InfoSpan(span, s"expected $expected, found $actual")))
   }
 }
 

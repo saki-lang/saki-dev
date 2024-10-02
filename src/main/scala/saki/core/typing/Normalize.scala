@@ -22,7 +22,7 @@ object Normalize {
 
       case Term.Primitive(_) | Term.PrimitiveType(_) | Term.Universe => term
 
-      case Term.Ref(variable) => ctx.get(variable).map(_.rename.normalize).getOrElse(term)
+      case Term.Ref(variable) => ctx.get(variable).map(_.rename).getOrElse(term)
 
       case Term.Pi(param, codomain) => Term.Pi(param, codomain.normalize)
 
@@ -59,7 +59,8 @@ object Normalize {
       case Term.Match(scrutinees, clauses) => {
         val scrutineesNorm = scrutinees.map(_.normalize)
         clauses.tryMatch(scrutineesNorm).map(_.normalize).getOrElse {
-          PatternError.noMatch(scrutineesNorm.toString, clauses.head.patterns.head.span)
+          Term.Match(scrutineesNorm, clauses)
+          // PatternError.noMatch(scrutineesNorm.toString, clauses.last.patterns.head.span)
         }
       }
 

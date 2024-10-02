@@ -23,15 +23,20 @@ private[core] object Match {
     // ```
     case Pattern.Cons(cons, patterns) if `type`.isInstanceOf[Term.InductiveCall] => {
       val inductiveCall = `type`.asInstanceOf[Term.InductiveCall]
-      val definition = cons.definition.toOption match {
+      val consDef: Definition.Constructor = cons.definition.toOption match {
         case Some(definition) => definition
-        case None => ctx.definitions.getOrElse(cons, SymbolError.undefined(cons.name, pattern.span))
+        case None => ctx.definitions.getOrElse(cons, SymbolError.undefined(cons.name, pattern.span)) match {
+          case consDef: Definition.Constructor => consDef
+          case _ => SymbolError.notConstructor(cons.name, pattern.span)
+        }
       }
-      if definition.params.size != inductiveCall.args.size then {
-        SizeError.mismatch(definition.params.size, inductiveCall.args.size, pattern.span)
+      if consDef.params.size != patterns.size then {
+        SizeError.mismatch(consDef.params.size, patterns.size, pattern.span)
+      } else if consDef.owner != inductiveCall.inductive then {
+        ValueError.mismatch(consDef.owner.name, inductiveCall.inductive.name, pattern.span)
       } else {
-        patterns.zip(inductiveCall.args).foldLeft(Map.empty: Map[Var.Local, Type]) {
-          case (subst, (pattern, argType)) => subst ++ matchPattern(pattern, argType)
+        patterns.zip(consDef.params).foldLeft(Map.empty: Map[Var.Local, Type]) {
+          case (subst, (pattern, param)) => subst ++ matchPattern(pattern, param.`type`)
         }
       }
     }
@@ -77,7 +82,7 @@ private[core] object Match {
         buildSubstMap(patterns, consCall.consArgs)
       }
     }
-    case _ => PatternError.unexpected(pattern, term, pattern.span)
+    case _ => None
   }
 
   /**
