@@ -28,6 +28,16 @@ object TypeError {
   }
 }
 
+object SymbolError {
+  def notFound(name: String, span: SourceSpan): Nothing = {
+    throw TypeError("Symbol not found", Some(InfoSpan(span, s"symbol $name not found")))
+  }
+
+  def undefined(name: String, span: SourceSpan): Nothing = {
+    throw TypeError("Symbol undefined", Some(InfoSpan(span, s"symbol $name undefined")))
+  }
+}
+
 case class ValueError(message: String, span: Option[InfoSpan] = None) extends Exception with Error {
   override def toString: String = message
   def raise: Nothing = throw this

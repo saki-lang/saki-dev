@@ -49,7 +49,7 @@ enum Expr(val span: SourceSpan) {
   )(implicit span: SourceSpan) extends Expr(span)
 
   case Match(
-    scrutinee: Expr,
+    scrutinees: Seq[Expr],
     clauses: Seq[Clause[Expr]]
   )(implicit span: SourceSpan) extends Expr(span)
 
@@ -122,7 +122,7 @@ enum Expr(val span: SourceSpan) {
       case Lambda(param, body, _) => s"λ(${param.ident} : ${param.`type`}) => $body"
       case Record(fields) => s"^{ ${fields.map { case (k, v) => s"$k = $v" }.mkString(", ")} }"
       case RecordType(fields) => s"record { ${fields.map { case (k, v) => s"$k: $v" }.mkString(", ")} }"
-      case Match(scrutinee, clauses) => s"match $scrutinee { ${clauses.map(_.toString).mkString(" | ")} }"
+      case Match(scrutinees, clauses) => s"match $scrutinees { ${clauses.map(_.toString).mkString(" | ")} }"
     }
   }
 }

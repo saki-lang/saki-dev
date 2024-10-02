@@ -1,7 +1,7 @@
 package saki.core.syntax
 
 import saki.core.SourceSpan
-import saki.core.typing.{Match, Resolve}
+import saki.core.typing.{Elaborate, Match, Resolve}
 
 import scala.collection.Seq
 
@@ -70,7 +70,7 @@ extension (self: Pattern[Term]) {
     Match.buildSubstMap(self, term)
   }
 
-  def matchWith(term: Term): Map[Var.Local, Type] = {
+  def matchWith(term: Term)(implicit ctx: Elaborate.Context): Map[Var.Local, Type] = {
     Match.matchPattern(self, term)
   }
 }

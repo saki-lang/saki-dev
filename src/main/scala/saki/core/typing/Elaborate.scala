@@ -133,24 +133,18 @@ private[core] object Elaborate {
       }
     }
 
-    case Expr.Match(scrutinee, clauses) => {
-      val (scrutineeTerm, scrutineeType) = scrutinee.synth.normalize.unpack
-      val clausesSynth = clauses.map { clause =>
-        val patterns = clause.patterns.map(pattern => pattern.map(_.synth.term))
-        // TODO: FIXME: add bindings introduced by patterns into the context
-        (patterns, clause.body.synth)
+    case Expr.Match(scrutinees, clauses) => {
+      val scrutineesSynth: Seq[Synth] = scrutinees.map(_.synth.normalize)
+      val clausesSynth: Seq[(Clause[Term], Type)] = clauses.map { clause =>
+        synthClause(clause, scrutineesSynth)
       }
-      if !clausesSynth.map(_._2.`type`).forall(_ unify scrutineeType) then {
+      val clauseBodyTypes: Seq[Type] = clausesSynth.map(_._2)
+      if !clauseBodyTypes.tail.forall(_ unify clauseBodyTypes.head) then {
         TypeError.error("Clauses have different types", expr.span)
       }
       Synth(
-        term = Term.Match(
-          scrutinee = scrutineeTerm,
-          clauses = clausesSynth.map {
-            case (patterns, bodySynth) => Clause(patterns, bodySynth.term)
-          }
-        ),
-        `type` = scrutineeType
+        term = Term.Match(scrutineesSynth.map(_.term), clausesSynth.map(_._1)),
+        `type` = clauseBodyTypes.head
       )
     }
 
@@ -172,16 +166,14 @@ private[core] object Elaborate {
   }
 
   def synthClause(
-    clause: Clause[Expr], params: Seq[Param[Term]], resultType: Type
-  )(implicit ctx: Context): Clause[Term] = {
+    clause: Clause[Expr], scrutinees: Seq[Synth]
+  )(implicit ctx: Context): (Clause[Term], Type) = {
     val patterns = clause.patterns.map(pattern => pattern.map(_.synth.term))
-    val map = patterns.zip(params).foldLeft(Map.empty: Map[Var.Local, Type]) {
+    val map = patterns.zip(scrutinees).foldLeft(Map.empty: Map[Var.Local, Type]) {
       case (subst, (pattern, param)) => subst ++ pattern.matchWith(param.`type`)
     }
-    val body = ctx.withLocals(map) {
-      elaborate(clause.body, resultType)
-    }
-    Clause(patterns, body)
+    val (body, ty) = ctx.withLocals[Synth](map) { clause.body.synth }.unpack
+    (Clause(patterns, body), ty)
   }
 
   def synthDefinition(definition: PristineDefinition)(implicit ctx: Context): Definition = definition match {
@@ -191,9 +183,12 @@ private[core] object Elaborate {
       val params = synthParams(paramExprs)
       ctx.withLocals(params.map(param => param.ident -> param.`type`).toMap) {
         implicit ctx => {
-          val function: Definition.Function = Definition.Function(ident, Signature(params, resultType), params, resultType)
-          given newCtx: Context = ctx.copy(definitions = ctx.definitions.updated(ident, function))
-          function.body := pristineBody.elaborate(resultType)(newCtx)
+          val function: Definition.Function = {
+            Definition.Function(ident, Signature(params, resultType), params, resultType)
+          }
+          function.ident.definition := function
+          given Context = ctx.copy(definitions = ctx.definitions.updated(ident, function))
+          function.body := pristineBody.elaborate(resultType)
           function
         }
       }
@@ -202,16 +197,23 @@ private[core] object Elaborate {
     case inductive: PristineDefinition.Inductive => {
       val params = synthParams(inductive.params)(ctx)
       val constructors = ArrayBuffer.empty[Definition.Constructor]
-      val inductiveDefinition = Definition.Inductive(
-        inductive.ident, Signature(params, Term.Universe), params, constructors
-      )
+      val inductiveDefinition: Definition.Inductive = {
+        Definition.Inductive(inductive.ident, Signature(params, Term.Universe), params, constructors)
+      }
+      inductiveDefinition.ident.definition := inductiveDefinition
       // To support recursive inductive types, we need to add the inductive type to the context
       // before synthesizing the constructors
       given Context = ctx.copy(definitions = ctx.definitions.updated(inductive.ident, inductiveDefinition))
       constructors ++= inductive.constructors.map { constructor =>
         // TODO: Check whether `Var.Local(inductiveDefinition.ident.name)` works as expected
-        val signature = Signature(params, Term.Ref(Var.Local(inductiveDefinition.ident.name)))
-        Definition.Constructor(constructor.ident, signature, inductive.ident, synthParams(constructor.params))
+        val constructorParams: ArrayBuffer[Param[Term]] = ArrayBuffer.empty
+        val signature = Signature(constructorParams, Term.Ref(Var.Local(inductiveDefinition.ident.name)))
+        val constructorDefinition: Definition.Constructor = {
+          Definition.Constructor(constructor.ident, signature, inductive.ident, constructorParams)
+        }
+        constructorDefinition.ident.definition := constructorDefinition
+        constructorParams ++= synthParams(constructor.params)
+        constructorDefinition
       }
       inductiveDefinition
     }

@@ -72,7 +72,7 @@ enum Expr(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] {
   )(implicit ctx: ParserRuleContext)
 
   case Match(
-    scrutinee: Expr,
+    scrutinees: Seq[Expr],
     cases: Seq[Clause[Expr]],
   )(implicit ctx: ParserRuleContext)
 
@@ -123,7 +123,7 @@ enum Expr(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] {
 
     case If(condition, thenBranch, elseBranch) => {
       Expr.Match(
-        scrutinee = condition,
+        scrutinees = Seq(condition),
         cases = Seq(
           Clause(
             patterns = Seq(Pattern.Primitive(Literal.trueValue)),
@@ -137,8 +137,8 @@ enum Expr(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] {
       ).emit
     }
 
-    case Match(scrutinee, cases) => CoreExpr.Match(
-      scrutinee = scrutinee.emit,
+    case Match(scrutinees, cases) => CoreExpr.Match(
+      scrutinees = scrutinees.map(_.emit),
       clauses = cases.map(clause => clause.map(_.emit)),
     )
 

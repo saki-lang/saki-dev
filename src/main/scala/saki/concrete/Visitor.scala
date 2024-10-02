@@ -292,7 +292,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
         }
       }
     }
-    Expr.Match(scrutinee, cases.toList)
+    Expr.Match(Seq(scrutinee), cases.toList)
   }
 
   override def visitExprArrowType(ctx: ExprArrowTypeContext): Expr.Pi = {

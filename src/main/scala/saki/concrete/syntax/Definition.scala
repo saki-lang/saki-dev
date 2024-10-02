@@ -59,8 +59,8 @@ enum Definition(implicit ctx: ParserRuleContext) extends SyntaxTree[CorePristine
 
 object Definition {
   case class Constructor(
-  ident: String,
-  params: Seq[Param[Expr]],
+    ident: String,
+    params: Seq[Param[Expr]],
   )(implicit ctx: ParserRuleContext) extends SyntaxTree[CorePristineDefinition.Constructor] {
 
     override def span: SourceSpan = ctx.span

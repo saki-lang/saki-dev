@@ -1,12 +1,14 @@
 package saki.core.typing
 
 import scala.collection.Seq
-import saki.core.{PatternError, SizeError, TypeError, ValueError}
+import saki.core.{PatternError, SizeError, SymbolError, TypeError, ValueError}
 import saki.core.syntax.*
 
 private[core] object Match {
 
-  def matchPattern(pattern: Pattern[Term], `type`: Type): Map[Var.Local, Type] = pattern match {
+  def matchPattern(
+    pattern: Pattern[Term], `type`: Type
+  )(implicit ctx: Elaborate.Context): Map[Var.Local, Type] = pattern match {
 
     case Pattern.Primitive(_) => Map.empty
     case Pattern.Bind(binding) => Map(binding -> `type`)
@@ -21,12 +23,12 @@ private[core] object Match {
     // ```
     case Pattern.Cons(cons, patterns) if `type`.isInstanceOf[Term.InductiveCall] => {
       val inductiveCall = `type`.asInstanceOf[Term.InductiveCall]
-      if cons.definition.get.params.size != inductiveCall.args.size then {
-        SizeError.mismatch(
-          cons.definition.get.params.size,
-          inductiveCall.args.size,
-          pattern.span
-        )
+      val definition = cons.definition.toOption match {
+        case Some(definition) => definition
+        case None => ctx.definitions.getOrElse(cons, SymbolError.undefined(cons.name, pattern.span))
+      }
+      if definition.params.size != inductiveCall.args.size then {
+        SizeError.mismatch(definition.params.size, inductiveCall.args.size, pattern.span)
       } else {
         patterns.zip(inductiveCall.args).foldLeft(Map.empty: Map[Var.Local, Type]) {
           case (subst, (pattern, argType)) => subst ++ matchPattern(pattern, argType)

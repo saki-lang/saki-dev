@@ -60,8 +60,8 @@ object Resolve {
         returnType = returnType,
       )
 
-      case Expr.Match(scrutinee, clauses) => { // TODO: double check
-        Expr.Match(scrutinee.resolve, clauses.map { clause =>
+      case Expr.Match(scrutinees, clauses) => { // TODO: double check
+        Expr.Match(scrutinees.map(_.resolve), clauses.map { clause =>
           val (resolvedClause, _) = resolveClause(clause)
           resolvedClause
         })

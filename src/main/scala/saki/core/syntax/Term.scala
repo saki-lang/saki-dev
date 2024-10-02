@@ -64,7 +64,7 @@ enum Term {
   case FunctionCall(fn: Var.Defined[Definition.Function], args: Seq[Term])
   case InductiveCall(inductive: Var.Defined[Definition.Inductive], args: Seq[Term])
   case ConstructorCall(cons: Var.Defined[Definition.Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term])
-  case Match(scrutinee: Term, clauses: Seq[Clause[Term]])
+  case Match(scrutinees: Seq[Term], clauses: Seq[Clause[Term]])
   case Pi(param: Param[Term], codomain: Term)
   case Sigma(param: Param[Term], codomain: Term)
   case Record(fields: Map[String, Term])
