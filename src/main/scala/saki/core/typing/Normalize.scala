@@ -44,12 +44,10 @@ object Normalize {
         given Context = fn.arguments.zip(argsNorm).foldLeft(ctx) {
           case (acc, (param, arg)) => acc + (param -> arg)
         }
-        fn.body.fold( // Either[Term, Seq[Clause[Term]]]
-          term => term.normalize,
-          clauses => { // TODO: remove, match is supported as an expression
-            clauses.tryMatch(args).map(_.normalize).getOrElse(Term.FunctionCall(fnRef, argsNorm))
-          }
-        )
+        fn.body.toOption match {
+          case Some(term) => term.normalize
+          case None => Term.FunctionCall(fnRef, argsNorm)
+        }
       }
 
       case Term.InductiveCall(inductive, args) => Term.InductiveCall(inductive, args.map(_.normalize))

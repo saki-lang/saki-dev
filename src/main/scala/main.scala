@@ -63,7 +63,7 @@ def printSourceWithHighlight(source: String, span: InfoSpan): Unit = {
       if (idx == startLine) {
         val highlightStart = span.start - source.substring(0, span.start).lastIndexOf('\n') - 1
         val highlightEnd = if (startLine == endLine) span.end - span.start + highlightStart else line.length
-        println(" " * (highlightStart + 6) + "^" * (highlightEnd - highlightStart) + " " + span.info)
+        println(" " * (highlightStart + 6) + "^" * (highlightEnd - highlightStart + 1) + " " + span.info)
       }
     case (line, idx) =>
       println(f"$idx%4d: $line")
@@ -83,9 +83,7 @@ def main(): Unit = {
   val module = catchError(exampleCode) {
     val definitions = defs.flatMap { definition =>
       definition.emit match {
-        case inductive: PristineDefinition.Inductive => {
-          Seq(inductive) ++ inductive.constructors
-        }
+        case inductive: PristineDefinition.Inductive => Seq(inductive) // ++ inductive.constructors
         case other => Seq(other)
       }
     }

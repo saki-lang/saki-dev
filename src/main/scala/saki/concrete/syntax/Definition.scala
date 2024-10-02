@@ -34,15 +34,12 @@ enum Definition(implicit ctx: ParserRuleContext) extends SyntaxTree[CorePristine
     case Function(name, paramsExpr, resultType, body) => {
       val params = paramsExpr.map(param => param.map(_.emit))
       val ident: Var.Defined[CoreDefinition.Function] = Var.Defined(name)
-      CorePristineDefinition.Function(
-        ident, params, resultType.emit,
-        CorePristineDefinition.FunctionBody.Expr(body.emit)
-      )
+      CorePristineDefinition.Function(ident, params, resultType.emit, body.emit)
     }
 
     case Inductive(name, paramsExpr, constructorsExpr) => {
       val constructors: mutable.ListBuffer[CorePristineDefinition.Constructor] = mutable.ListBuffer()
-      val ident: Var.Defined[CoreDefinition.Inductive] = Var.Defined(name)
+      val ident: Var.Defined[CoreDefinition.Inductive] = Var.Defined[CoreDefinition.Inductive](name)
       val params = paramsExpr.map(param => param.map(_.emit))
       val inductive: CorePristineDefinition.Inductive = {
         CorePristineDefinition.Inductive(ident, params, constructors)

@@ -1,6 +1,10 @@
 package saki.util
 
-def unreachable(message: String): Nothing = throw new Exception("Unreachable code: " + message)
-def unreachable: Nothing = throw new Exception("Unreachable code")
+case class UnreachableException(message: String) extends Exception(message)
 
-def unimplemented(message: String): Nothing = throw new Exception("Unimplemented code: " + message)
+case class UnimplementedException(message: String) extends Exception(message)
+
+def unreachable(message: String): Nothing = throw UnreachableException("Unreachable code: " + message)
+def unreachable: Nothing = throw UnreachableException("Unreachable code")
+
+def unimplemented(message: String): Nothing = throw UnimplementedException("Unimplemented code: " + message)

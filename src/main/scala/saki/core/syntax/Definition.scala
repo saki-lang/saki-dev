@@ -1,8 +1,10 @@
 package saki.core.syntax
 
-import scala.collection.Seq
 import saki.core.typing.Elaborate.Context
 import saki.core.typing.{Elaborate, Resolve}
+import saki.util.LateInit
+
+import scala.collection.Seq
 
 case class Param[Type](
   ident: Var.Local,
@@ -62,7 +64,7 @@ enum Definition(
     override val signature: Signature,
     params: ParamList[Term],
     override val resultType: Type,
-    body: Either[Term, Seq[Clause[Term]]],
+    val body: LateInit[Term] = LateInit[Term](),
   ) extends Definition(ident, signature)
 
   case Inductive(
@@ -88,7 +90,7 @@ enum Definition(
 
   def resultType: Type = this match {
     case Function(_, _, _, resultType, _) => resultType
-    case Inductive(_, _, _, _) => Term.unitType
+    case Inductive(_, _, _, _) => Term.Universe
     case Constructor(_, _, owner, _) => Term.InductiveCall(owner, owner.definition.get.arguments.refs)
     case Contract(_, _, _, resultType) => resultType
   }
@@ -102,7 +104,7 @@ enum PristineDefinition(
     override val ident: Var.Defined[Definition.Function],
     override val params: ParamList[Expr],
     resultType: Expr,
-    body: PristineDefinition.FunctionBody, // TODO: change to Expr
+    body: Expr,
   ) extends PristineDefinition(ident, params)
 
   case Inductive(
@@ -138,16 +140,4 @@ enum PristineDefinition(
       s"Constructor $ident$paramsStr"
     }
   }
-}
-
-object PristineDefinition {
-
-  private type CoreExpr = Expr
-
-  enum FunctionBody {
-    case Expr(body: CoreExpr)
-    case Clauses(clauses: Seq[Clause[CoreExpr]])
-    case UnresolvedClauses(clauses: Seq[UnresolvedClause])
-  }
-
 }

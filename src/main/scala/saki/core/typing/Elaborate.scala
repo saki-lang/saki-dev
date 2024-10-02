@@ -1,10 +1,12 @@
 package saki.core.typing
 
-import scala.collection.Seq
 import saki.core.TypeError
 import saki.core.syntax.*
-import saki.core.syntax.matchWith
 import saki.util.unreachable
+
+import scala.annotation.unchecked.uncheckedVariance
+import scala.collection.Seq
+import scala.collection.mutable.ArrayBuffer
 
 private[core] object Elaborate {
 
@@ -70,11 +72,17 @@ private[core] object Elaborate {
     case Expr.PrimitiveType(ty) => Synth(Term.PrimitiveType(ty), Term.Universe)
 
     case Expr.Resolved(ref) => ref match {
-      case definitionVar: Var.Defined[? <: Definition] => definitionVar.definition match {
-        case None => Synth(
-          term = definitionVar.signature.params.buildLambda(definitionVar.call),
-          `type` = definitionVar.signature.params.buildPiType(definitionVar.signature.resultType)
-        )
+      case definitionVar: Var.Defined[? <: Definition] => definitionVar.definition.toOption match {
+        case None => ctx.definitions.get(definitionVar) match {
+          case Some(definition) => {
+            definition.ident.definition :=! definition
+            Synth(
+              term = definition.params.buildLambda(definition.ident.call).rename(Map.empty),
+              `type` = definition.params.buildPiType(definition.resultType),
+            )
+          }
+          case None => TypeError.error(s"Unbound definition: ${definitionVar.name}", expr.span)
+        }
         case Some(definition: Definition) => Synth(
           // TODO: should we remove `rename` here? (does it make sense?)
           term = definition.params.buildLambda(definition.ident.call).rename(Map.empty),
@@ -121,7 +129,7 @@ private[core] object Elaborate {
             Synth(fn.apply(arg), codomain.subst(param.ident, arg))
           }
         }
-        case _ => TypeError.error("Expected a function type", fnExpr.span)
+        case _ => TypeError.mismatch("Π (x : A) -> B", fnType.toString, fnExpr.span)
       }
     }
 
@@ -129,6 +137,7 @@ private[core] object Elaborate {
       val (scrutineeTerm, scrutineeType) = scrutinee.synth.normalize.unpack
       val clausesSynth = clauses.map { clause =>
         val patterns = clause.patterns.map(pattern => pattern.map(_.synth.term))
+        // TODO: FIXME: add bindings introduced by patterns into the context
         (patterns, clause.body.synth)
       }
       if !clausesSynth.map(_._2.`type`).forall(_ unify scrutineeType) then {
@@ -182,29 +191,29 @@ private[core] object Elaborate {
       val params = synthParams(paramExprs)
       ctx.withLocals(params.map(param => param.ident -> param.`type`).toMap) {
         implicit ctx => {
-          import PristineDefinition.FunctionBody
-          val signature = Signature(params, resultType)
-          val body: Either[Term, Seq[Clause[Term]]] = pristineBody match {
-            case FunctionBody.Expr(expr) => Left(expr.elaborate(resultType))
-            case FunctionBody.Clauses(clauses) => {
-              Right(clauses.map(clause => synthClause(clause, params, resultType)))
-              // TODO: classify clauses
-            }
-            case FunctionBody.UnresolvedClauses(_) => unreachable
-          }
-          Definition.Function(ident, signature, params, resultType, body)
+          val function: Definition.Function = Definition.Function(ident, Signature(params, resultType), params, resultType)
+          given newCtx: Context = ctx.copy(definitions = ctx.definitions.updated(ident, function))
+          function.body := pristineBody.elaborate(resultType)(newCtx)
+          function
         }
       }
     }
 
     case inductive: PristineDefinition.Inductive => {
-      val params = synthParams(inductive.params)
-      val constructors: Seq[Definition.Constructor] = inductive.constructors.map { constructor =>
-        // FIXME: the return type of a constructor should be the inductive type
-        val signature = Signature(params, Term.Universe)
-        Definition.Constructor(constructor.ident, signature, inductive.ident, params)
+      val params = synthParams(inductive.params)(ctx)
+      val constructors = ArrayBuffer.empty[Definition.Constructor]
+      val inductiveDefinition = Definition.Inductive(
+        inductive.ident, Signature(params, Term.Universe), params, constructors
+      )
+      // To support recursive inductive types, we need to add the inductive type to the context
+      // before synthesizing the constructors
+      given Context = ctx.copy(definitions = ctx.definitions.updated(inductive.ident, inductiveDefinition))
+      constructors ++= inductive.constructors.map { constructor =>
+        // TODO: Check whether `Var.Local(inductiveDefinition.ident.name)` works as expected
+        val signature = Signature(params, Term.Ref(Var.Local(inductiveDefinition.ident.name)))
+        Definition.Constructor(constructor.ident, signature, inductive.ident, synthParams(constructor.params))
       }
-      Definition.Inductive(inductive.ident, Signature(params, Term.Universe), params, constructors)
+      inductiveDefinition
     }
 
     case PristineDefinition.Constructor(_, _, _) => unreachable

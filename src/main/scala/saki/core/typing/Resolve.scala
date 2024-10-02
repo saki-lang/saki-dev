@@ -3,6 +3,7 @@ package saki.core.typing
 import scala.collection.Seq
 import saki.core.TypeError
 import saki.core.syntax.*
+import saki.core.syntax.Pattern.resolve
 import saki.core.SourceSpan
 
 object Resolve {
@@ -60,7 +61,10 @@ object Resolve {
       )
 
       case Expr.Match(scrutinee, clauses) => { // TODO: double check
-        Expr.Match(scrutinee.resolve, clauses.map(clause => clause.map(_.resolve)))
+        Expr.Match(scrutinee.resolve, clauses.map { clause =>
+          val (resolvedClause, _) = resolveClause(clause)
+          resolvedClause
+        })
       }
 
       case Expr.Record(fields) => Expr.Record(fields.view.mapValues(_.resolve).toMap)
@@ -83,10 +87,9 @@ object Resolve {
   def resolvePristineDefinition(
     pristineDefinition: PristineDefinition
   )(implicit ctx: Resolve.Context): (PristineDefinition, Resolve.Context) = {
-    
+
     var global: Resolve.Context = ctx
-    
-    import PristineDefinition.FunctionBody
+
     val resolvedDefinition: PristineDefinition = pristineDefinition match {
 
       case PristineDefinition.Function(ident, params, resultType, body) => {
@@ -95,12 +98,9 @@ object Resolve {
         global += (ident.name -> ident)
         // add the function name to the context for recursive calls
         val bodyCtx = ctxWithParam + (ident.name -> ident)
-        val resolvedBody = body match {
-          case FunctionBody.Expr(expr) => FunctionBody.Expr(expr.resolve(bodyCtx))
-          case FunctionBody.Clauses(clauses) => FunctionBody.Clauses(clauses)
-          case FunctionBody.UnresolvedClauses(clauses) => FunctionBody.Clauses(clauses.map(_.resolve(bodyCtx)))
-        }
-        PristineDefinition.Function(ident, resolvedParams, resultType.resolve(bodyCtx), resolvedBody)
+        val resolvedBody = body.resolve(bodyCtx)
+        val resolvedResultType = resultType.resolve(bodyCtx)
+        PristineDefinition.Function(ident, resolvedParams, resolvedResultType, resolvedBody)
       }
 
       // TODO: constructors should be resolved only in the context of the inductive type
@@ -116,6 +116,7 @@ object Resolve {
         global += (ident.name -> ident)
         val resolvedConstructors: Seq[PristineDefinition.Constructor] = constructors.map { constructor =>
           val (resolvedConsParams, _) = constructor.params.resolve(global)
+          global += (constructor.ident.name -> constructor.ident)
           PristineDefinition.Constructor(constructor.ident, constructor.owner, resolvedConsParams)
         }
         PristineDefinition.Inductive(ident, resolvedParams, resolvedConstructors)
@@ -124,32 +125,51 @@ object Resolve {
     (resolvedDefinition, global)
   }
 
-  def resolveUnresolvedPattern[T](
-    unresolvedPattern: UnresolvedPattern, span: SourceSpan
-  )(implicit ctx: Resolve.Context): (Pattern[T], Resolve.Context) = {
-    given SourceSpan = span
-    ctx.get(unresolvedPattern.name) match {
-      // If the variable is already defined, then it should be a constructor.
-      // TODO: literals and records
-      case Some(variable: Var.Defined[?]) if unresolvedPattern.patterns.nonEmpty => {
-        val (resolvedPatterns, updatedContext) = unresolvedPattern.patterns.foldLeft((List.empty[Pattern[T]], ctx)) {
+  def resolvePattern(pattern: Pattern[Expr])(implicit ctx: Context): (Pattern[Expr], Context) = {
+    given span: SourceSpan = pattern.span
+    pattern match {
+
+      case Pattern.Bind(binding) => {
+        (Pattern.Bind(binding), ctx.updated(binding.name, binding))
+      }
+
+      case Pattern.Cons(cons, patterns) => {
+        val (resolvedPatterns, updatedContext) = patterns.foldLeft((List.empty[Pattern[Expr]], ctx)) {
           case ((resolvedPatterns, context), pattern) => {
-            val (resolved, newCtx) = pattern.resolve[T](context)
+            val (resolved, newCtx) = pattern.resolve(context)
             (resolvedPatterns :+ resolved, newCtx)
           }
         }
-        val pattern = Pattern.Cons(
-          cons = variable.asInstanceOf[Var.Defined[Definition.Constructor]],
-          patterns = resolvedPatterns
-        )
-        (pattern, updatedContext)
+        (Pattern.Cons(cons, resolvedPatterns), updatedContext)
       }
 
-      // Otherwise, it should be a new introduced variable.
-      case _ => {
-        val variable: Var.Local = Var.Local(unresolvedPattern.name)
-        (Pattern.Bind(variable), ctx.updated(unresolvedPattern.name, variable))
+      case Pattern.Primitive(value) => (Pattern.Primitive(value), ctx)
+
+      case Pattern.Record(fields) => {
+        val (resolvedFields, updatedContext) = fields.foldLeft((Map.empty[String, Pattern[Expr]], ctx)) {
+          case ((resolvedFields, context), (label, pattern)) => {
+            val (resolved, newCtx) = pattern.resolve(context)
+            (resolvedFields + (label -> resolved), newCtx)
+          }
+        }
+        (Pattern.Record(resolvedFields.toSeq), updatedContext)
+      }
+
+      case Pattern.Typed(pattern, ty) => {
+        val (resolvedPattern, updatedContext) = pattern.resolve(ctx)
+        (Pattern.Typed(resolvedPattern, ty.resolve(updatedContext)), updatedContext)
       }
     }
+  }
+
+  def resolveClause(clause: Clause[Expr])(implicit ctx: Resolve.Context): (Clause[Expr], Context) = {
+    val (resolvedPatterns, newCtx) = clause.patterns.foldLeft((List.empty[Pattern[Expr]], ctx)) {
+      case ((resolvedPatterns, context), pattern) => {
+        val (resolved, newCtx) = pattern.resolve(context)
+        (resolvedPatterns :+ resolved, newCtx)
+      }
+    }
+    val body = clause.body.resolve(newCtx)
+    (Clause(resolvedPatterns, body), newCtx)
   }
 }

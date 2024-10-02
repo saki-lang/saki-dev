@@ -16,12 +16,26 @@ object Module {
 
   def from(pristineDefinitions: Seq[PristineDefinition]): Module = {
     var resolvingContext = Resolve.Context.empty
-    val elaboratingContext = Elaborate.Context.empty
+    var elaboratingContext = Elaborate.Context.empty
     val definitions = pristineDefinitions.map { definition =>
       val (resolved, ctx) = definition.resolve(resolvingContext)
       resolvingContext = ctx
       resolved
-    }.map { definition => definition.synth(elaboratingContext) }
+    }.map { definition =>
+      val definitionSynth = definition.synth(elaboratingContext)
+      definitionSynth match {
+        case inductive: Definition.Inductive => inductive.constructors.foreach { constructor =>
+          elaboratingContext = elaboratingContext.copy(
+            definitions = elaboratingContext.definitions.updated(constructor.ident, constructor)
+          )
+        }
+        case _ => ()
+      }
+      elaboratingContext = elaboratingContext.copy(
+        definitions = elaboratingContext.definitions.updated(definitionSynth.ident, definitionSynth)
+      )
+      definitionSynth
+    }
     Module(definitions)
   }
 }

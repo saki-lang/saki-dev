@@ -53,6 +53,16 @@ enum Pattern[T](val span: SourceSpan) {
     }
   }
 
+  def getBindings: Seq[Var.Local] = {
+    this match {
+      case Primitive(_) => Seq.empty
+      case Bind(binding) => Seq(binding)
+      case Cons(_, patterns) => patterns.flatMap(_.getBindings)
+      case Typed(pattern, _) => pattern.getBindings
+      case Record(fields) => fields.flatMap((_, pattern) => pattern.getBindings)
+    }
+  }
+
 }
 
 extension (self: Pattern[Term]) {
@@ -65,11 +75,10 @@ extension (self: Pattern[Term]) {
   }
 }
 
-case class UnresolvedPattern(
-  name: String,
-  patterns: Seq[UnresolvedPattern],
-)(implicit span: SourceSpan) {
-  def resolve[T](implicit ctx: Resolve.Context): (Pattern[T], Resolve.Context) = {
-    Resolve.resolveUnresolvedPattern(this, span)
+object Pattern {
+  extension (self: Pattern[Expr]) {
+    def resolve(implicit ctx: Resolve.Context): (Pattern[Expr], Resolve.Context) = {
+      Resolve.resolvePattern(self)
+    }
   }
 }

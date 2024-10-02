@@ -1,14 +1,17 @@
 package saki.core.syntax
 
-import scala.collection.Seq
+import saki.core.TypeError
 import saki.core.typing.Normalize.{Context, RenameMap}
 import saki.core.typing.{Normalize, Unify}
+import saki.util.LateInit
+
+import scala.collection.Seq
 
 enum Var {
 
   case Defined[Def <: Definition](
     override val name: String,
-    definition: Option[Def] = None,
+    definition: LateInit[Def] = LateInit[Def](),
   )
 
   case Local(override val name: String)
@@ -17,6 +20,8 @@ enum Var {
     case Defined(name, _) => name
     case Local(name) => name
   }
+
+  override def toString: String = this.name
 }
 
 extension (str: String) {
@@ -28,7 +33,7 @@ extension (self: Var.Defined[? <: Definition]) {
 
   def signature: Signature = self.definition.get.signature
 
-  def call: Term = self.definition match {
+  def call: Term = self.definition.toOption match {
     case Some(_: Definition.Function) =>
       Term.FunctionCall(self.asInstanceOf[Var.Defined[Definition.Function]],  self.signature.arguments.refs)
     case Some(_: Definition.Inductive) =>
@@ -42,7 +47,7 @@ extension (self: Var.Defined[? <: Definition]) {
       )
     }
     case Some(_: Definition.Contract) => ???
-    case None => throw new Exception(s"Unresolved reference: ${self.name}")
+    case None => TypeError(s"Unresolved reference: ${self.name}").raise
   }
 }
 
