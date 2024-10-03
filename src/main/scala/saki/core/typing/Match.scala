@@ -77,7 +77,7 @@ private[core] object Match {
     case Pattern.Cons(cons, patterns) if term.isInstanceOf[Term.ConstructorCall] => {
       val consCall = term.asInstanceOf[Term.ConstructorCall]
       if cons != consCall.cons then {
-        TypeError.mismatch(cons.toString, consCall.cons.toString, pattern.span)
+        None
       } else {
         buildSubstMap(patterns, consCall.consArgs)
       }

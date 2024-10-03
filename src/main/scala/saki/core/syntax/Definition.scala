@@ -94,6 +94,26 @@ enum Definition(
     case Constructor(_, _, owner, _) => Term.InductiveCall(owner, owner.definition.get.arguments.refs)
     case Contract(_, _, _, resultType) => resultType
   }
+
+  override def toString: String = this match {
+    case Function(ident, signature, params, resultType, body) => {
+      val paramsStr = params.map(_.toString).mkString("(", ", ", ")")
+      s"def $ident$paramsStr: $resultType = $body"
+    }
+    case Inductive(ident, signature, params, constructors) => {
+      val paramsStr = params.map(_.toString).mkString("(", ", ", ")")
+      val constructorsStr = constructors.map(_.toString).mkString("\n")
+      s"inductive $ident$paramsStr\n$constructorsStr"
+    }
+    case Constructor(ident, signature, owner, params) => {
+      val paramsStr = params.map(_.toString).mkString("(", ", ", ")")
+      s"constructor $ident$paramsStr"
+    }
+    case Contract(ident, signature, params, resultType) => {
+      val paramsStr = params.map(_.toString).mkString("(", ", ", ")")
+      s"contract $ident$paramsStr: $resultType"
+    }
+  }
 }
 
 enum PristineDefinition(

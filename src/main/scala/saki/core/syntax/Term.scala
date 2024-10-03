@@ -97,7 +97,7 @@ enum Term {
     case FunctionCall(fn, args) => s"${fn.name}(${args.mkString(", ")})"
     case InductiveCall(inductive, args) => s"${inductive.name}(${args.mkString(", ")})"
     case ConstructorCall(cons, args, inductiveArgs) =>
-      s"${cons.owner}::(${inductiveArgs.mkString(", ")})${cons.name}(${args.mkString(", ")})"
+      s"${cons.name}(${inductiveArgs.mkString(", ")})(${args.mkString(", ")})"
     case Match(scrutinee, clauses) => s"match $scrutinee {${clauses.mkString(" | ")}}"
     case Pi(param, codomain) => s"Π(${param.name} : ${param.`type`}) -> $codomain"
     case Sigma(param, codomain) => s"Σ(${param.name} : ${param.`type`}) -> $codomain"

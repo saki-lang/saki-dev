@@ -24,9 +24,10 @@ val exampleCode: String = {
       case Nat::Succ(Nat::Zero) => Nat::Succ(Nat::Zero)
       case Nat::Succ(Nat::Succ(n')) => plus(fib(n'), fib(Nat::Succ(n')))
   }
+
+  def main: Nat = fib(Nat::Succ(Nat::Succ(Nat::Zero)))
   """
 }
-
 
 def catchError[R](source: String)(action: => R): R = {
   try action catch {
@@ -70,7 +71,6 @@ def printSourceWithHighlight(source: String, span: InfoSpan): Unit = {
   }
 }
 
-
 @main
 def main(): Unit = {
   val lexer = SakiLexer(CharStreams.fromString(exampleCode))
@@ -81,13 +81,7 @@ def main(): Unit = {
   defs.foreach(println)
 
   val module = catchError(exampleCode) {
-    val definitions = defs.flatMap { definition =>
-      definition.emit match {
-        case inductive: PristineDefinition.Inductive => Seq(inductive) // ++ inductive.constructors
-        case other => Seq(other)
-      }
-    }
-    Module.from(definitions)
+    Module.from(defs.map(_.emit))
   }
 
   println(module)

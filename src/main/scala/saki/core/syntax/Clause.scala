@@ -1,7 +1,8 @@
 package saki.core.syntax
 
+import saki.core.typing.buildSubstMap
+
 import scala.collection.Seq
-import saki.core.typing.{Resolve, buildSubstMap}
 
 extension (clauses: Seq[Clause[Term]]) {
   /**

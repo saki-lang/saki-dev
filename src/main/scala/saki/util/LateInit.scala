@@ -39,6 +39,11 @@ case class LateInit[A]() extends Product with IterableOnce[A] {
   }
 
   override def iterator: Iterator[A] = value.iterator
+
+  override def toString: String = value match {
+    case Some(value) => value.toString
+    case None => "uninitialized"
+  }
 }
 
 object LateInit {
