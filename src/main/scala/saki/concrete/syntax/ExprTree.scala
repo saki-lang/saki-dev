@@ -2,16 +2,12 @@ package saki.concrete.syntax
 
 import org.antlr.v4.runtime.ParserRuleContext
 import saki.concrete.span
-import saki.core.{
-  ApplyMode, LiteralType,
-  Param, SourceSpan,
-  Expr as CoreExpr
-}
+import saki.core.{ApplyMode, Entity, LiteralType, Param, SourceSpan, Expr as CoreExpr}
 import saki.core.syntax.*
 
 import scala.collection.Seq
 
-enum Expr(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] {
+enum ExprTree(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] with Entity {
 
   override def span: SourceSpan = ctx.span
 
@@ -30,35 +26,35 @@ enum Expr(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] {
   )(implicit ctx: ParserRuleContext)
 
   case Elimination(
-    value: Expr,
+    value: ExprTree,
     member: String,
   )(implicit ctx: ParserRuleContext)
 
   case FunctionCall(
-    function: Expr,
-    arguments: Seq[Argument[Expr]],
+    function: ExprTree,
+    arguments: Seq[Argument[ExprTree]],
   )(implicit ctx: ParserRuleContext)
 
   case Constructor(
     inductive: String,
-    inductiveArguments: Seq[Argument[Expr]],
+    inductiveArguments: Seq[Argument[ExprTree]],
     constructor: String,
   )(implicit ctx: ParserRuleContext)
 
   case Lambda(
-    param: Param[Option[Expr]],
-    body: Expr,
-    returnType: Option[Expr],
+    param: Param[Option[ExprTree]],
+    body: ExprTree,
+    returnType: Option[ExprTree],
   )(implicit ctx: ParserRuleContext)
 
   case Pi(
-    param: Param[Expr],
-    codomain: Expr,
+    param: Param[ExprTree],
+    codomain: ExprTree,
   )(implicit ctx: ParserRuleContext)
 
   case Sigma(
-    param: Param[Expr],
-    codomain: Expr,
+    param: Param[ExprTree],
+    codomain: ExprTree,
   )(implicit ctx: ParserRuleContext)
 
   case CodeBlock(
@@ -66,23 +62,23 @@ enum Expr(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] {
   )(implicit ctx: ParserRuleContext)
 
   case If(
-    condition: Expr,
-    thenBranch: Expr,
-    elseBranch: Option[Expr],
+    condition: ExprTree,
+    thenBranch: ExprTree,
+    elseBranch: Option[ExprTree],
   )(implicit ctx: ParserRuleContext)
 
   case Match(
-    scrutinees: Seq[Expr],
-    cases: Seq[Clause[Expr]],
+    scrutinees: Seq[ExprTree],
+    cases: Seq[Clause[ExprTree]],
   )(implicit ctx: ParserRuleContext)
 
   case RecordType(
-    fields: Seq[(String, Expr)]
+    fields: Seq[(String, ExprTree)]
   )(implicit ctx: ParserRuleContext)
 
   case RecordValue(
-    fields: Seq[(String, Expr)],
-    `type`: Expr,
+    fields: Seq[(String, ExprTree)],
+    `type`: ExprTree,
   )(implicit ctx: ParserRuleContext)
 
   given SourceSpan = ctx.span
@@ -122,7 +118,7 @@ enum Expr(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] {
     }
 
     case If(condition, thenBranch, elseBranch) => {
-      Expr.Match(
+      ExprTree.Match(
         scrutinees = Seq(condition),
         cases = Seq(
           Clause(
@@ -131,7 +127,7 @@ enum Expr(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] {
           ),
           Clause(
             patterns = Seq(Pattern.Primitive(Literal.falseValue)),
-            body = elseBranch.getOrElse(Expr.PrimitiveValue(Literal.unit)),
+            body = elseBranch.getOrElse(ExprTree.PrimitiveValue(Literal.unit)),
           ),
         ),
       ).emit

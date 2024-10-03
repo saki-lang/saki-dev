@@ -1,18 +1,19 @@
 package saki.core.syntax
 
-import saki.core.SourceSpan
-import saki.core.typing.{Elaborate, Resolve}
+import saki.core.{Entity, EntityFactory, SourceSpan}
+import saki.core.domain.Environment
+import saki.core.typing.{Resolve, Synthesis}
 
 import scala.collection.Seq
 
-enum Expr(val span: SourceSpan) {
+enum Expr(val span: SourceSpan) extends Entity {
 
   case Unresolved(
     name: String
   )(implicit span: SourceSpan) extends Expr(span)
 
-  case Resolved(
-    ref: Var
+  case Variable(
+    ident: Var
   )(implicit span: SourceSpan) extends Expr(span)
 
   /**
@@ -101,9 +102,9 @@ enum Expr(val span: SourceSpan) {
     fields: Map[String, Expr]
   )(implicit span: SourceSpan) extends Expr(span)
 
-  def synth(implicit ctx: Elaborate.Context): Elaborate.Synth = Elaborate.synth(this)
+  def synth(implicit ctx: Synthesis.Context): Synthesis.Synth = Synthesis.synth(this)
 
-  def elaborate(expected: Type)(implicit ctx: Elaborate.Context): Term = Elaborate.elaborate(this, expected)
+  def elaborate(expected: Term)(implicit ctx: Synthesis.Context): Term = Synthesis.elaborate(this, expected)
 
   def resolve(implicit ctx: Resolve.Context): Expr = Resolve.resolveExpr(this)
 
@@ -112,8 +113,8 @@ enum Expr(val span: SourceSpan) {
       case Universe() => "Type"
       case Primitive(value) => value.toString
       case PrimitiveType(ty) => ty.toString
-      case Resolved(ref) => ref.toString
       case Unresolved(name) => name
+      case Variable(ref) => ref.toString
       case Hole(_) => "_"
       case Pi(param, result) => s"Π(${param.ident} : ${param.`type`}) -> $result"
       case Sigma(param, result) => s"Σ(${param.ident} : ${param.`type`}) -> $result"

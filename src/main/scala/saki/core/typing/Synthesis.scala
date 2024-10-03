@@ -1,28 +1,30 @@
 package saki.core.typing
 
-import saki.core.TypeError
+import saki.core.syntax.given
+import saki.core.{Entity, TypeError}
 import saki.core.syntax.*
+import saki.core.Param
 import saki.util.unreachable
 
 import scala.annotation.unchecked.uncheckedVariance
 import scala.collection.Seq
 import scala.collection.mutable.ArrayBuffer
 
-private[core] object Elaborate {
+private[core] object Synthesis {
 
   case class Context(
-    definitions: Map[Var.Defined[? <: Definition], Definition],
-    locals: Map[Var.Local, Type],
+    definitions: Map[Var.Defined[?, ?], Definition[Term]],
+    locals: Map[Var.Local, Term],
   ) {
-    private[Elaborate] def withLocal[R](local: Var.Local, `type`: Type)(action: Context => R): R = {
+    private[Synthesis] def withLocal[R](local: Var.Local, `type`: Term)(action: Context => R): R = {
       action(copy(locals = locals.updated(local, `type`)))
     }
 
-    private[Elaborate] def withLocals[R](locals: Map[Var.Local, Type])(action: Context => R): R = {
+    private[Synthesis] def withLocals[R](locals: Map[Var.Local, Term])(action: Context => R): R = {
       action(copy(locals = this.locals ++ locals))
     }
 
-    def getDefinition(name: String): Option[Definition] = definitions.collectFirst {
+    def getDefinition(name: String): Option[Definition[Term]] = definitions.collectFirst {
       case (varDef, definition) if varDef.name == name => definition
     }
   }
@@ -31,7 +33,7 @@ private[core] object Elaborate {
     def empty: Context = Context(Map.empty, Map.empty)
   }
 
-  def elaborate(expr: Expr, expectedType: Type)(implicit ctx: Context): Term = expr match {
+  def elaborate(expr: Expr, expectedType: Term)(implicit ctx: Context): Term = expr match {
     case Expr.Lambda(lambdaParam, body, returnType) => {
       // Check that expectedType is a Pi type
       expectedType.normalize(Map.empty) match {
@@ -58,8 +60,8 @@ private[core] object Elaborate {
     }
   }
 
-  case class Synth(term: Term, `type`: Type) {
-    def unpack: (Term, Type) = (term, `type`)
+  case class Synth(term: Term, `type`: Term) {
+    def unpack: (Term, Term) = (term, `type`)
     def normalize: Synth = copy(term = term.normalize(Map.empty), `type` = `type`.normalize(Map.empty))
   }
 
@@ -71,26 +73,26 @@ private[core] object Elaborate {
 
     case Expr.PrimitiveType(ty) => Synth(Term.PrimitiveType(ty), Term.Universe)
 
-    case Expr.Resolved(ref) => ref match {
-      case definitionVar: Var.Defined[? <: Definition] => definitionVar.definition.toOption match {
+    case Expr.Variable(ref) => ref match {
+      case definitionVar: Var.Defined[Term, ?] => definitionVar.definition.toOption match {
         case None => ctx.definitions.get(definitionVar) match {
           case Some(definition) => {
             definition.ident.definition :=! definition
             Synth(
-              term = definition.params.buildLambda(definition.ident.call).rename(Map.empty),
+              term = definition.params.buildLambda(definition.ident.call(Term)).rename(Map.empty),
               `type` = definition.params.buildPiType(definition.resultType),
             )
           }
           case None => TypeError.error(s"Unbound definition: ${definitionVar.name}", expr.span)
         }
-        case Some(definition: Definition) => Synth(
+        case Some(definition: Definition[Term]) => Synth(
           // TODO: should we remove `rename` here? (does it make sense?)
-          term = definition.params.buildLambda(definition.ident.call).rename(Map.empty),
+          term = definition.params.buildLambda(definition.ident.call(Term)).rename(Map.empty),
           `type` = definition.params.buildPiType(definition.resultType),
         )
       }
       case variable: Var.Local => ctx.locals.get(variable) match {
-        case Some(ty) => Synth(Term.Ref(variable), ty)
+        case Some(ty) => Synth(Term.Variable(variable), ty)
         case None => TypeError.error(s"Unbound variable: ${variable.name}", expr.span)
       }
     }
@@ -109,8 +111,8 @@ private[core] object Elaborate {
       // This is a method call
       // `obj.method`
       case (term, _) => {
-        val method: Definition.Function = ctx.getDefinition(member) match {
-          case Some(definition: Definition.Function) => definition
+        val method: Function[Term] = ctx.getDefinition(member) match {
+          case Some(definition: Function[Term]) => definition
           case _ => TypeError.error(s"Method not found: $member", expr.span)
         }
         Synth(Term.FunctionCall(method.ident, Seq(term)), method.resultType)
@@ -135,10 +137,10 @@ private[core] object Elaborate {
 
     case Expr.Match(scrutinees, clauses) => {
       val scrutineesSynth: Seq[Synth] = scrutinees.map(_.synth.normalize)
-      val clausesSynth: Seq[(Clause[Term], Type)] = clauses.map { clause =>
+      val clausesSynth: Seq[(Clause[Term], Term)] = clauses.map { clause =>
         synthClause(clause, scrutineesSynth)
       }
-      val clauseBodyTypes: Seq[Type] = clausesSynth.map(_._2)
+      val clauseBodyTypes: Seq[Term] = clausesSynth.map(_._2)
       if !clauseBodyTypes.tail.forall(_ unify clauseBodyTypes.head) then {
         TypeError.error("Clauses have different types", expr.span)
       }
@@ -167,49 +169,51 @@ private[core] object Elaborate {
 
   def synthClause(
     clause: Clause[Expr], scrutinees: Seq[Synth]
-  )(implicit ctx: Context): (Clause[Term], Type) = {
+  )(implicit ctx: Context): (Clause[Term], Term) = {
     val patterns = clause.patterns.map(pattern => pattern.map(_.synth.term))
-    val map = patterns.zip(scrutinees).foldLeft(Map.empty: Map[Var.Local, Type]) {
+    val map = patterns.zip(scrutinees).foldLeft(Map.empty: Map[Var.Local, Term]) {
       case (subst, (pattern, param)) => subst ++ pattern.matchWith(param.`type`)
     }
     val (body, ty) = ctx.withLocals[Synth](map) { clause.body.synth }.unpack
     (Clause(patterns, body), ty)
   }
 
-  def synthDefinition(definition: PristineDefinition)(implicit ctx: Context): Definition = definition match {
+  extension (definition: Definition[Expr]) {
+    def synth(implicit ctx: Context): Definition[Term] = synthDefinition(definition)
+  }
+  
+  def synthDefinition(definition: Definition[Expr])(implicit ctx: Context): Definition[Term] = definition match {
 
-    case PristineDefinition.Function(ident, paramExprs, resultTypeExpr, pristineBody) => {
+    case Function(ident, paramExprs, resultTypeExpr, pristineBody) => {
       val resultType = resultTypeExpr.elaborate(Term.Universe)
       val params = synthParams(paramExprs)
       ctx.withLocals(params.map(param => param.ident -> param.`type`).toMap) {
         implicit ctx => {
-          val function: Definition.Function = {
-            Definition.Function(ident, Signature(params, resultType), params, resultType)
-          }
+          val function: Function[Term] = Function[Term](Var.Defined(ident.name), params, resultType)
           function.ident.definition := function
           given Context = ctx.copy(definitions = ctx.definitions.updated(ident, function))
-          function.body := pristineBody.elaborate(resultType)
+          function.body := pristineBody.get.elaborate(resultType)
           function
         }
       }
     }
 
-    case inductive: PristineDefinition.Inductive => {
-      val params = synthParams(inductive.params)(ctx)
-      val constructors = ArrayBuffer.empty[Definition.Constructor]
-      val inductiveDefinition: Definition.Inductive = {
-        Definition.Inductive(inductive.ident, Signature(params, Term.Universe), params, constructors)
-      }
+    case inductiveExpr: Inductive[Expr] => {
+      val params = synthParams(inductiveExpr.params)(ctx)
+      val constructors = ArrayBuffer.empty[Constructor[Term]]
+      val inductiveDefinition: Inductive[Term] = Inductive(Var.Defined(inductiveExpr.ident.name), params, constructors)
       inductiveDefinition.ident.definition := inductiveDefinition
       // To support recursive inductive types, we need to add the inductive type to the context
       // before synthesizing the constructors
-      given Context = ctx.copy(definitions = ctx.definitions.updated(inductive.ident, inductiveDefinition))
-      constructors ++= inductive.constructors.map { constructor =>
+      given Context = ctx.copy(definitions = ctx.definitions.updated(inductiveDefinition.ident, inductiveDefinition))
+      constructors ++= inductiveExpr.constructors.map { constructor =>
         // TODO: Check whether `Var.Local(inductiveDefinition.ident.name)` works as expected
         val constructorParams: ArrayBuffer[Param[Term]] = ArrayBuffer.empty
-        val signature = Signature(constructorParams, Term.Ref(Var.Local(inductiveDefinition.ident.name)))
-        val constructorDefinition: Definition.Constructor = {
-          Definition.Constructor(constructor.ident, signature, inductive.ident, constructorParams)
+        val signature = Signature(constructorParams, Term.Variable(Var.Local(inductiveDefinition.ident.name)))
+        val constructorDefinition: Constructor[Term] = {
+          val consIdent: Var.Defined[Term, Constructor] = Var.Defined(constructor.ident.name)
+          val indIdent: Var.Defined[Term, Inductive] = inductiveDefinition.ident
+          Constructor(consIdent, indIdent, constructorParams)
         }
         constructorDefinition.ident.definition := constructorDefinition
         constructorParams ++= synthParams(constructor.params)
@@ -218,7 +222,7 @@ private[core] object Elaborate {
       inductiveDefinition
     }
 
-    case PristineDefinition.Constructor(_, _, _) => unreachable
+    case Constructor(_, _, _) => unreachable
   }
 
   def synthParams(paramExprs: Seq[Param[Expr]])(implicit ctx: Context): Seq[Param[Term]] = {

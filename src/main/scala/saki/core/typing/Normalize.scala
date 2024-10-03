@@ -9,7 +9,7 @@ object Normalize {
 
   extension (ctx: Context) {
     private def withParam[R](param: Var.Local)(action: Context => R): R = {
-      action(ctx + (param -> Term.Ref(param)))
+      action(ctx + (param -> Term.Variable(param)))
     }
   }
   
@@ -20,7 +20,7 @@ object Normalize {
 
       case Term.Primitive(_) | Term.PrimitiveType(_) | Term.Universe => term
 
-      case Term.Ref(variable) => ctx.get(variable).map(_.rename).getOrElse(term)
+      case Term.Variable(variable) => ctx.get(variable).map(_.rename).getOrElse(term)
 
       case Term.Pi(param, codomain) => Term.Pi(param, codomain.normalize)
 
@@ -82,7 +82,7 @@ object Normalize {
   def renameTerm(term: Term)(implicit map: RenameMap): Term = term match {
     case Term.Primitive(_) | Term.PrimitiveType(_) | Term.Universe => term
 
-    case Term.Ref(variable) => Term.Ref(map.getOrElse(variable, variable))
+    case Term.Variable(variable) => Term.Variable(map.getOrElse(variable, variable))
 
     case Term.Lambda(param, body) => {
       val withParam: RenameMap = map + (param -> Var.Local(param.name))

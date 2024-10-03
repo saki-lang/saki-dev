@@ -1,11 +1,11 @@
 package saki.core.syntax
 
-import saki.core.SourceSpan
-import saki.core.typing.{Elaborate, Match, Resolve}
+import saki.core.{Entity, SourceSpan}
+import saki.core.typing.{Match, Resolve, Synthesis}
 
 import scala.collection.Seq
 
-enum Pattern[T](val span: SourceSpan) {
+enum Pattern[T <: Entity](val span: SourceSpan) {
 
   case Primitive(
     value: Literal,
@@ -16,7 +16,7 @@ enum Pattern[T](val span: SourceSpan) {
   )(implicit span: SourceSpan) extends Pattern[T](span)
 
   case Cons(
-    cons: Var.Defined[Definition.Constructor],
+    cons: Var.Defined[?, Constructor],
     patterns: Seq[Pattern[T]],
   )(implicit span: SourceSpan) extends Pattern[T](span)
 
@@ -43,7 +43,7 @@ enum Pattern[T](val span: SourceSpan) {
     }
   }
 
-  def map[U](f: T => U): Pattern[U] = {
+  def map[U <: Entity](f: T => U): Pattern[U] = {
     this match {
       case Primitive(value) => Pattern.Primitive(value)
       case Bind(binding) => Pattern.Bind(binding)
@@ -70,7 +70,7 @@ extension (self: Pattern[Term]) {
     Match.buildSubstMap(self, term)
   }
 
-  def matchWith(term: Term)(implicit ctx: Elaborate.Context): Map[Var.Local, Type] = {
+  def matchWith(term: Term)(implicit ctx: Synthesis.Context): Map[Var.Local, Term] = {
     Match.matchPattern(self, term)
   }
 }

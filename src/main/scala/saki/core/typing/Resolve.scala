@@ -5,6 +5,7 @@ import saki.core.TypeError
 import saki.core.syntax.*
 import saki.core.syntax.Pattern.resolve
 import saki.core.SourceSpan
+import saki.util.LateInit
 
 object Resolve {
 
@@ -32,9 +33,10 @@ object Resolve {
       case Expr.Primitive(value) => Expr.Primitive(value)
       case Expr.PrimitiveType(ty) => Expr.PrimitiveType(ty)
 
-      case Expr.Resolved(ref) => Expr.Resolved(ref)
+      case Expr.Variable(ref) => Expr.Variable(ref)
+
       case Expr.Unresolved(name) => ctx.get(name) match {
-        case Some(variable) => Expr.Resolved(variable)
+        case Some(variable) => Expr.Variable(variable)
         case None => TypeError.error(s"Unresolved variable: $name", span)
       }
 
@@ -83,43 +85,49 @@ object Resolve {
       }
     }
   }
+  
+  extension (definition: Definition[Expr]) {
+    def resolve(implicit ctx: Resolve.Context): (Definition[Expr], Resolve.Context) = {
+      resolveDefinitionExpr(definition)
+    }
+  }
 
-  def resolvePristineDefinition(
-    pristineDefinition: PristineDefinition
-  )(implicit ctx: Resolve.Context): (PristineDefinition, Resolve.Context) = {
+  def resolveDefinitionExpr(
+    pristineDefinition: Definition[Expr]
+  )(implicit ctx: Resolve.Context): (Definition[Expr], Resolve.Context) = {
 
     var global: Resolve.Context = ctx
 
-    val resolvedDefinition: PristineDefinition = pristineDefinition match {
+    val resolvedDefinition: Definition[Expr] = pristineDefinition match {
 
-      case PristineDefinition.Function(ident, params, resultType, body) => {
+      case Function(ident, params, resultType, body) => {
         val (resolvedParams, ctxWithParam) = params.resolve(global)
         // register the function name to global context
         global += (ident.name -> ident)
         // add the function name to the context for recursive calls
         val bodyCtx = ctxWithParam + (ident.name -> ident)
-        val resolvedBody = body.resolve(bodyCtx)
+        val resolvedBody = body.get.resolve(bodyCtx)
         val resolvedResultType = resultType.resolve(bodyCtx)
-        PristineDefinition.Function(ident, resolvedParams, resolvedResultType, resolvedBody)
+        Function[Expr](ident, resolvedParams, resolvedResultType, LateInit(resolvedBody))
       }
 
       // TODO: constructors should be resolved only in the context of the inductive type
       // TODO: Remove this match arm (?)
-      case PristineDefinition.Constructor(ident, owner, params) => {
+      case Constructor(ident, owner, params) => {
         val (resolvedParams, _) = params.resolve(global)
         global += (ident.name -> ident)
-        PristineDefinition.Constructor(ident, owner, resolvedParams)
+        Constructor(ident, owner, resolvedParams)
       }
 
-      case PristineDefinition.Inductive(ident, params, constructors) => {
+      case Inductive(ident, params, constructors) => {
         val (resolvedParams, _) = params.resolve(global)
         global += (ident.name -> ident)
-        val resolvedConstructors: Seq[PristineDefinition.Constructor] = constructors.map { constructor =>
+        val resolvedConstructors: Seq[Constructor[Expr]] = constructors.map { constructor =>
           val (resolvedConsParams, _) = constructor.params.resolve(global)
           global += (constructor.ident.name -> constructor.ident)
-          PristineDefinition.Constructor(constructor.ident, constructor.owner, resolvedConsParams)
+          Constructor[Expr](constructor.ident, constructor.owner, resolvedConsParams)
         }
-        PristineDefinition.Inductive(ident, resolvedParams, resolvedConstructors)
+        Inductive[Expr](ident, resolvedParams, resolvedConstructors)
       }
     }
     (resolvedDefinition, global)

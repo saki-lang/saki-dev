@@ -1,18 +1,16 @@
 package saki.core.syntax
 
-import saki.core.typing.Elaborate.Context
-import saki.core.typing.{Elaborate, Resolve}
+import saki.core.{Entity, EntityFactory}
 import saki.util.LateInit
 
 import scala.collection.Seq
 
-case class Param[Type](
-  ident: Var.Local,
-  `type`: Type,
+case class Param[T <: Entity | Option[Entity]](
+  ident: Var.Local, `type`: T,
   applyMode: ApplyMode = ApplyMode.Explicit,
 ) {
   def name: String = ident.name
-  def map[NewType](transform: Type => NewType): Param[NewType] = {
+  def map[U <: Entity | Option[Entity]](transform: T => U): Param[U] = {
     copy(`type` = transform(`type`))
   }
 }
@@ -29,135 +27,65 @@ enum ApplyMode {
   }
 }
 
-type ParamList[T] = Seq[Param[T]]
+type ParamList[T <: Entity | Option[Entity]] = Seq[Param[T]]
 
-case class Argument[Value](
-  value: Value,
+case class Argument[T <: Entity](
+  value: T,
   applyMode: ApplyMode = ApplyMode.Explicit,
 ) {
-  def map[NewValue](transform: Value => NewValue): Argument[NewValue] = {
+  def map[U <: Entity](transform: T => U): Argument[U] = {
     copy(value = transform(value))
   }
 }
 
-type ArgList[Value] = Seq[Argument[Value]]
+case class Signature[T <: Entity](params: ParamList[T], resultType: T) extends FnLike[T] {
+  def map[U <: Entity](transform: T => U): Signature[U] = {
+    copy(params = params.map(_.map(transform)), resultType = transform(resultType))
+  }
+}
 
-trait FnLike[T] {
+type ArgList[T <: Entity] = Seq[Argument[T]]
+
+trait FnLike[T <: Entity] {
   def params: ParamList[T]
-  def resultType: T
   def arguments: Seq[Var.Local] = params.map(_.ident)
 }
 
 extension (arguments: Seq[Var.Local]) {
-  def refs: Seq[Term.Ref] = arguments.map(Term.Ref.apply)
-}
-
-case class Signature(params: ParamList[Term], resultType: Type) extends FnLike[Term]
-
-enum Definition(
-  val ident: Var.Defined[? <: Definition],
-  val signature: Signature,
-) extends FnLike[Type] {
-
-  case Function(
-    override val ident: Var.Defined[Function],
-    override val signature: Signature,
-    params: ParamList[Term],
-    override val resultType: Type,
-    val body: LateInit[Term] = LateInit[Term](),
-  ) extends Definition(ident, signature)
-
-  case Inductive(
-    override val ident: Var.Defined[Inductive],
-    override val signature: Signature,
-    params: ParamList[Term],
-    constructors: Seq[Constructor],
-  ) extends Definition(ident, signature)
-
-  case Constructor(
-    override val ident: Var.Defined[Constructor],
-    override val signature: Signature,
-    owner: Var.Defined[Inductive],
-    params: ParamList[Term],
-  ) extends Definition(ident, signature)
-
-  case Contract(
-    override val ident: Var.Defined[Contract],
-    override val signature: Signature,
-    params: ParamList[Term],
-    override val resultType: Type,
-  ) extends Definition(ident, signature)
-
-  def resultType: Type = this match {
-    case Function(_, _, _, resultType, _) => resultType
-    case Inductive(_, _, _, _) => Term.Universe
-    case Constructor(_, _, owner, _) => Term.InductiveCall(owner, owner.definition.get.arguments.refs)
-    case Contract(_, _, _, resultType) => resultType
-  }
-
-  override def toString: String = this match {
-    case Function(ident, signature, params, resultType, body) => {
-      val paramsStr = params.map(_.toString).mkString("(", ", ", ")")
-      s"def $ident$paramsStr: $resultType = $body"
-    }
-    case Inductive(ident, signature, params, constructors) => {
-      val paramsStr = params.map(_.toString).mkString("(", ", ", ")")
-      val constructorsStr = constructors.map(_.toString).mkString("\n")
-      s"inductive $ident$paramsStr\n$constructorsStr"
-    }
-    case Constructor(ident, signature, owner, params) => {
-      val paramsStr = params.map(_.toString).mkString("(", ", ", ")")
-      s"constructor $ident$paramsStr"
-    }
-    case Contract(ident, signature, params, resultType) => {
-      val paramsStr = params.map(_.toString).mkString("(", ", ", ")")
-      s"contract $ident$paramsStr: $resultType"
-    }
+  def refs[T <: Entity](implicit factory: EntityFactory[T]): Seq[T] = {
+    arguments.map(factory.variable)
   }
 }
 
-enum PristineDefinition(
-  val ident: Var.Defined[? <: Definition], 
-  val params: ParamList[Expr]
-) {
-  case Function(
-    override val ident: Var.Defined[Definition.Function],
-    override val params: ParamList[Expr],
-    resultType: Expr,
-    body: Expr,
-  ) extends PristineDefinition(ident, params)
+sealed trait Definition[T <: Entity] extends FnLike[T] {
+  def ident: Var.Defined[T, ?]
+  def resultType(implicit ev: EntityFactory[T]): T
+  def signature(implicit ev: EntityFactory[T]): Signature[T] = Signature(params, resultType)
+}
 
-  case Inductive(
-    override val ident: Var.Defined[Definition.Inductive],
-    override val params: ParamList[Expr],
-    constructors: Seq[Constructor],
-  ) extends PristineDefinition(ident, params)
+case class Function[T <: Entity](
+  override val ident: Var.Defined[T, Function],
+  override val params: ParamList[T],
+  val resultType: T,
+  body: LateInit[T] = LateInit[T](),
+) extends Definition[T] {
+  def resultType(implicit ev: EntityFactory[T]): T = resultType
+}
 
-  case Constructor(
-    override val ident: Var.Defined[Definition.Constructor],
-    owner: PristineDefinition.Inductive,
-    override val params: ParamList[Expr],
-  ) extends PristineDefinition(ident, params)
+case class Inductive[T <: Entity](
+  override val ident: Var.Defined[T, Inductive],
+  override val params: ParamList[T],
+  constructors: Seq[Constructor[T]],
+) extends Definition[T] {
+  def resultType(implicit ev: EntityFactory[T]): T = ev.universe
+}
 
-  def resolve(implicit ctx: Resolve.Context): (PristineDefinition, Resolve.Context) = {
-    Resolve.resolvePristineDefinition(this)
-  }
-
-  def synth(implicit ctx: Context): Definition = Elaborate.synthDefinition(this)
-
-  override def toString: String = this match {
-    case Function(ident, params, resultType, body) => {
-      val paramsStr = params.map(_.toString).mkString("(", ", ", ")")
-      s"Function $ident$paramsStr: $resultType = $body"
-    }
-    case Inductive(ident, params, constructors) => {
-      val paramsStr = params.map(_.toString).mkString("(", ", ", ")")
-      val constructorsStr = constructors.map(_.toString).mkString("\n")
-      s"Inductive $ident$paramsStr\n$constructorsStr"
-    }
-    case Constructor(ident, _, params) => {
-      val paramsStr = params.map(_.toString).mkString("(", ", ", ")")
-      s"Constructor $ident$paramsStr"
-    }
+case class Constructor[T <: Entity](
+  override val ident: Var.Defined[T, Constructor],
+  owner: Var.Defined[T, Inductive],
+  override val params: ParamList[T],
+) extends Definition[T] {
+  def resultType(implicit factory: EntityFactory[T]): T = {
+    factory.inductiveCall(owner, owner.definition.get.arguments.refs(factory))
   }
 }

@@ -1,7 +1,7 @@
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 import saki.concrete.Visitor
 import saki.concrete.syntax.Definition
-import saki.core.syntax.{Module, PristineDefinition}
+import saki.core.syntax.Module
 import saki.core.{Error, InfoSpan}
 import saki.grammar.{SakiLexer, SakiParser}
 

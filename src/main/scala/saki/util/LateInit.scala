@@ -8,7 +8,10 @@ case class LateInit[A]() extends Product with IterableOnce[A] {
 
   def toOption: Option[A] = value
 
-  def get: A = value.get
+  def get: A = value match {
+    case Some(value) => value
+    case None => throw new NoSuchElementException("LateInit has not been initialized")
+  }
 
   def getOrElse(default: A): A = value.getOrElse(default)
 
@@ -58,3 +61,5 @@ object LateInit {
 
   def apply[A](): LateInit[A] = new LateInit[A]()
 }
+
+given [A]: Conversion[A, LateInit[A]] = LateInit.apply(_)

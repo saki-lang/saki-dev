@@ -1,11 +1,12 @@
 package saki.core
 
+import saki.core.domain.Type
+
 export syntax.{
   Literal,
   LiteralType,
   Expr,
   Term,
-  Type,
   Param,
   ParamList,
   Argument,
@@ -14,7 +15,6 @@ export syntax.{
   Pattern,
   Clause,
   Definition,
-  PristineDefinition,
 }
 
 package object syntax

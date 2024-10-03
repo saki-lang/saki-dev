@@ -2,10 +2,10 @@ package saki.concrete
 
 import org.antlr.v4.runtime.ParserRuleContext
 import saki.concrete.SeqExprParser.{Associativity, Operator, UnaryType}
-import saki.concrete.syntax.{Definition, Expr, Spanned, Statement, SyntaxTree}
+import saki.concrete.syntax.{Definition, ExprTree, Spanned, Statement, SyntaxTree}
 import saki.core.Literal.*
 import saki.core.{Pattern, SourceSpan, UnsupportedError, Literal as LiteralValue}
-import saki.core.syntax.{ApplyMode, Argument, Clause, Param, Var, toDefinedVar, toLocalVar}
+import saki.core.syntax.{ApplyMode, Argument, Clause, Param, Var}
 import saki.grammar.SakiBaseVisitor
 import saki.grammar.SakiParser.*
 import saki.util.*
@@ -92,7 +92,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     val implicitParams = ctx.implicitParamList.toImplicitParams
     val explicitParams = ctx.explicitParamList.toExplicitParams
     val ident = ctx.ident.getText
-    visitDefinitionBody(ident, implicitParams, explicitParams, Expr.Universe(), ctx.body)
+    visitDefinitionBody(ident, implicitParams, explicitParams, ExprTree.Universe(), ctx.body)
   }
 
   override def visitDefGeneral(ctx: DefGeneralContext): Seq[Definition] = {
@@ -114,17 +114,17 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
 
   def visitDefinitionBody(
     ident: String,
-    implicitParams: Seq[Param[Expr]],
-    explicitParams: Seq[Param[Expr]],
-    returnType: Expr,
+    implicitParams: Seq[Param[ExprTree]],
+    explicitParams: Seq[Param[ExprTree]],
+    returnType: ExprTree,
     body: DefinitionBodyContext,
   ): Seq[Definition] = body match {
     case expr: DefBodyExprContext => {
-      val params: Seq[Param[Expr]] = implicitParams ++ explicitParams
+      val params: Seq[Param[ExprTree]] = implicitParams ++ explicitParams
       Seq(Definition.Function(ident, params, returnType, expr.blockExpr.visit)(body))
     }
     case inductive: DefBodyInductiveContext => {
-      val params: Seq[Param[Expr]] = implicitParams ++ explicitParams
+      val params: Seq[Param[ExprTree]] = implicitParams ++ explicitParams
       val constructors = inductive.constructors.asScala.map {
         case _: InductiveConsTypeContext => {
           UnsupportedError.unsupported("Inductive constructor with type is not supported yet", inductive.span)
@@ -147,10 +147,10 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   // block
 
   extension (self: BlockExprContext) {
-    private def visit: Expr = self match {
+    private def visit: ExprTree = self match {
       case ctx: BlockExprExprContext => ctx.expr.visit
       case ctx: BlockExprBlockContext => {
-        Expr.CodeBlock(ctx.block.statements.asScala.map(_.visit))(self)
+        ExprTree.CodeBlock(ctx.block.statements.asScala.map(_.visit))(self)
       }
     }
   }
@@ -158,7 +158,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   // Expr
 
   extension (self: ExprContext) {
-    private def visit: Expr = self match {
+    private def visit: ExprTree = self match {
       case ctx: ExprAtomContext => visitExprAtom(ctx)
       case ctx: ExprCallContext => visitExprCall(ctx)
       case ctx: ExprImplicitCallContext => visitExprImplicitCall(ctx)
@@ -182,48 +182,48 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     }
   }
 
-  override def visitExprAtom(ctx: ExprAtomContext): Expr = ctx.atom match {
+  override def visitExprAtom(ctx: ExprAtomContext): ExprTree = ctx.atom match {
     case context: AtomOperatorContext => visitAtomOperator(context)
     case context: AtomIdentifierContext => visitAtomIdentifier(context)
     case context: AtomLiteralContext => visitAtomLiteral(context)
     case context: AtomSelfContext => UnsupportedError.unsupported("`self` is not supported yet", context.span)
   }
 
-  override def visitExprCall(ctx: ExprCallContext): Expr.FunctionCall = {
+  override def visitExprCall(ctx: ExprCallContext): ExprTree.FunctionCall = {
     given ParserRuleContext = ctx
     val func = ctx.func.visit
     val args = ctx.argList.args.asScala.map { arg => Argument(arg.visit, ApplyMode.Explicit) }
-    Expr.FunctionCall(func, args)
+    ExprTree.FunctionCall(func, args)
   }
 
-  override def visitExprImplicitCall(ctx: ExprImplicitCallContext): Expr.FunctionCall = {
+  override def visitExprImplicitCall(ctx: ExprImplicitCallContext): ExprTree.FunctionCall = {
     given ParserRuleContext = ctx
     val func = ctx.func.visit
     val args = ctx.argList.args.asScala.map { arg => Argument(arg.visit, ApplyMode.Implicit) }
-    Expr.FunctionCall(func, args)
+    ExprTree.FunctionCall(func, args)
   }
 
-  override def visitExprParen(ctx: ExprParenContext): Expr = ctx.value.visit
+  override def visitExprParen(ctx: ExprParenContext): ExprTree = ctx.value.visit
 
-  override def visitExprTuple(ctx: ExprTupleContext): Expr = {
+  override def visitExprTuple(ctx: ExprTupleContext): ExprTree = {
     UnsupportedError.unsupported("Tuple is not supported yet", ctx.span)
   }
 
-  override def visitExprTupleType(ctx: ExprTupleTypeContext): Expr = {
+  override def visitExprTupleType(ctx: ExprTupleTypeContext): ExprTree = {
     UnsupportedError.unsupported("Tuple type is not supported yet", ctx.span)
   }
 
-  override def visitExprConstructor(ctx: ExprConstructorContext): Expr.Constructor = {
+  override def visitExprConstructor(ctx: ExprConstructorContext): ExprTree.Constructor = {
     given ParserRuleContext = ctx
     val inductive = ctx.inductive.getText
     val explicitArgs = Option(ctx.explicitArgList).map(_.args.asScala.map(_.visit)).getOrElse(Seq.empty)
     val implicitArgs = Option(ctx.implicitArgList).map(_.args.asScala.map(_.visit)).getOrElse(Seq.empty)
     val constructor = ctx.constructor.getText
     val args = explicitArgs.map(Argument(_)) ++ implicitArgs.map(Argument(_, ApplyMode.Implicit))
-    Expr.Constructor(inductive, args, constructor)
+    ExprTree.Constructor(inductive, args, constructor)
   }
 
-  override def visitExprLambda(ctx: ExprLambdaContext): Expr = {
+  override def visitExprLambda(ctx: ExprLambdaContext): ExprTree = {
     given ParserRuleContext = ctx
     val params = ctx.lambdaParamList.params.asScala.flatMap { param =>
       val `type` = param.`type`.visit
@@ -237,7 +237,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     lambda(params, body, returnType)
   }
 
-  override def visitExprCallWithLambda(ctx: ExprCallWithLambdaContext): Expr = {
+  override def visitExprCallWithLambda(ctx: ExprCallWithLambdaContext): ExprTree = {
     given ParserRuleContext = ctx
     val func = ctx.func.visit
     val returnType = Option(ctx.returnType).map(_.visit)
@@ -246,31 +246,31 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       val ty = Option(param.`type`).map(_.visit)
       Param(Var.Local(ident), ty)
     }
-    val lambdaBody = Expr.CodeBlock(ctx.body.statements.asScala.map(_.visit))
-    Expr.FunctionCall(func, Seq(Argument(lambda(lambdaParams, lambdaBody, returnType), ApplyMode.Explicit)))
+    val lambdaBody = ExprTree.CodeBlock(ctx.body.statements.asScala.map(_.visit))
+    ExprTree.FunctionCall(func, Seq(Argument(lambda(lambdaParams, lambdaBody, returnType), ApplyMode.Explicit)))
   }
 
-  override def visitExprElimination(ctx: ExprEliminationContext): Expr.Elimination = {
+  override def visitExprElimination(ctx: ExprEliminationContext): ExprTree.Elimination = {
     given ParserRuleContext = ctx
     val subject = ctx.subject.visit
     val member = ctx.member.getText
     if ctx.implicitArgList != null then {
       UnsupportedError.unsupported("Implicit arguments in elimination is not supported yet", ctx.span)
     }
-    Expr.Elimination(subject, member)
+    ExprTree.Elimination(subject, member)
   }
 
 //  override def visitExprSeq(ctx: ExprSeqContext): Expr = ???
 
-  override def visitExprIf(ctx: ExprIfContext): Expr = {
+  override def visitExprIf(ctx: ExprIfContext): ExprTree = {
     given ParserRuleContext = ctx
     val condition = ctx.cond.visit
     val thenBranch = ctx.`then`.visit
     val elseBranch = Option(ctx.else_).map(_.visit)
-    Expr.If(condition, thenBranch, elseBranch)
+    ExprTree.If(condition, thenBranch, elseBranch)
   }
 
-  override def visitExprMatch(ctx: ExprMatchContext): Expr = {
+  override def visitExprMatch(ctx: ExprMatchContext): ExprTree = {
     given ParserRuleContext = ctx
     val scrutinee = ctx.value.visit
     val cases = ctx.cases.asScala.flatMap { caseCtx =>
@@ -292,57 +292,57 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
         }
       }
     }
-    Expr.Match(Seq(scrutinee), cases.toList)
+    ExprTree.Match(Seq(scrutinee), cases.toList)
   }
 
-  override def visitExprArrowType(ctx: ExprArrowTypeContext): Expr.Pi = {
+  override def visitExprArrowType(ctx: ExprArrowTypeContext): ExprTree.Pi = {
     given ParserRuleContext = ctx
     val domain = ctx.domain.visit
     val codomain = ctx.codomain.visit
-    Expr.Pi(Param(Var.Local("_"), domain), codomain)
+    ExprTree.Pi(Param(Var.Local("_"), domain), codomain)
   }
 
-  override def visitExprImplicitArrowType(ctx: ExprImplicitArrowTypeContext): Expr.Pi = {
+  override def visitExprImplicitArrowType(ctx: ExprImplicitArrowTypeContext): ExprTree.Pi = {
     given ParserRuleContext = ctx
     val domain = ctx.domain.visit
     val codomain = ctx.codomain.visit
-    Expr.Pi(Param(Var.Local("_"), domain, ApplyMode.Implicit), codomain)
+    ExprTree.Pi(Param(Var.Local("_"), domain, ApplyMode.Implicit), codomain)
   }
 
-  override def visitExprPiType(ctx: ExprPiTypeContext): Expr.Pi = {
-    given ParserRuleContext = ctx
-    val param = ctx.param.getText
-    val domain = ctx.domain.visit
-    val codomain = ctx.codomain.visit
-    Expr.Pi(Param(Var.Local(param), domain), codomain)
-  }
-
-  override def visitExprImplicitPiType(ctx: ExprImplicitPiTypeContext): Expr.Pi = {
+  override def visitExprPiType(ctx: ExprPiTypeContext): ExprTree.Pi = {
     given ParserRuleContext = ctx
     val param = ctx.param.getText
     val domain = ctx.domain.visit
     val codomain = ctx.codomain.visit
-    Expr.Pi(Param(Var.Local(param), domain, ApplyMode.Implicit), codomain)
+    ExprTree.Pi(Param(Var.Local(param), domain), codomain)
   }
 
-  override def visitExprSigmaType(ctx: ExprSigmaTypeContext): Expr.Sigma = {
+  override def visitExprImplicitPiType(ctx: ExprImplicitPiTypeContext): ExprTree.Pi = {
     given ParserRuleContext = ctx
     val param = ctx.param.getText
     val domain = ctx.domain.visit
     val codomain = ctx.codomain.visit
-    Expr.Sigma(Param(Var.Local(param), domain), codomain)
+    ExprTree.Pi(Param(Var.Local(param), domain, ApplyMode.Implicit), codomain)
   }
 
-  override def visitExprRecordType(ctx: ExprRecordTypeContext): Expr.RecordType = {
+  override def visitExprSigmaType(ctx: ExprSigmaTypeContext): ExprTree.Sigma = {
+    given ParserRuleContext = ctx
+    val param = ctx.param.getText
+    val domain = ctx.domain.visit
+    val codomain = ctx.codomain.visit
+    ExprTree.Sigma(Param(Var.Local(param), domain), codomain)
+  }
+
+  override def visitExprRecordType(ctx: ExprRecordTypeContext): ExprTree.RecordType = {
     given ParserRuleContext = ctx
     val fields = ctx.fields.asScala.flatMap { field =>
       val ty = field.`type`.visit
       field.idents.asScala.map { ident => (ident.getText, ty) }
     }
-    Expr.RecordType(fields.toSeq)
+    ExprTree.RecordType(fields.toSeq)
   }
 
-  override def visitExprRecord(ctx: ExprRecordContext): Expr.RecordValue = {
+  override def visitExprRecord(ctx: ExprRecordContext): ExprTree.RecordValue = {
     given ParserRuleContext = ctx
     val recordType = ctx.recordType.visit
     val fields = ctx.fields.asScala.map { field =>
@@ -350,7 +350,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       val value = field.value.visit
       (name, value)
     }
-    Expr.RecordValue(fields.toSeq, recordType)
+    ExprTree.RecordValue(fields.toSeq, recordType)
   }
 
   // Statement
@@ -381,7 +381,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   // Pattern
 
   extension (self: PatternContext) {
-    private def visit: Spanned[Pattern[Expr]] = self match {
+    private def visit: Spanned[Pattern[ExprTree]] = self match {
       case ctx: PatternLiteralContext => visitPatternLiteral(ctx)
       case ctx: PatternVariableContext => visitPatternVariable(ctx)
       case ctx: PatternConstructorContext => visitPatternConstructor(ctx)
@@ -390,7 +390,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     }
   }
 
-  override def visitPatternLiteral(ctx: PatternLiteralContext): Spanned[Pattern[Expr]] = {
+  override def visitPatternLiteral(ctx: PatternLiteralContext): Spanned[Pattern[ExprTree]] = {
     given ParserRuleContext = ctx
     given SourceSpan = ctx.span
     val valueString = ctx.literal.getText
@@ -407,12 +407,12 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     Spanned(Pattern.Primitive(value))
   }
 
-  override def visitPatternVariable(ctx: PatternVariableContext): Spanned[Pattern[Expr]] = {
+  override def visitPatternVariable(ctx: PatternVariableContext): Spanned[Pattern[ExprTree]] = {
     given ParserRuleContext = ctx
-    Spanned(Pattern.Bind[Expr](ctx.ident.getText.toLocalVar)(ctx.span))
+    Spanned(Pattern.Bind[ExprTree](Var.Local(ctx.ident.getText))(ctx.span))
   }
 
-  override def visitPatternConstructor(ctx: PatternConstructorContext): Spanned[Pattern[Expr]] = {
+  override def visitPatternConstructor(ctx: PatternConstructorContext): Spanned[Pattern[ExprTree]] = {
     given ParserRuleContext = ctx
     given SourceSpan = ctx.span
     val inductiveIdent = ctx.inductive.getText
@@ -421,10 +421,10 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       UnsupportedError.unsupported("Pattern constructor with arguments", ctx.span)
     }
     val patterns = Option(ctx.consPatternList).map(_.patterns.asScala.map(_.visit.get)).getOrElse(Seq.empty)
-    Spanned(Pattern.Cons(constructorIdent.toDefinedVar, patterns.toSeq))
+    Spanned(Pattern.Cons(Var.Defined(constructorIdent), patterns.toSeq))
   }
 
-  override def visitPatternRecord(ctx: PatternRecordContext): Spanned[Pattern[Expr]] = {
+  override def visitPatternRecord(ctx: PatternRecordContext): Spanned[Pattern[ExprTree]] = {
     given ParserRuleContext = ctx
     given SourceSpan = ctx.span
     val fields = ctx.fields.asScala.map { field =>
@@ -435,7 +435,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     Spanned(Pattern.Record(fields.toSeq))
   }
 
-  override def visitPatternTuple(ctx: PatternTupleContext): Spanned[Pattern[Expr]] = {
+  override def visitPatternTuple(ctx: PatternTupleContext): Spanned[Pattern[ExprTree]] = {
     UnsupportedError.unsupported("Tuple is not supported yet", ctx.span)
   }
 
@@ -475,9 +475,9 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   }
 
   private def lambda(
-    params: Seq[Param[Option[Expr]]], body: Expr,
-    returnType: Option[Expr] = None,
-  )(implicit ctx: ParserRuleContext): Expr = {
+    params: Seq[Param[Option[ExprTree]]], body: ExprTree,
+    returnType: Option[ExprTree] = None,
+  )(implicit ctx: ParserRuleContext): ExprTree = {
     given ParserRuleContext = ctx
     // Fold over parameters to construct both the Lambda expression and the Pi-type return type
     params.foldRight((body, returnType)) { case (param, (accBody, accReturnType)) =>
@@ -487,9 +487,9 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       val piReturnType = for {
         paramType <- param.`type`  // Ensure the parameter type is defined
         codomain <- accReturnType  // Ensure the accumulated return type is defined
-      } yield Expr.Pi(Param(param.ident, paramType), codomain)
+      } yield ExprTree.Pi(Param(param.ident, paramType), codomain)
       // Construct the Lambda expression with the updated body and return type (which could be None)
-      val lambdaExpr = Expr.Lambda(param, accBody, piReturnType)
+      val lambdaExpr = ExprTree.Lambda(param, accBody, piReturnType)
       // Accumulate the updated Lambda and Pi-type return type
       (lambdaExpr, piReturnType)
     }._1  // Return only the Lambda expression, ignoring the accumulated return type
@@ -499,7 +499,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
 
   extension (self: ParamListContext) {
 
-    private def toParams(applyMode: ApplyMode): Seq[Param[Expr]] = {
+    private def toParams(applyMode: ApplyMode): Seq[Param[ExprTree]] = {
       if (self == null) return Seq.empty
       self.params.asScala.flatMap { param =>
         param.idents.asScala.map(_.getText).map { ident =>
@@ -509,18 +509,18 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       }
     }
 
-    private def toExplicitParams: Seq[Param[Expr]] = toParams(ApplyMode.Explicit)
+    private def toExplicitParams: Seq[Param[ExprTree]] = toParams(ApplyMode.Explicit)
 
-    private def toImplicitParams: Seq[Param[Expr]] = toParams(ApplyMode.Implicit)
+    private def toImplicitParams: Seq[Param[ExprTree]] = toParams(ApplyMode.Implicit)
   }
 
   // Atom
 
-  override def visitAtomIdentifier(ctx: AtomIdentifierContext): Expr = Expr.Variable(ctx.ident.getText)(ctx)
+  override def visitAtomIdentifier(ctx: AtomIdentifierContext): ExprTree = ExprTree.Variable(ctx.ident.getText)(ctx)
 
-  override def visitAtomOperator(ctx: AtomOperatorContext): Expr = Expr.Variable(ctx.op.getText)(ctx)
+  override def visitAtomOperator(ctx: AtomOperatorContext): ExprTree = ExprTree.Variable(ctx.op.getText)(ctx)
 
-  override def visitAtomLiteral(ctx: AtomLiteralContext): Expr = ctx.literal match {
+  override def visitAtomLiteral(ctx: AtomLiteralContext): ExprTree = ctx.literal match {
     case context: LiteralBoolContext => visitLiteralBool(context)
     case context: LiteralCharContext => visitLiteralChar(context)
     case context: LiteralFloatContext => visitLiteralFloat(context)
@@ -531,23 +531,23 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
 
   // Literal
 
-  override def visitLiteralInt(ctx: LiteralIntContext): Expr = Expr.PrimitiveValue(IntValue(ctx.value.getText.toInt))(ctx)
+  override def visitLiteralInt(ctx: LiteralIntContext): ExprTree = ExprTree.PrimitiveValue(IntValue(ctx.value.getText.toInt))(ctx)
 
-  override def visitLiteralFloat(ctx: LiteralFloatContext): Expr = Expr.PrimitiveValue(FloatValue(ctx.value.getText.toFloat))(ctx)
+  override def visitLiteralFloat(ctx: LiteralFloatContext): ExprTree = ExprTree.PrimitiveValue(FloatValue(ctx.value.getText.toFloat))(ctx)
 
-  override def visitLiteralBool(ctx: LiteralBoolContext): Expr = Expr.PrimitiveValue(BoolValue(ctx.value.getText.toBoolean))(ctx)
+  override def visitLiteralBool(ctx: LiteralBoolContext): ExprTree = ExprTree.PrimitiveValue(BoolValue(ctx.value.getText.toBoolean))(ctx)
 
-  override def visitLiteralChar(ctx: LiteralCharContext): Expr = Expr.PrimitiveValue(CharValue(ctx.value.getText.charAt(1)))(ctx)
+  override def visitLiteralChar(ctx: LiteralCharContext): ExprTree = ExprTree.PrimitiveValue(CharValue(ctx.value.getText.charAt(1)))(ctx)
 
-  override def visitLiteralRawString(ctx: LiteralRawStringContext): Expr = {
+  override def visitLiteralRawString(ctx: LiteralRawStringContext): ExprTree = {
     given ParserRuleContext = ctx
     val text = ctx.value.getText
-    Expr.PrimitiveValue(StringValue(text.stripPrefix("#").stripPrefix("{").stripSuffix("}")))
+    ExprTree.PrimitiveValue(StringValue(text.stripPrefix("#").stripPrefix("{").stripSuffix("}")))
   }
 
-  override def visitLiteralRegularString(ctx: LiteralRegularStringContext): Expr = {
+  override def visitLiteralRegularString(ctx: LiteralRegularStringContext): ExprTree = {
     given ParserRuleContext = ctx
     val text = ctx.value.getText
-    Expr.PrimitiveValue(StringValue(text.substring(1, text.length - 1)))
+    ExprTree.PrimitiveValue(StringValue(text.substring(1, text.length - 1)))
   }
 }

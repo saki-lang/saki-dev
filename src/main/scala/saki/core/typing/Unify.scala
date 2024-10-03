@@ -11,20 +11,20 @@ private[core] object Unify {
     case (Term.Universe, Term.Universe) => true
     case (Term.Primitive(lit1), Term.Primitive(lit2)) => lit1 == lit2
     case (Term.PrimitiveType(ty1), Term.PrimitiveType(ty2)) => ty1 == ty2
-    case (Term.Ref(ref1), Term.Ref(ref2)) => ref1 == ref2
+    case (Term.Variable(ref1), Term.Variable(ref2)) => ref1 == ref2
 
     // Lambda
-    case (Term.Lambda(param1, body1), Term.Lambda(param2, body2)) => body1 unify body2.subst(param2, Term.Ref(param1))
+    case (Term.Lambda(param1, body1), Term.Lambda(param2, body2)) => body1 unify body2.subst(param2, Term.Variable(param1))
     case (Term.Lambda(param, body), _) => rhs.etaUnify(Term.Lambda(param, body))
     case (_, Term.Lambda(param, body)) => lhs.etaUnify(Term.Lambda(param, body))
 
     // Dependent type
     case (Term.Pi(param1, codomain1), Term.Pi(param2, codomain2)) =>
       (param1.`type` unify param2.`type`) &&
-      (codomain1 unify codomain2.subst(param2.ident, Term.Ref(param1.ident)))
+      (codomain1 unify codomain2.subst(param2.ident, Term.Variable(param1.ident)))
     case (Term.Sigma(param1, codomain1), Term.Sigma(param2, codomain2)) =>
       (param1.`type` unify param2.`type`) &&
-      (codomain1 unify codomain2.subst(param2.ident, Term.Ref(param1.ident)))
+      (codomain1 unify codomain2.subst(param2.ident, Term.Variable(param1.ident)))
 
     // Function call
     case (Term.FunctionCall(fn1, args1), Term.FunctionCall(fn2, args2)) =>

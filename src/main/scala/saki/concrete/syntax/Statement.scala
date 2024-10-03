@@ -13,12 +13,12 @@ enum Statement(implicit ctx: ParserRuleContext) extends SyntaxTree[Nothing] {
 
   case Let(
     name: String,
-    `type`: Option[Expr],
-    value: Expr,
+    `type`: Option[ExprTree],
+    value: ExprTree,
   )(implicit ctx: ParserRuleContext)
 
   case Expression(
-    expr: Expr,
+    expr: ExprTree,
   )(implicit ctx: ParserRuleContext)
 
   @deprecated

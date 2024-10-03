@@ -7,8 +7,8 @@ import saki.core.syntax.*
 private[core] object Match {
 
   def matchPattern(
-    pattern: Pattern[Term], `type`: Type
-  )(implicit ctx: Elaborate.Context): Map[Var.Local, Type] = pattern match {
+    pattern: Pattern[Term], `type`: Term
+  )(implicit ctx: Synthesis.Context): Map[Var.Local, Term] = pattern match {
 
     case Pattern.Primitive(_) => Map.empty
     case Pattern.Bind(binding) => Map(binding -> `type`)
@@ -23,10 +23,10 @@ private[core] object Match {
     // ```
     case Pattern.Cons(cons, patterns) if `type`.isInstanceOf[Term.InductiveCall] => {
       val inductiveCall = `type`.asInstanceOf[Term.InductiveCall]
-      val consDef: Definition.Constructor = cons.definition.toOption match {
-        case Some(definition) => definition
+      val consDef: Constructor[Term] = cons.definition.toOption match {
+        case Some(definition) => definition.asInstanceOf[Constructor[Term]]
         case None => ctx.definitions.getOrElse(cons, SymbolError.undefined(cons.name, pattern.span)) match {
-          case consDef: Definition.Constructor => consDef
+          case consDef: Constructor[Term] => consDef
           case _ => SymbolError.notConstructor(cons.name, pattern.span)
         }
       }
@@ -35,7 +35,7 @@ private[core] object Match {
       } else if consDef.owner != inductiveCall.inductive then {
         ValueError.mismatch(consDef.owner.name, inductiveCall.inductive.name, pattern.span)
       } else {
-        patterns.zip(consDef.params).foldLeft(Map.empty: Map[Var.Local, Type]) {
+        patterns.zip(consDef.params).foldLeft(Map.empty: Map[Var.Local, Term]) {
           case (subst, (pattern, param)) => subst ++ matchPattern(pattern, param.`type`)
         }
       }
@@ -49,7 +49,7 @@ private[core] object Match {
 
     case Pattern.Record(fields) if `type`.isInstanceOf[Term.RecordType] => {
       val recordType = `type`.asInstanceOf[Term.RecordType]
-      fields.foldLeft(Map.empty: Map[Var.Local, Type]) {
+      fields.foldLeft(Map.empty: Map[Var.Local, Term]) {
         case (subst, (name, pattern)) => {
           val field = recordType.fields.getOrElse(name, {
             ValueError.missingField(name, recordType, pattern.span)
