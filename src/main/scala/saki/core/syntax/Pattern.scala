@@ -1,7 +1,7 @@
 package saki.core.syntax
 
 import saki.core.{Entity, SourceSpan}
-import saki.core.typing.{Match, Resolve, Synthesis}
+import saki.core.elaborate.{Match, Resolve, Synthesis}
 
 import scala.collection.Seq
 

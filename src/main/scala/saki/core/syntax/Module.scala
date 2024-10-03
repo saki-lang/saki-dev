@@ -1,8 +1,8 @@
 package saki.core.syntax
 
-import saki.core.typing.{Synthesis, Resolve}
-import saki.core.typing.Synthesis.synth
-import saki.core.typing.Resolve.resolve
+import saki.core.elaborate.{Synthesis, Resolve}
+import saki.core.elaborate.Synthesis.synth
+import saki.core.elaborate.Resolve.resolve
 
 import scala.collection.Seq
 

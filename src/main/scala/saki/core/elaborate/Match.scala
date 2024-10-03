@@ -1,4 +1,4 @@
-package saki.core.typing
+package saki.core.elaborate
 
 import scala.collection.Seq
 import saki.core.{PatternError, SizeError, SymbolError, TypeError, ValueError}

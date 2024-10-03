@@ -1,8 +1,8 @@
 package saki.core.syntax
 
 import saki.core.domain.{Environment, Value}
-import saki.core.typing.Normalize.{Context, RenameMap}
-import saki.core.typing.{Normalize, Unify}
+import saki.core.elaborate.Normalize.{Context, RenameMap}
+import saki.core.elaborate.{Normalize, Unify}
 import saki.core.{Entity, EntityFactory, TypeError}
 import saki.util.LateInit
 

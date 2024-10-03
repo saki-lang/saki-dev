@@ -1,7 +1,7 @@
 package saki.core.syntax
 
 import saki.core.Entity
-import saki.core.typing.buildSubstMap
+import saki.core.elaborate.buildSubstMap
 
 import scala.collection.Seq
 

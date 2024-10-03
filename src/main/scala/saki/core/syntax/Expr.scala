@@ -2,7 +2,7 @@ package saki.core.syntax
 
 import saki.core.{Entity, EntityFactory, SourceSpan}
 import saki.core.domain.Environment
-import saki.core.typing.{Resolve, Synthesis}
+import saki.core.elaborate.{Resolve, Synthesis}
 
 import scala.collection.Seq
 

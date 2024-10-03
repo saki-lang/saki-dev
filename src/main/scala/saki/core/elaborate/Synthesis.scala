@@ -1,4 +1,4 @@
-package saki.core.typing
+package saki.core.elaborate
 
 import saki.core.syntax.given
 import saki.core.{Entity, TypeError}
