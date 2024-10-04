@@ -27,14 +27,14 @@ private[core] object Unify {
       (codomain1 unify codomain2.subst(param2.ident, Term.Variable(param1.ident)))
 
     // Function call
-    case (Term.FunctionCall(fn1, args1), Term.FunctionCall(fn2, args2)) =>
+    case (Term.FunctionInvoke(fn1, args1), Term.FunctionInvoke(fn2, args2)) =>
       (fn1 == fn2) && (args1 zip args2).forall((a, b) => a unify b)
-    case (Term.InductiveCall(ind1, args1), Term.InductiveCall(ind2, args2)) =>
+    case (Term.InductiveType(ind1, args1), Term.InductiveType(ind2, args2)) =>
       (ind1 == ind2) && (args1 zip args2).forall((a, b) => a unify b)
-    case (Term.ConstructorCall(cons1, consArgs1, indArgs1), Term.ConstructorCall(cons2, consArgs2, indArgs2)) =>
+    case (Term.InductiveVariant(cons1, consArgs1, indArgs1), Term.InductiveVariant(cons2, consArgs2, indArgs2)) =>
       (cons1 == cons2) && (consArgs1 zip consArgs2).forall((a, b) => a unify b) &&
       (indArgs1 zip indArgs2).forall((a, b) => a unify b)
-    case (Term.ApplyOnce(fn1, arg1), Term.ApplyOnce(fn2, arg2)) =>
+    case (Term.Apply(fn1, arg1), Term.Apply(fn2, arg2)) =>
       (fn1 unify fn2) && (arg1 unify arg2)
 
     // Projection

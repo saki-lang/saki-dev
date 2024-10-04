@@ -48,13 +48,8 @@ type ArgList[T <: Entity] = Seq[Argument[T]]
 
 trait FnLike[T <: Entity] {
   def params: ParamList[T]
-  def arguments: Seq[Var.Local] = params.map(_.ident)
-}
-
-extension (arguments: Seq[Var.Local]) {
-  def refs[T <: Entity](implicit factory: EntityFactory[T]): Seq[T] = {
-    arguments.map(factory.variable)
-  }
+  def paramToVars(implicit factory: EntityFactory[T]): Seq[T] = params.map(_.ident).map(factory.variable)
+  def arguments[T1 <: Entity](argValues: Seq[T1]): Seq[(Var.Local, T1)] = params.map(_.ident).zip(argValues)
 }
 
 sealed trait Definition[T <: Entity] extends FnLike[T] {
@@ -86,6 +81,6 @@ case class Constructor[T <: Entity](
   override val params: ParamList[T],
 ) extends Definition[T] {
   def resultType(implicit factory: EntityFactory[T]): T = {
-    factory.inductiveCall(owner, owner.definition.get.arguments.refs(factory))
+    factory.inductiveType(owner, owner.definition.get.paramToVars)
   }
 }

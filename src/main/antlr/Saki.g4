@@ -207,7 +207,7 @@ NL: '\n' | '\r' '\n'?;
 /* Fragments */
 
 // camelCaseWithEnglishOrGreekLetters with optional postfix single quotation
-fragment ValueIdent: [a-z]+([A-Za-zα-ωΑ-Ω])*('\'')*;
+fragment ValueIdent: [a-zα-ω]+([A-ZΑ-Ωa-zα-ω0-9])*('\'')*;
 
 // A single blackboard bold letter or PascalCase
 fragment TypeIdent: PascalCase | BlackboardBoldLetter;

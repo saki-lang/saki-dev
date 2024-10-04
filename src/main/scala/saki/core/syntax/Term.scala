@@ -1,9 +1,9 @@
 package saki.core.syntax
 
-import saki.core.domain.{Environment, Value}
+import saki.core.domain.{Environment, NeutralValue, Type, Value}
 import saki.core.elaborate.Normalize.{Context, RenameMap}
 import saki.core.elaborate.{Normalize, Unify}
-import saki.core.{Entity, EntityFactory, TypeError}
+import saki.core.{Entity, EntityFactory, RuntimeEntity, TypeError}
 import saki.util.LateInit
 
 import scala.collection.Seq
@@ -12,7 +12,7 @@ enum Var {
 
   case Defined[T <: Entity, Def[A <: Entity] <: Definition[A]](
     override val name: String,
-    definition: LateInit[Def[T]] = LateInit[Def[T]](),
+    val definition: LateInit[Def[T]] = LateInit[Def[T]](),
   )
 
   case Local(override val name: String)
@@ -33,20 +33,20 @@ extension [T <: Entity, Def[E <: Entity] <: Definition[E]](self: Var.Defined[T, 
 
     case Some(_: Function[T]) => {
       val signature: Signature[T] = self.definition.get.signature
-      factory.functionCall(self.asInstanceOf[Var.Defined[T, Function]], signature.arguments.refs)
+      factory.functionInvoke(self.asInstanceOf[Var.Defined[T, Function]], signature.paramToVars)
     }
 
     case Some(_: Inductive[T]) => {
       val signature: Signature[T] = self.definition.get.signature
-      factory.inductiveCall(self.asInstanceOf[Var.Defined[T, Inductive]], signature.arguments.refs)
+      factory.inductiveType(self.asInstanceOf[Var.Defined[T, Inductive]], signature.paramToVars)
     }
 
     case Some(_: Constructor[T]) => {
       val cons = self.asInstanceOf[Var.Defined[T, Constructor]]
-      factory.constructorCall(
+      factory.inductiveVariant(
         cons = cons,
-        consArgs = self.signature.arguments.refs,
-        inductiveArgs = cons.owner.signature.arguments.refs
+        consArgs = self.signature.paramToVars,
+        inductiveArgs = cons.owner.signature.paramToVars
       )
     }
 
@@ -58,21 +58,21 @@ extension [T <: Entity](variable: Var.Defined[T, Constructor]) {
   def owner: Var.Defined[T, Inductive] = variable.definition.get.owner
 }
 
-enum Term extends Entity {
+enum Term extends RuntimeEntity[Type] {
 
   case Universe
   case Primitive(value: Literal)
   case PrimitiveType(`type`: LiteralType)
   case Variable(variable: Var.Local)
-  case FunctionCall(fn: Var.Defined[Term, Function], args: Seq[Term])
-  case InductiveCall(inductive: Var.Defined[Term, Inductive], args: Seq[Term])
-  case ConstructorCall(cons: Var.Defined[Term, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term])
+  case FunctionInvoke(fn: Var.Defined[Term, Function], args: Seq[Term])
+  case InductiveType(inductive: Var.Defined[Term, Inductive], args: Seq[Term])
+  case InductiveVariant(cons: Var.Defined[Term, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term])
   case Match(scrutinees: Seq[Term], clauses: Seq[Clause[Term]])
   case Pi(param: Param[Term], codomain: Term)
   case Sigma(param: Param[Term], codomain: Term)
   case Record(fields: Map[String, Term])
   case RecordType(fields: Map[String, Term])
-  case ApplyOnce(fn: Term, arg: Term)
+  case Apply(fn: Term, arg: Term)
   case Lambda(param: Var.Local, body: Term)
   case Projection(record: Term, field: String)
 
@@ -83,7 +83,7 @@ enum Term extends Entity {
   def apply(args: Term*): Term = {
     args.foldLeft(this) {
       case (Lambda(param, body), arg) => body.subst(param, arg)
-      case (fn, arg) => ApplyOnce(fn, arg)
+      case (fn, arg) => Apply(fn, arg)
     }
   }
 
@@ -92,16 +92,21 @@ enum Term extends Entity {
     case Primitive(value) => value.toString
     case PrimitiveType(ty) => ty.toString
     case Variable(variable) => variable.name
-    case FunctionCall(fn, args) => s"${fn.name}(${args.mkString(", ")})"
-    case InductiveCall(inductive, args) => s"${inductive.name}(${args.mkString(", ")})"
-    case ConstructorCall(cons, args, inductiveArgs) =>
-      s"${cons.name}(${inductiveArgs.mkString(", ")})(${args.mkString(", ")})"
+    case FunctionInvoke(fn, args) => s"${fn.name}(${args.mkString(", ")})"
+    case InductiveType(inductive, args) => s"${inductive.name}(${args.mkString(", ")})"
+    case InductiveVariant(cons, args, inductiveArgs) => {
+      if (inductiveArgs.isEmpty) {
+        s"${cons.name}(${args.mkString(", ")})"
+      } else {
+        s"${cons.name}(${inductiveArgs.mkString(", ")})(${args.mkString(", ")})"
+      }
+    }
     case Match(scrutinee, clauses) => s"match $scrutinee {${clauses.mkString(" | ")}}"
     case Pi(param, codomain) => s"Π(${param.name} : ${param.`type`}) -> $codomain"
     case Sigma(param, codomain) => s"Σ(${param.name} : ${param.`type`}) -> $codomain"
     case Record(fields) => s"{${fields.map { case (k, v) => s"$k = $v" }.mkString(", ")}}"
     case RecordType(fields) => s"record {${fields.map { case (k, v) => s"$k: $v" }.mkString(", ")}}"
-    case ApplyOnce(fn, arg) => s"$fn($arg)"
+    case Apply(fn, arg) => s"$fn($arg)"
     case Lambda(param, body) => s"λ(${param.name}) => $body"
     case Projection(record, field) => s"$record.$field"
   }
@@ -117,6 +122,8 @@ enum Term extends Entity {
   def normalize(implicit ctx: Context): Term = Normalize.normalizeTerm(this, ctx)
 
   def rename(implicit map: RenameMap): Term = Normalize.renameTerm(this)
+  
+  override def infer(implicit env: Environment): Value = ???
 
   def eval(implicit env: Environment): Value = this match {
 
@@ -128,22 +135,42 @@ enum Term extends Entity {
 
     case Variable(variable) => env(variable).value
 
-    case FunctionCall(fnTerm, argTerms) => {
-//      val func = fnTerm.definition.get
-//      env.currentDefinition match {
-//        case Some(current) if current == func => {
-//          Value.Neutral(NeutralValue.FunctionCall(fn, args.map(_.eval)))
-//        }
-//        case None => {
-//          val argsValue = args.map(_.eval)
-//
-//          given Environment = env.addArgs(func.signature.arguments.zip(argsValue))
-//          func.body.get.eval
-//        }
-//      }
-      ???
+    case FunctionInvoke(fnRef, argTerms) => {
+      // Use the evaluated function in the environment if possible to avoid re-evaluation
+      val fn = env.lookup(fnRef).getOrElse {
+        throw IllegalStateException(s"Unbound function: ${fnRef.name}")
+      }.asInstanceOf[Function[Value | Term]]
+      env.currentDefinition match {
+        case Some(current) if current.name == fnRef.name => {
+          // Recursive call, keep it a neutral value
+          Value.functionInvokeGeneral(fn.ident, argTerms.map(_.eval))
+        }
+        case None => {
+          val body = fn.body.get match {
+            case body: Value => body.readBack
+            case body: Term => body
+          }
+          val argsValue: Seq[Value] = argTerms.map(_.eval)
+          val argVarList: Seq[(Var.Local, Environment.TypedValue)] = fn.arguments(argsValue).map {
+            (param, arg) => (param, Environment.TypedValue(arg, arg.infer))
+          }
+          env.withVars(argVarList.toMap) { body.eval }
+        }
+      }
     }
 
+    case InductiveType(indRef, argTerms) => {
+      val argsValue: Seq[Value] = argTerms.map(_.eval)
+      Value.inductiveTypeGeneral(indRef, argsValue)
+    }
+
+    case InductiveVariant(consRef, consArgs, inductiveArgs) => {
+      val consArgsValue: Seq[Value] = consArgs.map(_.eval)
+      val inductiveArgsValue: Seq[Value] = inductiveArgs.map(_.eval)
+      Value.inductiveVariantGeneral(consRef, consArgsValue, inductiveArgsValue)
+    }
+    
+    case Match(scrutinees, clauses) => ???
   }
 }
 
@@ -169,15 +196,15 @@ object Term extends EntityFactory[Term] {
 
   override def variable(ident: Var.Local): Term = Variable(ident)
 
-  override def inductiveCall(
+  override def inductiveType(
     inductive: Var.Defined[Term, Inductive], args: Seq[Term]
-  ): Term = InductiveCall(inductive, args)
+  ): Term = InductiveType(inductive, args)
 
-  override def functionCall(
+  override def functionInvoke(
     function: Var.Defined[Term, Function], args: Seq[Term]
-  ): Term = FunctionCall(function, args)
+  ): Term = FunctionInvoke(function, args)
 
-  override def constructorCall(
+  override def inductiveVariant(
     cons: Var.Defined[Term, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term]
-  ): Term = ConstructorCall(cons, consArgs, inductiveArgs)
+  ): Term = InductiveVariant(cons, consArgs, inductiveArgs)
 }

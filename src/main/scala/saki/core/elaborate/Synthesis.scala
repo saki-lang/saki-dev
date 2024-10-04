@@ -115,7 +115,7 @@ private[core] object Synthesis {
           case Some(definition: Function[Term]) => definition
           case _ => TypeError.error(s"Method not found: $member", expr.span)
         }
-        Synth(Term.FunctionCall(method.ident, Seq(term)), method.resultType)
+        Synth(Term.FunctionInvoke(method.ident, Seq(term)), method.resultType)
       }
     }
 

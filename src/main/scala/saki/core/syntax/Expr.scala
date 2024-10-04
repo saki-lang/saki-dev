@@ -1,8 +1,7 @@
 package saki.core.syntax
 
-import saki.core.{Entity, EntityFactory, SourceSpan}
-import saki.core.domain.Environment
 import saki.core.elaborate.{Resolve, Synthesis}
+import saki.core.{Entity, SourceSpan}
 
 import scala.collection.Seq
 
@@ -126,8 +125,4 @@ enum Expr(val span: SourceSpan) extends Entity {
       case Match(scrutinees, clauses) => s"match $scrutinees { ${clauses.map(_.toString).mkString(" | ")} }"
     }
   }
-}
-
-object Expr {
-  def unit(implicit span: SourceSpan): Expr = Primitive(Literal.UnitValue)(span)
 }

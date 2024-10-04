@@ -1,16 +1,13 @@
 package saki.core.domain
 
 import saki.core.Entity
-import saki.core.domain.Environment.{DefinitionKind, LocalVariable}
-import saki.core.domain.{Type, Value}
-import saki.core.syntax.{Argument, Definition, Param, ParamList, Term, Var}
-import saki.util.unreachable
-
-import scala.reflect.ClassTag
+import saki.core.domain.Environment.{DefinitionKind, TypedValue}
+import saki.core.domain.Type
+import saki.core.syntax.*
 
 case class Environment private(
   private val definitions: Map[Var.Defined[?, ?], (Definition[?], DefinitionKind[?])],
-  private val locals: Map[Var.Local, LocalVariable],
+  private val locals: Map[Var.Local, TypedValue],
   currentDefinition: Option[Var.Defined[Value, ?]] = None,
 ) {
 
@@ -29,59 +26,37 @@ case class Environment private(
     copy(definitions = definitions.updated(definition.ident, (definition, Environment.DefinitionKindTerm)))
   }
 
-  def add(local: LocalVariable): Environment = {
+  def add(local: TypedValue): Environment = {
     copy(locals = locals.updated(local.value.asInstanceOf[Var.Local], local))
   }
 
-  def add(local: Var.Local, `type`: Type): Environment = {
-    copy(locals = locals.updated(local, LocalVariable(Value.variable(local), `type`)))
+  def add(local: Var.Local, value: Value, `type`: Type): Environment = {
+    copy(locals = locals.updated(local, TypedValue(value, `type`)))
   }
 
-  def addVars(locals: Map[Var.Local, LocalVariable]): Environment = {
+  def addVars(locals: Map[Var.Local, TypedValue]): Environment = {
     copy(locals = this.locals ++ locals)
   }
 
   def addArgs(args: (Argument[Value], Type)*): Environment = {
     copy(locals = this.locals ++ args.map {
-      case (Argument(value, _), ty) => value.asInstanceOf[Var.Local] -> LocalVariable(value, ty)
+      case (Argument(value, _), ty) => value.asInstanceOf[Var.Local] -> TypedValue(value, ty)
     })
   }
 
-  def addParams(params: ParamList[Type]): Environment = {
-    copy(locals = this.locals ++ params.map {
-      case Param(ident, ty, _) => ident -> LocalVariable(Value.variable(ident), ty)
-    })
+  def lookup(local: Var.Local): Option[TypedValue] = locals.get(local)
+
+  def lookup[T <: Entity, Def[E <: Entity] <: Definition[E]](definition: Var.Defined[T, Def]): Option[Def[T]] = {
+    definitions.get(definition).map(_._1.asInstanceOf[Def[T]])
   }
 
-  def addParams(locals: Map[Var.Local, Type]): Environment = {
-    copy(locals = this.locals ++ locals.map {
-      case (local, ty) => local -> LocalVariable(Value.variable(local), ty)
-    })
+  def apply(local: Var.Local): TypedValue = locals(local)
+
+  def apply[T <: Entity, Def[E <: Entity] <: Definition[E]](definition: Var.Defined[T, Def]): Def[T] = {
+    definitions(definition)._1.asInstanceOf[Def[T]]
   }
 
-  def get(local: Var.Local): Option[LocalVariable] = locals.get(local)
-
-  def get(definition: Var.Defined[?, ?]): Option[Definition[?]] = {
-    definitions.get(definition).map(_._1)
-  }
-
-  def apply(local: Var.Local): LocalVariable = locals(local)
-
-  def apply(definition: Var.Defined[?, ?]): Definition[?] = definitions(definition)._1
-
-  private[core] def withParam[R](local: Var.Local, `type`: Type)(action: Environment => R): R = {
-    action(this.add(local, `type`))
-  }
-
-  private[core] def withParams[R](locals: Map[Var.Local, Type])(action: Environment => R): R = {
-    action(this.addParams(locals))
-  }
-
-  private[core] def withParams[R](params: ParamList[Type])(action: Environment => R): R = {
-    action(this.addParams(params))
-  }
-
-  private[core] def withVars[R](vars: Map[Var.Local, LocalVariable])(action: Environment => R): R = {
+  private[core] def withVars[R](vars: Map[Var.Local, TypedValue])(action: Environment => R): R = {
     action(this.copy(locals = this.locals ++ vars))
   }
 }
@@ -92,7 +67,7 @@ object Environment {
   private case object DefinitionKindTerm extends DefinitionKind[Definition[Term]]
   private case object DefinitionKindValue extends DefinitionKind[Definition[Value]]
 
-  case class LocalVariable(value: Value, `type`: Type) {
+  case class TypedValue(value: Value, `type`: Type) {
     def unapply: (Value, Type) = (value, `type`)
   }
 }

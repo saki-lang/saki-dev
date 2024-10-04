@@ -21,8 +21,8 @@ private[core] object Match {
     //    Some : A -> this
     //  }
     // ```
-    case Pattern.Cons(cons, patterns) if `type`.isInstanceOf[Term.InductiveCall] => {
-      val inductiveCall = `type`.asInstanceOf[Term.InductiveCall]
+    case Pattern.Cons(cons, patterns) if `type`.isInstanceOf[Term.InductiveType] => {
+      val inductiveType = `type`.asInstanceOf[Term.InductiveType]
       val consDef: Constructor[Term] = cons.definition.toOption match {
         case Some(definition) => definition.asInstanceOf[Constructor[Term]]
         case None => ctx.definitions.getOrElse(cons, SymbolError.undefined(cons.name, pattern.span)) match {
@@ -32,8 +32,8 @@ private[core] object Match {
       }
       if consDef.params.size != patterns.size then {
         SizeError.mismatch(consDef.params.size, patterns.size, pattern.span)
-      } else if consDef.owner != inductiveCall.inductive then {
-        ValueError.mismatch(consDef.owner.name, inductiveCall.inductive.name, pattern.span)
+      } else if consDef.owner != inductiveType.inductive then {
+        ValueError.mismatch(consDef.owner.name, inductiveType.inductive.name, pattern.span)
       } else {
         patterns.zip(consDef.params).foldLeft(Map.empty: Map[Var.Local, Term]) {
           case (subst, (pattern, param)) => subst ++ matchPattern(pattern, param.`type`)
@@ -74,8 +74,8 @@ private[core] object Match {
       if value == primitive.value then Some(Map.empty) else None
     }
     case Pattern.Bind(binding) => Some(Map(binding -> term))
-    case Pattern.Cons(cons, patterns) if term.isInstanceOf[Term.ConstructorCall] => {
-      val consCall = term.asInstanceOf[Term.ConstructorCall]
+    case Pattern.Cons(cons, patterns) if term.isInstanceOf[Term.InductiveVariant] => {
+      val consCall = term.asInstanceOf[Term.InductiveVariant]
       if cons != consCall.cons then {
         None
       } else {

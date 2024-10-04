@@ -11,10 +11,10 @@ extension (clauses: Seq[Clause[Term]]) {
    * Return the body of the first matching clause.
    */
   def tryMatch(args: Seq[Term]): Option[Term] = {
-    clauses.collectFirst { clause =>
+    clauses.map { clause =>
       val substOpt = clause.patterns.buildSubstMap(args)
       substOpt.map(subst => clause.body.subst(subst))
-    }.flatten
+    }.collectFirst { case Some(body) => body }
   }
 }
 
@@ -23,6 +23,6 @@ extension (clauses: Seq[Clause[Term]]) {
  */
 case class Clause[T <: Entity](patterns: Seq[Pattern[T]], body: T) {
   def map[U <: Entity](f: T => U): Clause[U] = Clause(patterns.map(_.map(f)), f(body))
-
+  def mapPatterns(f: Pattern[T] => Pattern[T]): Clause[T] = Clause(patterns.map(f), body)
   override def toString: String = s"${patterns.mkString(", ")} => $body"
 }

@@ -2,6 +2,8 @@ package saki.core.elaborate
 
 import saki.core.syntax.*
 
+import scala.collection.Seq
+
 object Normalize {
 
   type Context = Map[Var.Local, Term]
@@ -26,39 +28,40 @@ object Normalize {
 
       case Term.Sigma(param, codomain) => Term.Sigma(param, codomain.normalize)
 
-      case Term.ApplyOnce(fn, arg) => {
+      case Term.Apply(fn, arg) => {
         fn.normalize match {
           case Term.Lambda(param, body) => ctx.withParam(param) {
             // TODO: need subst?
             newCtx => body.normalize(newCtx)
           }
-          case fnNorm => Term.ApplyOnce(fnNorm, arg.normalize)
+          case fnNorm => Term.Apply(fnNorm, arg.normalize)
         }
       }
 
-      case Term.FunctionCall(fnRef, args) => {
+      case Term.FunctionInvoke(fnRef, args) => {
         val fn = fnRef.definition.get
-        val argsNorm = args.map(_.normalize(ctx))
-        given Context = fn.arguments.zip(argsNorm).foldLeft(ctx) {
+        val argsNorm: Seq[Term] = args.map(_.normalize(ctx))
+        given Context = fn.arguments(argsNorm).foldLeft(ctx) {
           case (acc, (param, arg)) => acc + (param -> arg)
         }
         fn.body.toOption match {
           case Some(term) => term.normalize
-          case None => Term.FunctionCall(fnRef, argsNorm)
+          case None => Term.FunctionInvoke(fnRef, argsNorm)
         }
       }
 
-      case Term.InductiveCall(inductive, args) => Term.InductiveCall(inductive, args.map(_.normalize))
+      case Term.InductiveType(inductive, args) => Term.InductiveType(inductive, args.map(_.normalize))
 
-      case Term.ConstructorCall(cons, args, inductiveArgs) => {
-        Term.ConstructorCall(cons, args.map(_.normalize), inductiveArgs.map(_.normalize))
+      case Term.InductiveVariant(cons, args, inductiveArgs) => {
+        Term.InductiveVariant(cons, args.map(_.normalize), inductiveArgs.map(_.normalize))
       }
 
       case Term.Match(scrutinees, clauses) => {
         val scrutineesNorm = scrutinees.map(_.normalize)
-        clauses.tryMatch(scrutineesNorm).map(_.normalize).getOrElse {
+        clauses.map {
+          clause => clause.mapPatterns(_.map(_.normalize))
+        }.tryMatch(scrutineesNorm).map(_.normalize).getOrElse {
           Term.Match(scrutineesNorm, clauses)
-          // PatternError.noMatch(scrutineesNorm.toString, clauses.last.patterns.head.span)
         }
       }
 
@@ -103,14 +106,14 @@ object Normalize {
 
     case Term.RecordType(fields) => Term.RecordType(fields.view.mapValues(_.rename).toMap)
 
-    case Term.ApplyOnce(fn, arg) => Term.ApplyOnce(fn.rename, arg.rename)
+    case Term.Apply(fn, arg) => Term.Apply(fn.rename, arg.rename)
 
-    case Term.InductiveCall(inductive, args) => Term.InductiveCall(inductive, args.map(_.rename))
+    case Term.InductiveType(inductive, args) => Term.InductiveType(inductive, args.map(_.rename))
 
-    case Term.FunctionCall(fn, args) => Term.FunctionCall(fn, args.map(_.rename))
+    case Term.FunctionInvoke(fn, args) => Term.FunctionInvoke(fn, args.map(_.rename))
 
-    case Term.ConstructorCall(cons, args, inductiveArgs) => {
-      Term.ConstructorCall(cons, args.map(_.rename), inductiveArgs.map(_.rename))
+    case Term.InductiveVariant(cons, args, inductiveArgs) => {
+      Term.InductiveVariant(cons, args.map(_.rename), inductiveArgs.map(_.rename))
     }
 
     case Term.Match(scrutinees, clauses) => {
