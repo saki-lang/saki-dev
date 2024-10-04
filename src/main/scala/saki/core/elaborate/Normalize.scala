@@ -41,12 +41,15 @@ object Normalize {
       case Term.FunctionInvoke(fnRef, args) => {
         val fn = fnRef.definition.get
         val argsNorm: Seq[Term] = args.map(_.normalize(ctx))
-        given Context = fn.arguments(argsNorm).foldLeft(ctx) {
-          case (acc, (param, arg)) => acc + (param -> arg)
-        }
         fn.body.toOption match {
-          case Some(term) => term.normalize
-          case None => Term.FunctionInvoke(fnRef, argsNorm)
+          // TODO: if all arguments are pure values, we can evaluate the function
+          case Some(term) if !fn.isNeutral => {
+            given Context = fn.arguments(argsNorm).foldLeft(ctx) {
+              case (acc, (param, arg)) => acc + (param -> arg)
+            }
+            term.normalize
+          }
+          case _ => Term.FunctionInvoke(fnRef, argsNorm)
         }
       }
 

@@ -13,7 +13,7 @@ extension (clauses: Seq[Clause[Term]]) {
   def tryMatch(args: Seq[Term]): Option[Term] = {
     clauses.map { clause =>
       val substOpt = clause.patterns.buildSubstMap(args)
-      substOpt.map(subst => clause.body.subst(subst))
+      substOpt.map { implicit subst => clause.body.normalize }
     }.collectFirst { case Some(body) => body }
   }
 }

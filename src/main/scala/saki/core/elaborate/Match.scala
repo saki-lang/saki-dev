@@ -75,11 +75,11 @@ private[core] object Match {
     }
     case Pattern.Bind(binding) => Some(Map(binding -> term))
     case Pattern.Cons(cons, patterns) if term.isInstanceOf[Term.InductiveVariant] => {
-      val consCall = term.asInstanceOf[Term.InductiveVariant]
-      if cons != consCall.cons then {
+      val variant = term.asInstanceOf[Term.InductiveVariant]
+      if cons != variant.cons then {
         None
       } else {
-        buildSubstMap(patterns, consCall.consArgs)
+        buildSubstMap(patterns, variant.consArgs)
       }
     }
     case _ => None
@@ -90,6 +90,7 @@ private[core] object Match {
    * All patterns must match the corresponding terms.
    */
   def buildSubstMap(patterns: Seq[Pattern[Term]], terms: Seq[Term]): Option[Map[Var.Local, Term]] = {
+    assert(patterns.size == terms.size)
     patterns.zip(terms).foldLeft(Some(Map.empty): Option[Map[Var.Local, Term]]) {
       case (Some(subst), (pattern, term)) => buildSubstMap(pattern, term).map(subst ++ _)
       case _ => None

@@ -96,11 +96,13 @@ object Resolve {
     pristineDefinition: Definition[Expr]
   )(implicit ctx: Resolve.Context): (Definition[Expr], Resolve.Context) = {
 
+    // TODO: build a reference graph to detect recursive calls
+
     var global: Resolve.Context = ctx
 
     val resolvedDefinition: Definition[Expr] = pristineDefinition match {
 
-      case Function(ident, params, resultType, body) => {
+      case Function(ident, params, resultType, isNeutral, body) => {
         val (resolvedParams, ctxWithParam) = params.resolve(global)
         // register the function name to global context
         global += (ident.name -> ident)
@@ -108,7 +110,7 @@ object Resolve {
         val bodyCtx = ctxWithParam + (ident.name -> ident)
         val resolvedBody = body.get.resolve(bodyCtx)
         val resolvedResultType = resultType.resolve(bodyCtx)
-        Function[Expr](ident, resolvedParams, resolvedResultType, LateInit(resolvedBody))
+        Function[Expr](ident, resolvedParams, resolvedResultType, isNeutral, LateInit(resolvedBody))
       }
 
       // TODO: constructors should be resolved only in the context of the inductive type

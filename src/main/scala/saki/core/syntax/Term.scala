@@ -76,6 +76,8 @@ enum Term extends RuntimeEntity[Type] {
   case Lambda(param: Var.Local, body: Term)
   case Projection(record: Term, field: String)
 
+  def isFinal: Boolean = ???
+
   def subst(variable: Var.Local, term: Term): Term = this.subst(Map(variable -> term))
 
   def subst(implicit ctx: Normalize.Context): Term = this.normalize

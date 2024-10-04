@@ -62,7 +62,11 @@ case class Function[T <: Entity](
   override val ident: Var.Defined[T, Function],
   override val params: ParamList[T],
   val resultType: T,
-  body: LateInit[T] = LateInit[T](),
+  // Mark this function as a neutral function (recursive)
+  // When a function is a neutral function, its invocation will not be evaluated instantly 
+  // unless all its arguments are pure values
+  val isNeutral: Boolean = true,
+  val body: LateInit[T] = LateInit[T](),
 ) extends Definition[T] {
   def resultType(implicit ev: EntityFactory[T]): T = resultType
 }

@@ -53,7 +53,7 @@ private[core] object Synthesis {
     case Expr.Hole(_) =>  TypeError.error("Holes are not allowed in this context", expr.span)
     case _ => {
       val synthResult = expr.synth
-      if !(synthResult.`type` unify expectedType) then {
+      if !(synthResult.`type` unify expectedType.normalize(Map.empty)) then {
         TypeError.mismatch(expectedType.toString, synthResult.`type`.toString, expr.span)
       }
       synthResult.term
@@ -63,6 +63,7 @@ private[core] object Synthesis {
   case class Synth(term: Term, `type`: Term) {
     def unpack: (Term, Term) = (term, `type`)
     def normalize: Synth = copy(term = term.normalize(Map.empty), `type` = `type`.normalize(Map.empty))
+    def normalizeType: Synth = copy(term = term, `type` = `type`.normalize(Map.empty))
   }
 
   def synth(expr: Expr)(implicit ctx: Context): Synth = (expr match {
@@ -156,7 +157,7 @@ private[core] object Synthesis {
 
     case _ => TypeError.error("Failed to synthesis expression", expr.span)
     
-  }).normalize
+  }).normalizeType
 
   private def synthDependentType(param: Param[Expr], result: Expr)(implicit ctx: Context): Synth = {
     val (paramType, _) = param.`type`.synth.unpack
@@ -184,12 +185,13 @@ private[core] object Synthesis {
   
   def synthDefinition(definition: Definition[Expr])(implicit ctx: Context): Definition[Term] = definition match {
 
-    case Function(ident, paramExprs, resultTypeExpr, pristineBody) => {
+    case Function(ident, paramExprs, resultTypeExpr, isNeutral, pristineBody) => {
+      // TODO: Compute `isNeutral` using a reference graph
       val resultType = resultTypeExpr.elaborate(Term.Universe)
       val params = synthParams(paramExprs)
       ctx.withLocals(params.map(param => param.ident -> param.`type`).toMap) {
         implicit ctx => {
-          val function: Function[Term] = Function[Term](Var.Defined(ident.name), params, resultType)
+          val function: Function[Term] = Function[Term](Var.Defined(ident.name), params, resultType, isNeutral)
           function.ident.definition := function
           given Context = ctx.copy(definitions = ctx.definitions.updated(ident, function))
           function.body := pristineBody.get.elaborate(resultType)
