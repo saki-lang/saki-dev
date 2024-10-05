@@ -19,16 +19,25 @@ val exampleCode: String = {
       case Nat::Succ(a') => Nat::Succ(plus(a', b))
   }
 
-  def onePlusOne: Nat = plus(Nat::Succ(Nat::Succ(Nat::Zero)), plus(Nat::Succ(Nat::Zero), Nat::Succ(Nat::Zero)))
-
   def fib(n : Nat): Nat = match n {
       case Nat::Zero => Nat::Zero
       case Nat::Succ(Nat::Zero) => Nat::Succ(Nat::Zero)
       case Nat::Succ(Nat::Succ(n')) => plus(fib(n'), fib(Nat::Succ(n')))
   }
 
-  def fib1: Nat = fib(Nat::Succ(Nat::Zero))
-  def fib2: Nat = fib(Nat::Succ(Nat::Succ(Nat::Zero)))
+  def one: Nat = Nat::Succ(Nat::Zero)
+  def two: Nat = Nat::Succ(Nat::Succ(Nat::Zero))
+  def three: Nat = Nat::Succ(Nat::Succ(Nat::Succ(Nat::Zero)))
+  def four: Nat = Nat::Succ(Nat::Succ(Nat::Succ(Nat::Succ(Nat::Zero))))
+  def five: Nat = Nat::Succ(Nat::Succ(Nat::Succ(Nat::Succ(Nat::Succ(Nat::Zero)))))
+  def six: Nat = Nat::Succ(Nat::Succ(Nat::Succ(Nat::Succ(Nat::Succ(Nat::Succ(Nat::Zero))))))
+
+  def fib1: Nat = fib(one)
+  def fib2: Nat = fib(two)
+  def fib3: Nat = fib(three)
+  def fib4: Nat = fib(four)
+  def fib5: Nat = fib(five)
+  def fib6: Nat = fib(six)
   """
 }
 

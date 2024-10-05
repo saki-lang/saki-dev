@@ -42,7 +42,7 @@ object Normalize {
         val fn = fnRef.definition.get
         val argsNorm: Seq[Term] = args.map(_.normalize(ctx))
         fn.body.toOption match {
-          case Some(term) if !fn.isNeutral || args.forall(_.isFinal(Set.empty)) => {
+          case Some(term) if !fn.isNeutral || argsNorm.forall(_.isFinal(Set.empty)) => {
             given Context = fn.arguments(argsNorm).foldLeft(ctx) {
               case (acc, (param, arg)) => acc + (param -> arg)
             }
