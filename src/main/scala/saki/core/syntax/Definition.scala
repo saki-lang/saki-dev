@@ -1,17 +1,83 @@
 package saki.core.syntax
 
-import saki.core.{Entity, EntityFactory}
+import saki.core.{Entity, EntityFactory, TypeError}
 import saki.util.LateInit
 
 import scala.collection.Seq
+
+enum Var {
+
+  case Defined[T <: Entity, Def[A <: Entity] <: Definition[A]](
+    override val name: String,
+    val definition: LateInit[Def[T]] = LateInit[Def[T]](),
+  )
+
+  case Local(override val name: String)
+
+  def name: String = this match {
+    case Defined(name, _) => name
+    case Local(name) => name
+  }
+
+  override def equals(that: Any): Boolean = that match {
+    case that: Var.Defined[?, ?] => this.name == that.name
+    case that: Var.Local => this.name == that.name
+    case _ => false
+  }
+
+  override def toString: String = this.name
+}
+
+extension [T <: Entity, Def[E <: Entity] <: Definition[E]](self: Var.Defined[T, Def]) {
+
+  def signature(implicit factory: EntityFactory[T]): Signature[T] = self.definition.get.signature
+
+  def call(implicit factory: EntityFactory[T]): T = self.definition.toOption match {
+
+    case Some(_: Function[T]) => {
+      val signature: Signature[T] = self.definition.get.signature
+      factory.functionInvoke(self.asInstanceOf[Var.Defined[T, Function]], signature.paramToVars)
+    }
+
+    case Some(_: Inductive[T]) => {
+      val signature: Signature[T] = self.definition.get.signature
+      factory.inductiveType(self.asInstanceOf[Var.Defined[T, Inductive]], signature.paramToVars)
+    }
+
+    case Some(_: Constructor[T]) => {
+      val cons = self.asInstanceOf[Var.Defined[T, Constructor]]
+      factory.inductiveVariant(
+        cons = cons,
+        consArgs = self.signature.paramToVars,
+        inductiveArgs = cons.owner.signature.paramToVars
+      )
+    }
+
+    case None => TypeError(s"Unresolved reference: ${self.name}").raise
+  }
+}
+
+extension [T <: Entity](variable: Var.Defined[T, Constructor]) {
+  def owner: Var.Defined[T, Inductive] = variable.definition.get.owner
+}
 
 case class Param[T <: Entity | Option[Entity]](
   ident: Var.Local, `type`: T,
   applyMode: ApplyMode = ApplyMode.Explicit,
 ) {
+
   def name: String = ident.name
+
   def map[U <: Entity | Option[Entity]](transform: T => U): Param[U] = {
     copy(`type` = transform(`type`))
+  }
+
+  def unapply: (Var.Local, T) = (ident, `type`)
+
+  override def toString: String = applyMode match {
+    case ApplyMode.Explicit => s"$name: ${`type`}"
+    case ApplyMode.Implicit => s"[$name: ${`type`}]"
+    case ApplyMode.Instance => s"{$name: ${`type`}}"
   }
 }
 
@@ -28,6 +94,12 @@ enum ApplyMode {
 }
 
 type ParamList[T <: Entity | Option[Entity]] = Seq[Param[T]]
+
+extension [T <: Entity | Option[Entity]](params: ParamList[T]) {
+  def map[U <: Entity | Option[Entity]](transform: T => U): ParamList[U] = {
+    params.map(_.map(transform))
+  }
+}
 
 case class Argument[T <: Entity](
   value: T,
@@ -68,7 +140,12 @@ case class Function[T <: Entity](
   val isNeutral: Boolean = true,
   val body: LateInit[T] = LateInit[T](),
 ) extends Definition[T] {
+
   def resultType(implicit ev: EntityFactory[T]): T = resultType
+
+  override def toString: String = {
+    s"def ${ident.name}(${params.mkString(", ")}): $resultType = \n\t$body"
+  }
 }
 
 case class Inductive[T <: Entity](
@@ -76,7 +153,12 @@ case class Inductive[T <: Entity](
   override val params: ParamList[T],
   constructors: Seq[Constructor[T]],
 ) extends Definition[T] {
+
   def resultType(implicit ev: EntityFactory[T]): T = ev.universe
+
+  override def toString: String = {
+    s"inductive ${ident.name}(${params.mkString(", ")})"
+  }
 }
 
 case class Constructor[T <: Entity](
@@ -84,7 +166,12 @@ case class Constructor[T <: Entity](
   owner: Var.Defined[T, Inductive],
   override val params: ParamList[T],
 ) extends Definition[T] {
+  
   def resultType(implicit factory: EntityFactory[T]): T = {
     factory.inductiveType(owner, owner.definition.get.paramToVars)
+  }
+
+  override def toString: String = {
+    s"cons(${owner.name}) ${ident.name}(${params.mkString(", ")})"
   }
 }

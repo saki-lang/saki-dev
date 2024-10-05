@@ -5,72 +5,161 @@ import saki.core.TypeError
 import saki.core.syntax.*
 import saki.core.syntax.Pattern.resolve
 import saki.core.SourceSpan
-import saki.util.LateInit
+import saki.util.{Graph, LateInit}
+
+import scala.annotation.targetName
 
 object Resolve {
 
-  type Context = Map[String, Var]
+  case class Context(
+    variableMap: Map[String, Var] = Map.empty,
+    dependencyGraph: Graph[Var.Defined[?, ?]] = Graph.directed,
+    currentDefinition: Option[Var.Defined[Expr, ?]] = None,
+  ) {
+    def variables: Seq[Var] = variableMap.values.toSeq
+
+
+    @targetName("add")
+    def +(variable: Var): Context = copy(variableMap = variableMap + (variable.name -> variable))
+
+    def ref(variable: Var.Defined[?, ?]): Context = {
+      val updatedDependencies = currentDefinition match {
+        case Some(definition) => dependencyGraph.addEdge(definition, variable)
+        case None => dependencyGraph
+      }
+      copy(variableMap = variableMap + (variable.name -> variable), dependencyGraph = updatedDependencies)
+    }
+
+    def withVariable[R](variable: Var)(action: Context => R): R = {
+      action(this + variable)
+    }
+
+    def withDefinition[R](definition: Var.Defined[Expr, ?])(action: Context => R): R = {
+      if currentDefinition.isDefined then {
+        throw new IllegalStateException("Cannot nest definitions")
+      } else {
+        action(copy(
+          currentDefinition = Some(definition),
+          variableMap = variableMap + (definition.name -> definition),
+          dependencyGraph = dependencyGraph.addVertex(definition),
+        ))
+      }
+    }
+
+    def get(name: String): Option[Var] = variableMap.get(name)
+  }
 
   object Context {
-    def apply(): Resolve.Context = Map.empty
-    def apply(env: Map[String, Var]): Resolve.Context = env
-    def empty: Resolve.Context = Map.empty
+    // def apply(): Resolve.Context = empty
+    def apply(env: Map[String, Var]): Resolve.Context = new Context(env)
+    def empty: Resolve.Context = Context()
   }
 
-  extension (ctx: Context) {
-    def add(variable: Var): Resolve.Context = ctx + (variable.name -> variable)
-
-    def withVariable[R](variable: Var)(action: Resolve.Context => R): R = {
-      action(ctx.add(variable))
-    }
-  }
-
-  def resolveExpr(expr: Expr)(implicit ctx: Resolve.Context): Expr = {
+  def resolveExpr(expr: Expr)(implicit ctx: Resolve.Context): (Expr, Resolve.Context) = {
     given span: SourceSpan = expr.span
+    given Resolve.Context = ctx
     expr match {
 
-      case Expr.Universe() => Expr.Universe()
-      case Expr.Primitive(value) => Expr.Primitive(value)
-      case Expr.PrimitiveType(ty) => Expr.PrimitiveType(ty)
+      case Expr.Universe() => (Expr.Universe(), ctx)
+      case Expr.Primitive(value) => (Expr.Primitive(value), ctx)
+      case Expr.PrimitiveType(ty) => (Expr.PrimitiveType(ty), ctx)
 
-      case Expr.Variable(ref) => Expr.Variable(ref)
+      case Expr.Variable(variable) => variable match {
+        case defined: Var.Defined[?, ?] => (Expr.Variable(defined), ctx.ref(defined))
+        case local: Var.Local => (Expr.Variable(local), ctx)
+      }
 
       case Expr.Unresolved(name) => ctx.get(name) match {
-        case Some(variable) => Expr.Variable(variable)
+        case Some(variable) => (Expr.Variable(variable), ctx)
         case None => TypeError.error(s"Unresolved variable: $name", span)
       }
 
-      case Expr.Hole(_) => Expr.Hole(ctx.values.flatMap {
-        case local: Var.Local => Some(local)
-        case _ => None
-      }.toSeq)
+      case Expr.Hole(_) => {
+        val resolved = Expr.Hole(ctx.variables.flatMap {
+          case local: Var.Local => Some(local)
+          case _ => None
+        }.toSeq)
+        (resolved, ctx)
+      }
 
       case Expr.Pi(param, codomain) => {
-        val resolvedParam = Param(param.ident, param.`type`.resolve(ctx))
-        Expr.Pi(resolvedParam, ctx.withVariable(resolvedParam.ident) { codomain.resolve })
-      }
-      case Expr.Sigma(param, codomain) => {
-        val resolvedParam = Param(param.ident, param.`type`.resolve(ctx))
-        Expr.Sigma(resolvedParam, ctx.withVariable(resolvedParam.ident) { codomain.resolve })
+        val (resolvedParamType, ctxParam) = param.`type`.resolve(ctx)
+        val resolvedParam = Param(param.ident, resolvedParamType)
+        val (resolvedResult, ctxResult) = ctxParam.withVariable(resolvedParam.ident) { codomain.resolve }
+        (Expr.Pi(resolvedParam, resolvedResult), ctxResult)
       }
 
-      case Expr.Apply(fn, arg) => Expr.Apply(fn.resolve, Argument(arg.value.resolve, arg.applyMode))
-      case Expr.Elimination(obj, member) => Expr.Elimination(obj.resolve, member)
-      case Expr.Lambda(param, body, returnType) => Expr.Lambda(
-        param = Param(param.ident, param.`type`.map(_.resolve)),
-        body = ctx.withVariable(param.ident) { body.resolve },
-        returnType = returnType,
-      )
+      case Expr.Sigma(param, codomain) => {
+        val (resolvedParamType, ctxParam) = param.`type`.resolve(ctx)
+        val resolvedParam = Param(param.ident, resolvedParamType)
+        val (resolvedResult, ctxResult) = ctxParam.withVariable(resolvedParam.ident) { codomain.resolve }
+        (Expr.Sigma(resolvedParam, resolvedResult), ctxResult)
+      }
+
+      case Expr.Apply(fn, arg) => {
+        val (resolvedFn, fnCtx) = fn.resolve
+        val (resolvedArg, argCtx) = arg.value.resolve(fnCtx)
+        val resolved = Expr.Apply(resolvedFn, Argument(resolvedArg, arg.applyMode))
+        (resolved, argCtx)
+      }
+
+      case Expr.Elimination(obj, member) => {
+        val (resolvedObj, ctx) = obj.resolve
+        val resolved = Expr.Elimination(resolvedObj, member)
+        (resolved, ctx)
+      }
+
+      case Expr.Lambda(param, body, returnType) => {
+        val (resolvedParamType, ctxParam) = param.`type` match {
+          case Some(ty) =>
+            val (resolved, ctxParam) = ty.resolve(ctx)
+            (Some(resolved), ctxParam)
+          case None => (None, ctx)
+        }
+        val (resolvedBody, ctxBody) = ctxParam.withVariable(param.ident) { body.resolve }
+        val resolved = Expr.Lambda(
+          param = Param(param.ident, resolvedParamType),
+          body = resolvedBody,
+          returnType = returnType,
+        )
+        (resolved, ctxBody)
+      }
 
       case Expr.Match(scrutinees, clauses) => { // TODO: double check
-        Expr.Match(scrutinees.map(_.resolve), clauses.map { clause =>
-          val (resolvedClause, _) = resolveClause(clause)
-          resolvedClause
-        })
+        val (resolvedScrutinees, scrutineesCtx) = scrutinees.foldLeft((List.empty[Expr], ctx)) {
+          case ((resolvedScrutinees, ctx), scrutinee) => {
+            val (resolved, newCtx) = scrutinee.resolve(ctx)
+            (resolvedScrutinees :+ resolved, newCtx)
+          }
+        }
+        val (resolvedClauses, clausesCtx) = clauses.foldLeft((List.empty[Clause[Expr]], scrutineesCtx)) {
+          case ((resolvedClauses, ctx), clause) => {
+            val (resolved, newCtx) = resolveClause(clause)(ctx)
+            (resolvedClauses :+ resolved, newCtx)
+          }
+        }
+        (Expr.Match(resolvedScrutinees, resolvedClauses), clausesCtx)
       }
 
-      case Expr.Record(fields) => Expr.Record(fields.view.mapValues(_.resolve).toMap)
-      case Expr.RecordType(fields) => Expr.RecordType(fields.view.mapValues(_.resolve).toMap)
+      case Expr.Record(fields) => {
+        val (resolvedFields, fieldsCtx) = fields.foldLeft((Map.empty[String, Expr], ctx)) {
+          case ((resolvedFields, ctx), (label, expr)) => {
+            val (resolved, newCtx) = expr.resolve(ctx)
+            (resolvedFields + (label -> resolved), newCtx)
+          }
+        }
+        (Expr.Record(resolvedFields), fieldsCtx)
+      }
+
+      case Expr.RecordType(fields) => {
+        val (resolvedFields, fieldsCtx) = fields.foldLeft((Map.empty[String, Expr], ctx)) {
+          case ((resolvedFields, ctx), (label, expr)) => {
+            val (resolved, newCtx) = expr.resolve(ctx)
+            (resolvedFields + (label -> resolved), newCtx)
+          }
+        }
+        (Expr.RecordType(resolvedFields), fieldsCtx)
+      }
 
     }
   }
@@ -79,8 +168,9 @@ object Resolve {
     def resolve(ctx: Resolve.Context): (ParamList[Expr], Resolve.Context) = {
       params.foldLeft((Seq.empty: ParamList[Expr], ctx)) {
         case ((params, ctx), param) => {
-          val resolvedParam = Param(param.ident, param.`type`.resolve(ctx))
-          (params :+ resolvedParam, ctx.add(resolvedParam.ident))
+          val (resolvedParamType, paramCtx) = param.`type`.resolve(ctx)
+          val resolvedParam = Param(param.ident, resolvedParamType)
+          (params :+ resolvedParam, paramCtx + resolvedParam.ident)
         }
       }
     }
@@ -88,15 +178,15 @@ object Resolve {
   
   extension (definition: Definition[Expr]) {
     def resolve(implicit ctx: Resolve.Context): (Definition[Expr], Resolve.Context) = {
-      resolveDefinitionExpr(definition)
+      resolveDefinition(definition)
     }
   }
 
-  def resolveDefinitionExpr(
+  def resolveDefinition(
     pristineDefinition: Definition[Expr]
   )(implicit ctx: Resolve.Context): (Definition[Expr], Resolve.Context) = {
 
-    // TODO: build a reference graph to detect recursive calls
+    // TODO: support mutual recursion (need another pass to pre-build declarations)
 
     var global: Resolve.Context = ctx
 
@@ -105,28 +195,29 @@ object Resolve {
       case Function(ident, params, resultType, isNeutral, body) => {
         val (resolvedParams, ctxWithParam) = params.resolve(global)
         // register the function name to global context
-        global += (ident.name -> ident)
+        global += ident
         // add the function name to the context for recursive calls
-        val bodyCtx = ctxWithParam + (ident.name -> ident)
-        val resolvedBody = body.get.resolve(bodyCtx)
-        val resolvedResultType = resultType.resolve(bodyCtx)
-        Function[Expr](ident, resolvedParams, resolvedResultType, isNeutral, LateInit(resolvedBody))
+        ctxWithParam.withDefinition(ident) { implicit ctx =>
+          val (resolvedBody, bodyCtx) = body.get.resolve(ctx)
+          val (resolvedResultType, resultTypeCtx) = resultType.resolve(bodyCtx)
+          Function[Expr](ident, resolvedParams, resolvedResultType, isNeutral, LateInit(resolvedBody))
+        }
       }
 
-      // TODO: constructors should be resolved only in the context of the inductive type
+      // TODO: constructors should be resolved only in the context of inductive types
       // TODO: Remove this match arm (?)
       case Constructor(ident, owner, params) => {
         val (resolvedParams, _) = params.resolve(global)
-        global += (ident.name -> ident)
+        global += ident
         Constructor(ident, owner, resolvedParams)
       }
 
       case Inductive(ident, params, constructors) => {
         val (resolvedParams, _) = params.resolve(global)
-        global += (ident.name -> ident)
+        global += ident
         val resolvedConstructors: Seq[Constructor[Expr]] = constructors.map { constructor =>
           val (resolvedConsParams, _) = constructor.params.resolve(global)
-          global += (constructor.ident.name -> constructor.ident)
+          global += constructor.ident
           Constructor[Expr](constructor.ident, constructor.owner, resolvedConsParams)
         }
         Inductive[Expr](ident, resolvedParams, resolvedConstructors)
@@ -139,9 +230,7 @@ object Resolve {
     given span: SourceSpan = pattern.span
     pattern match {
 
-      case Pattern.Bind(binding) => {
-        (Pattern.Bind(binding), ctx.updated(binding.name, binding))
-      }
+      case Pattern.Bind(binding) => (Pattern.Bind(binding), ctx + binding)
 
       case Pattern.Cons(cons, patterns) => {
         val (resolvedPatterns, updatedContext) = patterns.foldLeft((List.empty[Pattern[Expr]], ctx)) {
@@ -150,7 +239,7 @@ object Resolve {
             (resolvedPatterns :+ resolved, newCtx)
           }
         }
-        (Pattern.Cons(cons, resolvedPatterns), updatedContext)
+        (Pattern.Cons(cons, resolvedPatterns), updatedContext.ref(cons))
       }
 
       case Pattern.Primitive(value) => (Pattern.Primitive(value), ctx)
@@ -167,7 +256,8 @@ object Resolve {
 
       case Pattern.Typed(pattern, ty) => {
         val (resolvedPattern, updatedContext) = pattern.resolve(ctx)
-        (Pattern.Typed(resolvedPattern, ty.resolve(updatedContext)), updatedContext)
+        val (resolvedType, tyCtx) = ty.resolve(updatedContext)
+        (Pattern.Typed(resolvedPattern, resolvedType), tyCtx)
       }
     }
   }
@@ -179,7 +269,7 @@ object Resolve {
         (resolvedPatterns :+ resolved, newCtx)
       }
     }
-    val body = clause.body.resolve(newCtx)
-    (Clause(resolvedPatterns, body), newCtx)
+    val (resolvedPattern, bodyCtx) = clause.body.resolve(newCtx)
+    (Clause(resolvedPatterns, resolvedPattern), bodyCtx)
   }
 }

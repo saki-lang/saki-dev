@@ -8,56 +8,6 @@ import saki.util.LateInit
 
 import scala.collection.Seq
 
-enum Var {
-
-  case Defined[T <: Entity, Def[A <: Entity] <: Definition[A]](
-    override val name: String,
-    val definition: LateInit[Def[T]] = LateInit[Def[T]](),
-  )
-
-  case Local(override val name: String)
-
-  def name: String = this match {
-    case Defined(name, _) => name
-    case Local(name) => name
-  }
-
-  override def toString: String = this.name
-}
-
-extension [T <: Entity, Def[E <: Entity] <: Definition[E]](self: Var.Defined[T, Def]) {
-
-  def signature(implicit factory: EntityFactory[T]): Signature[T] = self.definition.get.signature
-
-  def call(implicit factory: EntityFactory[T]): T = self.definition.toOption match {
-
-    case Some(_: Function[T]) => {
-      val signature: Signature[T] = self.definition.get.signature
-      factory.functionInvoke(self.asInstanceOf[Var.Defined[T, Function]], signature.paramToVars)
-    }
-
-    case Some(_: Inductive[T]) => {
-      val signature: Signature[T] = self.definition.get.signature
-      factory.inductiveType(self.asInstanceOf[Var.Defined[T, Inductive]], signature.paramToVars)
-    }
-
-    case Some(_: Constructor[T]) => {
-      val cons = self.asInstanceOf[Var.Defined[T, Constructor]]
-      factory.inductiveVariant(
-        cons = cons,
-        consArgs = self.signature.paramToVars,
-        inductiveArgs = cons.owner.signature.paramToVars
-      )
-    }
-
-    case None => TypeError(s"Unresolved reference: ${self.name}").raise
-  }
-}
-
-extension [T <: Entity](variable: Var.Defined[T, Constructor]) {
-  def owner: Var.Defined[T, Inductive] = variable.definition.get.owner
-}
-
 enum Term extends RuntimeEntity[Type] {
 
   case Universe
@@ -76,8 +26,6 @@ enum Term extends RuntimeEntity[Type] {
   case Lambda(param: Var.Local, body: Term)
   case Projection(record: Term, field: String)
 
-  def isFinal: Boolean = ???
-
   def subst(variable: Var.Local, term: Term): Term = this.subst(Map(variable -> term))
 
   def subst(implicit ctx: Normalize.Context): Term = this.normalize
@@ -95,19 +43,25 @@ enum Term extends RuntimeEntity[Type] {
     case PrimitiveType(ty) => ty.toString
     case Variable(variable) => variable.name
     case FunctionInvoke(fn, args) => s"${fn.name}(${args.mkString(", ")})"
-    case InductiveType(inductive, args) => s"${inductive.name}(${args.mkString(", ")})"
-    case InductiveVariant(cons, args, inductiveArgs) => {
-      if (inductiveArgs.isEmpty) {
-        s"${cons.name}(${args.mkString(", ")})"
-      } else {
-        s"${cons.name}(${inductiveArgs.mkString(", ")})(${args.mkString(", ")})"
-      }
+    case InductiveType(inductive, args) => {
+      val argsStr = if args.nonEmpty then s"(${args.mkString(", ")})" else ""
+      s"${inductive.name}$argsStr"
     }
-    case Match(scrutinee, clauses) => s"match $scrutinee {${clauses.mkString(" | ")}}"
+    case InductiveVariant(cons, args, inductiveArgs) => {
+      val inductiveArgsStr = if inductiveArgs.nonEmpty then s"(${inductiveArgs.mkString(", ")})" else ""
+      val argsStr = if args.nonEmpty then s"(${args.mkString(", ")})" else ""
+      s"${cons.name}$inductiveArgsStr$argsStr"
+    }
+    case Match(scrutinees, clauses) => {
+      val scrutineesStr = if scrutinees.size > 1 then {
+        s"(${scrutinees.mkString(", ")})"
+      } else scrutinees.head.toString
+      s"match $scrutineesStr { ${clauses.mkString(" | ")} }"
+    }
     case Pi(param, codomain) => s"Π(${param.name} : ${param.`type`}) -> $codomain"
     case Sigma(param, codomain) => s"Σ(${param.name} : ${param.`type`}) -> $codomain"
-    case Record(fields) => s"{${fields.map { case (k, v) => s"$k = $v" }.mkString(", ")}}"
-    case RecordType(fields) => s"record {${fields.map { case (k, v) => s"$k: $v" }.mkString(", ")}}"
+    case Record(fields) => s"{ ${fields.map { case (k, v) => s"$k = $v" }.mkString(", ")} }"
+    case RecordType(fields) => s"record { ${fields.map { case (k, v) => s"$k: $v" }.mkString(", ")} }"
     case Apply(fn, arg) => s"$fn($arg)"
     case Lambda(param, body) => s"λ(${param.name}) => $body"
     case Projection(record, field) => s"$record.$field"
@@ -173,6 +127,22 @@ enum Term extends RuntimeEntity[Type] {
     }
     
     case Match(scrutinees, clauses) => ???
+  }
+
+  def isFinal(implicit localVars: Set[Var.Local]): Boolean = this match {
+    case Variable(variable) => localVars.contains(variable)
+    case Universe | Primitive(_) | PrimitiveType(_) => true
+    case FunctionInvoke(_, args) => args.forall(_.isFinal)
+    case InductiveType(_, args) => args.forall(_.isFinal)
+    case InductiveVariant(_, consArgs, inductiveArgs) => consArgs.forall(_.isFinal) && inductiveArgs.forall(_.isFinal)
+    case Match(scrutinees, clauses) => scrutinees.forall(_.isFinal) && clauses.forall(_.forall(_.isFinal))
+    case Pi(param, codomain) => param.`type`.isFinal && codomain.isFinal
+    case Sigma(param, codomain) => param.`type`.isFinal && codomain.isFinal
+    case Record(fields) => fields.values.forall(_.isFinal)
+    case RecordType(fields) => fields.values.forall(_.isFinal)
+    case Apply(fn, arg) => fn.isFinal && arg.isFinal
+    case Lambda(param, body) => body.isFinal(localVars + param)
+    case Projection(record, _) => record.isFinal
   }
 }
 

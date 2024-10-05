@@ -26,12 +26,12 @@ case class Environment private(
     copy(definitions = definitions.updated(definition.ident, (definition, Environment.DefinitionKindTerm)))
   }
 
-  def add(ident: Var.Local, value: TypedValue): Environment = {
-    copy(locals = locals.updated(ident, value))
+  def add(local: TypedValue): Environment = {
+    copy(locals = locals.updated(local.value.asInstanceOf[Var.Local], local))
   }
 
-  def add(ident: Var.Local, value: Value, `type`: Type): Environment = {
-    copy(locals = locals.updated(ident, TypedValue(value, `type`)))
+  def add(local: Var.Local, value: Value, `type`: Type): Environment = {
+    copy(locals = locals.updated(local, TypedValue(value, `type`)))
   }
 
   def addVars(locals: Map[Var.Local, TypedValue]): Environment = {
@@ -43,8 +43,6 @@ case class Environment private(
       case (Argument(value, _), ty) => value.asInstanceOf[Var.Local] -> TypedValue(value, ty)
     })
   }
-
-  def contains(local: Var.Local): Boolean = locals.contains(local)
 
   def lookup(local: Var.Local): Option[TypedValue] = locals.get(local)
 

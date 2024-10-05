@@ -35,7 +35,10 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
     this match {
       case Primitive(value) => value.toString
       case Bind(binding) => binding.name
-      case Cons(cons, patterns) => s"${cons.name}(${patterns.mkString(", ")})"
+      case Cons(cons, patterns) => {
+        val patternsStr = if patterns.isEmpty then "" else s"(${patterns.mkString(", ")})"
+        s"${cons.name}$patternsStr"
+      }
       case Typed(pattern, ty) => s"$pattern : $ty"
       case Record(fields) => s"{${
         fields.map((name, pattern) => s"$name = $pattern").mkString(", ")
@@ -43,24 +46,28 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
     }
   }
 
-  def map[U <: Entity](f: T => U): Pattern[U] = {
-    this match {
-      case Primitive(value) => Pattern.Primitive(value)
-      case Bind(binding) => Pattern.Bind(binding)
-      case Cons(cons, patterns) => Pattern.Cons(cons, patterns.map(_.map(f)))
-      case Typed(pattern, ty) => Pattern.Typed(pattern.map(f), f(ty))
-      case Record(fields) => Pattern.Record(fields.map((name, pattern) => (name, pattern.map(f))))
-    }
+  def map[U <: Entity](f: T => U): Pattern[U] = this match {
+    case Primitive(value) => Pattern.Primitive(value)
+    case Bind(binding) => Pattern.Bind(binding)
+    case Cons(cons, patterns) => Pattern.Cons(cons, patterns.map(_.map(f)))
+    case Typed(pattern, ty) => Pattern.Typed(pattern.map(f), f(ty))
+    case Record(fields) => Pattern.Record(fields.map((name, pattern) => (name, pattern.map(f))))
   }
 
-  def getBindings: Seq[Var.Local] = {
-    this match {
-      case Primitive(_) => Seq.empty
-      case Bind(binding) => Seq(binding)
-      case Cons(_, patterns) => patterns.flatMap(_.getBindings)
-      case Typed(pattern, _) => pattern.getBindings
-      case Record(fields) => fields.flatMap((_, pattern) => pattern.getBindings)
-    }
+  def forall(f: T => Boolean): Boolean = this match {
+    case Primitive(_) => true
+    case Bind(_) => true
+    case Cons(_, patterns) => patterns.forall(_.forall(f))
+    case Typed(pattern, ty) => pattern.forall(f) && f(ty)
+    case Record(fields) => fields.forall((_, pattern) => pattern.forall(f))
+  }
+
+  def getBindings: Seq[Var.Local] = this match {
+    case Primitive(_) => Seq.empty
+    case Bind(binding) => Seq(binding)
+    case Cons(_, patterns) => patterns.flatMap(_.getBindings)
+    case Typed(pattern, _) => pattern.getBindings
+    case Record(fields) => fields.flatMap((_, pattern) => pattern.getBindings)
   }
 
 }

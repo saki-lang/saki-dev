@@ -105,24 +105,22 @@ enum Expr(val span: SourceSpan) extends Entity {
 
   def elaborate(expected: Term)(implicit ctx: Synthesis.Context): Term = Synthesis.elaborate(this, expected)
 
-  def resolve(implicit ctx: Resolve.Context): Expr = Resolve.resolveExpr(this)
+  def resolve(implicit ctx: Resolve.Context): (Expr, Resolve.Context) = Resolve.resolveExpr(this)
 
-  override def toString: String = {
-    this match {
-      case Universe() => "Type"
-      case Primitive(value) => value.toString
-      case PrimitiveType(ty) => ty.toString
-      case Unresolved(name) => name
-      case Variable(ref) => ref.toString
-      case Hole(_) => "_"
-      case Pi(param, result) => s"Π(${param.ident} : ${param.`type`}) -> $result"
-      case Sigma(param, result) => s"Σ(${param.ident} : ${param.`type`}) -> $result"
-      case Apply(fn, arg) => s"$fn $arg"
-      case Elimination(obj, member) => s"$obj.$member"
-      case Lambda(param, body, _) => s"λ(${param.ident} : ${param.`type`}) => $body"
-      case Record(fields) => s"^{ ${fields.map { case (k, v) => s"$k = $v" }.mkString(", ")} }"
-      case RecordType(fields) => s"record { ${fields.map { case (k, v) => s"$k: $v" }.mkString(", ")} }"
-      case Match(scrutinees, clauses) => s"match $scrutinees { ${clauses.map(_.toString).mkString(" | ")} }"
-    }
+  override def toString: String = this match {
+    case Universe() => "Type"
+    case Primitive(value) => value.toString
+    case PrimitiveType(ty) => ty.toString
+    case Unresolved(name) => name
+    case Variable(ref) => ref.toString
+    case Hole(_) => "_"
+    case Pi(param, result) => s"Π(${param.ident} : ${param.`type`}) -> $result"
+    case Sigma(param, result) => s"Σ(${param.ident} : ${param.`type`}) -> $result"
+    case Apply(fn, arg) => s"$fn $arg"
+    case Elimination(obj, member) => s"$obj.$member"
+    case Lambda(param, body, _) => s"λ(${param.ident} : ${param.`type`}) => $body"
+    case Record(fields) => s"^{ ${fields.map { case (k, v) => s"$k = $v" }.mkString(", ")} }"
+    case RecordType(fields) => s"record { ${fields.map { case (k, v) => s"$k: $v" }.mkString(", ")} }"
+    case Match(scrutinees, clauses) => s"match $scrutinees { ${clauses.map(_.toString).mkString(" | ")} }"
   }
 }

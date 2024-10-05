@@ -38,47 +38,16 @@ enum Value extends RuntimeEntity[Type] {
     val inductiveArgs: Seq[Value],
   )
 
-  def isFinal(implicit env: Environment): Boolean = this match {
-    case Universe => true
-    case Primitive(_) => true
-    case PrimitiveType(_) => true
-    case Neutral(_) => false
-    case Pi(_, _) => ???
-    case Sigma(_, _) => ???
-    case Lambda(_, _) => ???
-    case Record(fields) => fields.values.forall(_.isFinal)
-    case RecordType(fields) => fields.values.forall(_.isFinal)
-    case InductiveType(_, args) => args.forall(_.isFinal)
-    case InductiveVariant(_, consArgs, inductiveArgs) => consArgs.forall(_.isFinal) && inductiveArgs.forall(_.isFinal)
-  }
-
   override def infer(implicit env: Environment): Type = ???
 
-  def readBack(implicit env: Environment): Term = this match {
+  def readBack: Term = this match {
     case Universe => Term.Universe
     case Primitive(value) => Term.Primitive(value)
     case PrimitiveType(ty) => Term.PrimitiveType(ty)
     case Neutral(value) => value.readBack
-    case Pi(paramType, codomain) => {
-      val paramIdent = Value.uniqueVariable
-      val param = Value.variable(paramIdent)
-      val paramTerm = Term.Variable(paramIdent)
-      val newEnv: Environment = env.add(paramIdent, param, paramType)
-      Term.Pi(Param(paramIdent, paramTerm), codomain(param).readBack(newEnv))
-    }
-    case Sigma(paramType, codomain) => {
-      val paramIdent = Value.uniqueVariable
-      val param = Value.variable(paramIdent)
-      val paramTerm = Term.Variable(paramIdent)
-      val newEnv: Environment = env.add(paramIdent, param, paramType)
-      Term.Sigma(Param(paramIdent, paramTerm), codomain(param).readBack(newEnv))
-    }
-    case Lambda(paramType, body) => {
-      val paramIdent = Value.uniqueVariable
-      val param = Value.variable(paramIdent)
-      val newEnv: Environment = env.add(paramIdent, param, paramType)
-      Term.Lambda(paramIdent, body(param).readBack(newEnv))
-    }
+    case Pi(param, codomain) => ???
+    case Sigma(param, codomain) => ???
+    case Lambda(param, body) => ???
     case Record(fields) => Term.Record(fields.map((name, value) => (name, value.readBack)))
     case RecordType(fields) => Term.RecordType(fields.map((name, ty) => (name, ty.readBack)))
   }
@@ -119,15 +88,6 @@ object Value extends EntityFactory[Value] {
     Value.InductiveVariant(cons, consArgs, inductiveArgs)
   }
 
-  def uniqueVariable(implicit env: Environment): Var.Local = {
-    // Iterator that generates names in the format "param$0", "param$1", ...
-    val nameIterator = Iterator.from(0).map(i => s"param$$$i")
-    // Find the first unique name that does not collide with any key in env
-    val uniqueName = nameIterator.find(name => !env.contains(Var.Local(name))).get
-    // Return a new Var.Local with the unique name
-    Var.Local(uniqueName)
-  }
-
 }
 
 enum NeutralValue {
@@ -151,7 +111,7 @@ enum NeutralValue {
   
   def infer(implicit env: Environment): Type = ???
 
-  def readBack(implicit env: Environment): Term = this match {
+  def readBack: Term = this match {
     case Variable(ident) => Term.Variable(ident)
     case Apply(fn, arg) => Term.Apply(fn.readBack, arg.readBack)
     case Projection(record, field) => Term.Projection(record.readBack, field)

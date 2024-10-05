@@ -42,8 +42,7 @@ object Normalize {
         val fn = fnRef.definition.get
         val argsNorm: Seq[Term] = args.map(_.normalize(ctx))
         fn.body.toOption match {
-          // TODO: if all arguments are pure values, we can evaluate the function
-          case Some(term) if !fn.isNeutral => {
+          case Some(term) if !fn.isNeutral || args.forall(_.isFinal(Set.empty)) => {
             given Context = fn.arguments(argsNorm).foldLeft(ctx) {
               case (acc, (param, arg)) => acc + (param -> arg)
             }

@@ -24,5 +24,6 @@ extension (clauses: Seq[Clause[Term]]) {
 case class Clause[T <: Entity](patterns: Seq[Pattern[T]], body: T) {
   def map[U <: Entity](f: T => U): Clause[U] = Clause(patterns.map(_.map(f)), f(body))
   def mapPatterns(f: Pattern[T] => Pattern[T]): Clause[T] = Clause(patterns.map(f), body)
+  def forall(f: T => Boolean): Boolean = f(body) && patterns.forall(_.forall(f))
   override def toString: String = s"${patterns.mkString(", ")} => $body"
 }
