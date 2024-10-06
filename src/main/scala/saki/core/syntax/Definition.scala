@@ -32,7 +32,7 @@ extension [T <: Entity, Def[E <: Entity] <: Definition[E]](self: Var.Defined[T, 
 
   def signature(implicit factory: EntityFactory[T]): Signature[T] = self.definition.get.signature
 
-  def call(implicit factory: EntityFactory[T]): T = self.definition.toOption match {
+  def buildInvoke(implicit factory: EntityFactory[T]): T = self.definition.toOption match {
 
     case Some(_: Function[T]) => {
       val signature: Signature[T] = self.definition.get.signature

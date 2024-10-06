@@ -1,14 +1,16 @@
 package saki.core.elaborate
 
+import saki.core.context.Environment
+
 import scala.collection.Seq
 import saki.core.{PatternError, SizeError, SymbolError, TypeError, ValueError}
 import saki.core.syntax.*
 
 private[core] object Match {
 
-  def matchPattern(
-    pattern: Pattern[Term], `type`: Term
-  )(implicit ctx: Synthesis.Context): Map[Var.Local, Term] = pattern match {
+  def buildPatternMatch(pattern: Pattern[Term], `type`: Term)(
+    implicit env: Environment.Untyped[Term]
+  ): Map[Var.Local, Term] = pattern match {
 
     case Pattern.Primitive(_) => Map.empty
     case Pattern.Bind(binding) => Map(binding -> `type`)
@@ -25,7 +27,7 @@ private[core] object Match {
       val inductiveType = `type`.asInstanceOf[Term.InductiveType]
       val consDef: Constructor[Term] = cons.definition.toOption match {
         case Some(definition) => definition.asInstanceOf[Constructor[Term]]
-        case None => ctx.definitions.getOrElse(cons, SymbolError.undefined(cons.name, pattern.span)) match {
+        case None => env.definitions.getOrElse(cons, SymbolError.undefined(cons.name, pattern.span)) match {
           case consDef: Constructor[Term] => consDef
           case _ => SymbolError.notConstructor(cons.name, pattern.span)
         }
@@ -36,7 +38,7 @@ private[core] object Match {
         ValueError.mismatch(consDef.owner.name, inductiveType.inductive.name, pattern.span)
       } else {
         patterns.zip(consDef.params).foldLeft(Map.empty: Map[Var.Local, Term]) {
-          case (subst, (pattern, param)) => subst ++ matchPattern(pattern, param.`type`)
+          case (subst, (pattern, param)) => subst ++ buildPatternMatch(pattern, param.`type`)
         }
       }
     }
@@ -45,7 +47,7 @@ private[core] object Match {
       PatternError.mismatch("Inductive", `type`.toString, pattern.span)
     }
 
-    case Pattern.Typed(pattern, ty) => matchPattern(pattern, ty)
+    case Pattern.Typed(pattern, ty) => buildPatternMatch(pattern, ty)
 
     case Pattern.Record(fields) if `type`.isInstanceOf[Term.RecordType] => {
       val recordType = `type`.asInstanceOf[Term.RecordType]
@@ -54,7 +56,7 @@ private[core] object Match {
           val field = recordType.fields.getOrElse(name, {
             ValueError.missingField(name, recordType, pattern.span)
           })
-          subst ++ matchPattern(pattern, field)
+          subst ++ buildPatternMatch(pattern, field)
         }
       }
     }
@@ -63,44 +65,5 @@ private[core] object Match {
       PatternError.mismatch("Record", `type`.toString, pattern.span)
     }
   }
-
-  /**
-   * Build a substitution map from a pattern and a term.
-   * When a match fails, return None.
-   */
-  def buildSubstMap(pattern: Pattern[Term], term: Term): Option[Map[Var.Local, Term]] = pattern match {
-    case Pattern.Primitive(value) if term.isInstanceOf[Term.Primitive] => {
-      val primitive = term.asInstanceOf[Term.Primitive]
-      if value == primitive.value then Some(Map.empty) else None
-    }
-    case Pattern.Bind(binding) => Some(Map(binding -> term))
-    case Pattern.Cons(cons, patterns) if term.isInstanceOf[Term.InductiveVariant] => {
-      val variant = term.asInstanceOf[Term.InductiveVariant]
-      if cons != variant.cons then {
-        None
-      } else {
-        buildSubstMap(patterns, variant.consArgs)
-      }
-    }
-    case _ => None
-  }
-
-  /**
-   * Build a substitution map from a sequence of patterns and terms.
-   * All patterns must match the corresponding terms.
-   */
-  def buildSubstMap(patterns: Seq[Pattern[Term]], terms: Seq[Term]): Option[Map[Var.Local, Term]] = {
-    assert(patterns.size == terms.size)
-    patterns.zip(terms).foldLeft(Some(Map.empty): Option[Map[Var.Local, Term]]) {
-      case (Some(subst), (pattern, term)) => buildSubstMap(pattern, term).map(subst ++ _)
-      case _ => None
-    }
-  }
-
-}
-
-extension (patterns: Seq[Pattern[Term]]) {
-  def buildSubstMap(terms: Seq[Term]): Option[Map[Var.Local, Term]] = {
-    Match.buildSubstMap(patterns, terms)
-  }
+  
 }

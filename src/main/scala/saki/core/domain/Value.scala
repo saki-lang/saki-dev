@@ -1,5 +1,6 @@
 package saki.core.domain
 
+import saki.core.context.{CurrentDefinitionContext, Environment, LocalContext, TypedEnvironment, TypedLocalMutableContext}
 import saki.core.{Entity, EntityFactory, RuntimeEntity}
 import saki.core.syntax.*
 
@@ -38,18 +39,60 @@ enum Value extends RuntimeEntity[Type] {
     val inductiveArgs: Seq[Value],
   )
 
-  override def infer(implicit env: Environment): Type = ???
+  override def infer(
+    implicit env: Environment.Typed[Value]
+  ): Type = ???
 
-  def readBack: Term = this match {
+  def readBack(implicit env: Environment.Typed[Value]): Term = this match {
+
     case Universe => Term.Universe
+
     case Primitive(value) => Term.Primitive(value)
+
     case PrimitiveType(ty) => Term.PrimitiveType(ty)
+
     case Neutral(value) => value.readBack
-    case Pi(param, codomain) => ???
-    case Sigma(param, codomain) => ???
-    case Lambda(param, body) => ???
+
+    case Pi(paramType, codomain) => {
+      val paramIdent = env.uniqueVariable
+      val param = Value.variable(paramIdent)
+      Term.Pi(
+        Param(paramIdent, paramType.readBack),
+        env.withLocal(paramIdent, param, paramType) {
+          codomain(Value.variable(paramIdent)).readBack
+        }
+      )
+    }
+
+    case Sigma(paramType, codomain) => {
+      val paramIdent = env.uniqueVariable
+      val param = Value.variable(paramIdent)
+      Term.Sigma(
+        Param(paramIdent, paramType.readBack),
+        env.withLocal(paramIdent, param, paramType) {
+          codomain(Value.variable(paramIdent)).readBack
+        }
+      )
+    }
+
+    case Lambda(paramType, body) => {
+      val paramIdent = env.uniqueVariable
+      val param = Value.variable(paramIdent)
+      Term.Lambda(
+        Param(paramIdent, paramType.readBack),
+        env.withLocal(paramIdent, param, paramType) {
+          body(Value.variable(paramIdent)).readBack
+        }
+      )
+    }
+
     case Record(fields) => Term.Record(fields.map((name, value) => (name, value.readBack)))
+
     case RecordType(fields) => Term.RecordType(fields.map((name, ty) => (name, ty.readBack)))
+
+    case InductiveType(inductive, args) => {
+      Term.inductiveType(inductive, args.map(_.readBack))
+    }
   }
 
 }
@@ -64,27 +107,15 @@ object Value extends EntityFactory[Value] {
 
   override def variable(ident: Var.Local): Value = Neutral(NeutralValue.Variable(ident))
 
-  override def functionInvoke(function: Var.Defined[Type, Function], args: Seq[Type]): Type = {
+  override def functionInvoke(function: Var.Defined[?, Function], args: Seq[Type]): Type = {
     Neutral(NeutralValue.FunctionInvoke(function, args))
   }
 
-  def functionInvokeGeneral(function: Var.Defined[?, Function], args: Seq[Value]): Value = {
-    Neutral(NeutralValue.FunctionInvoke(function, args))
-  }
-
-  override def inductiveType(inductive: Var.Defined[Type, Inductive], args: Seq[Type]): Type = {
+  override def inductiveType(inductive: Var.Defined[?, Inductive], args: Seq[Type]): Type = {
     Value.InductiveType(inductive, args)
   }
 
-  def inductiveTypeGeneral(inductive: Var.Defined[?, Inductive], args: Seq[Value]): Value = {
-    Value.InductiveType(inductive, args)
-  }
-
-  override def inductiveVariant(cons: Var.Defined[Type, Constructor], consArgs: Seq[Type], inductiveArgs: Seq[Type]): Type = {
-    Value.InductiveVariant(cons, consArgs, inductiveArgs)
-  }
-
-  def inductiveVariantGeneral(cons: Var.Defined[?, Constructor], consArgs: Seq[Value], inductiveArgs: Seq[Value]): Value = {
+  override def inductiveVariant(cons: Var.Defined[?, Constructor], consArgs: Seq[Type], inductiveArgs: Seq[Type]): Type = {
     Value.InductiveVariant(cons, consArgs, inductiveArgs)
   }
 
@@ -106,14 +137,15 @@ enum NeutralValue {
 
   case Match(
     val scrutinees: Seq[Value],
-    val clauses: Seq[Clause[Type]]
+    val clauses: Seq[Clause[Term]]
   )
   
-  def infer(implicit env: Environment): Type = ???
+  def infer(implicit env: Environment.Typed[Value]): Type = ???
 
-  def readBack: Term = this match {
+  def readBack(implicit env: Environment.Typed[Value]): Term = this match {
     case Variable(ident) => Term.Variable(ident)
     case Apply(fn, arg) => Term.Apply(fn.readBack, arg.readBack)
     case Projection(record, field) => Term.Projection(record.readBack, field)
   }
+
 }

@@ -14,7 +14,9 @@ private[core] object Unify {
     case (Term.Variable(ref1), Term.Variable(ref2)) => ref1 == ref2
 
     // Lambda
-    case (Term.Lambda(param1, body1), Term.Lambda(param2, body2)) => body1 unify body2.subst(param2, Term.Variable(param1))
+    case (Term.Lambda(param1, body1), Term.Lambda(param2, body2)) => 
+      (param1.`type` unify param2.`type`) &&
+      (body1 unify body2.subst(param2.ident, Term.Variable(param1.ident)))
     case (Term.Lambda(param, body), _) => rhs.etaUnify(Term.Lambda(param, body))
     case (_, Term.Lambda(param, body)) => lhs.etaUnify(Term.Lambda(param, body))
 

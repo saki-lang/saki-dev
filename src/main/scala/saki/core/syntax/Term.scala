@@ -1,8 +1,8 @@
 package saki.core.syntax
 
-import saki.core.domain.{Environment, NeutralValue, Type, Value}
-import saki.core.elaborate.Normalize.{Context, RenameMap}
-import saki.core.elaborate.{Normalize, Unify}
+import saki.core.context.{CurrentDefinition, CurrentDefinitionContext, DefinitionContext, Environment, LocalContext, Typed, TypedEnvironment, TypedLocalContext, TypedLocalMutableContext}
+import saki.core.domain.{NeutralValue, Type, Value}
+import saki.core.elaborate.Unify
 import saki.core.{Entity, EntityFactory, RuntimeEntity, TypeError}
 import saki.util.LateInit
 
@@ -14,25 +14,27 @@ enum Term extends RuntimeEntity[Type] {
   case Primitive(value: Literal)
   case PrimitiveType(`type`: LiteralType)
   case Variable(variable: Var.Local)
-  case FunctionInvoke(fn: Var.Defined[Term, Function], args: Seq[Term])
-  case InductiveType(inductive: Var.Defined[Term, Inductive], args: Seq[Term])
-  case InductiveVariant(cons: Var.Defined[Term, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term])
+  case FunctionInvoke(fn: Var.Defined[?, Function], args: Seq[Term])
+  case InductiveType(inductive: Var.Defined[?, Inductive], args: Seq[Term])
+  case InductiveVariant(cons: Var.Defined[?, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term])
   case Match(scrutinees: Seq[Term], clauses: Seq[Clause[Term]])
-  case Pi(param: Param[Term], codomain: Term)
-  case Sigma(param: Param[Term], codomain: Term)
+  case Pi(param: Param[Term], codomain: Term) extends Term with PiLikeTerm
+  case Sigma(param: Param[Term], codomain: Term) extends Term with PiLikeTerm
   case Record(fields: Map[String, Term])
   case RecordType(fields: Map[String, Term])
   case Apply(fn: Term, arg: Term)
-  case Lambda(param: Var.Local, body: Term)
+  case Lambda(param: Param[Term], body: Term) extends Term with LambdaLikeTerm
   case Projection(record: Term, field: String)
 
-  def subst(variable: Var.Local, term: Term): Term = this.subst(Map(variable -> term))
+  def subst(variable: Var.Local, term: Term): Term = ???
 
-  def subst(implicit ctx: Normalize.Context): Term = this.normalize
+  def subst(
+    implicit env: Environment.Typed[Value]
+  ): Term = this.normalize
 
   def apply(args: Term*): Term = {
     args.foldLeft(this) {
-      case (Lambda(param, body), arg) => body.subst(param, arg)
+      case (Lambda(param, body), arg) => body.subst(param.ident, arg)
       case (fn, arg) => Apply(fn, arg)
     }
   }
@@ -73,15 +75,17 @@ enum Term extends RuntimeEntity[Type] {
    * Unify by eta conversion
    * (λx. M) N ~> M[x := N]
    */
-  def etaUnify(lambda: Term.Lambda): Boolean = Unify.unify(lambda.body, this.apply(Term.Variable(lambda.param)))
+  def etaUnify(lambda: Term.Lambda): Boolean = Unify.unify(lambda.body, this.apply(Term.Variable(lambda.param.ident)))
 
-  def normalize(implicit ctx: Context): Term = Normalize.normalizeTerm(this, ctx)
-
-  def rename(implicit map: RenameMap): Term = Normalize.renameTerm(this)
+  def normalize(
+    implicit env: Environment.Typed[Value]
+  ): Term = this.eval.readBack
   
-  override def infer(implicit env: Environment): Value = ???
+  override def infer(
+    implicit env: Environment.Typed[Value]
+  ): Value = ???
 
-  def eval(implicit env: Environment): Value = this match {
+  def eval(implicit env: Environment.Typed[Value]): Value = this match {
 
     case Universe => Value.Universe
 
@@ -89,44 +93,93 @@ enum Term extends RuntimeEntity[Type] {
 
     case PrimitiveType(ty) => Value.PrimitiveType(ty)
 
-    case Variable(variable) => env(variable).value
+    case Variable(variable) => env.getValue(variable).get
 
     case FunctionInvoke(fnRef, argTerms) => {
       // Use the evaluated function in the environment if possible to avoid re-evaluation
-      val fn = env.lookup(fnRef).getOrElse {
+      val fn = env.getDefinition(fnRef).getOrElse {
         throw IllegalStateException(s"Unbound function: ${fnRef.name}")
       }.asInstanceOf[Function[Value | Term]]
       env.currentDefinition match {
         case Some(current) if current.name == fnRef.name => {
           // Recursive call, keep it a neutral value
-          Value.functionInvokeGeneral(fn.ident, argTerms.map(_.eval))
+          Value.functionInvoke(fn.ident, argTerms.map(_.eval))
         }
-        case None => {
-          val body = fn.body.get match {
-            case body: Value => body.readBack
-            case body: Term => body
-          }
+        case None | Some(_) => {
           val argsValue: Seq[Value] = argTerms.map(_.eval)
-          val argVarList: Seq[(Var.Local, Environment.TypedValue)] = fn.arguments(argsValue).map {
-            (param, arg) => (param, Environment.TypedValue(arg, arg.infer))
+          // TODO: this need to be optimized
+          if !fn.isNeutral || argsValue.forall(_.readBack.isFinal(Set.empty)) then {
+            val argVarList: Seq[(Var.Local, Typed[Value])] = fn.arguments(argsValue).map {
+              (param, arg) => (param, Typed[Value](arg, arg.infer))
+            }
+            val body = fn.body.get match {
+              case body: Value => body.readBack
+              case body: Term => body
+            }
+            env.withLocals(argVarList.toMap) { implicit env => body.eval }
+          } else {
+            Value.functionInvoke(fn.ident, argsValue)
           }
-          env.withVars(argVarList.toMap) { body.eval }
         }
       }
     }
 
     case InductiveType(indRef, argTerms) => {
       val argsValue: Seq[Value] = argTerms.map(_.eval)
-      Value.inductiveTypeGeneral(indRef, argsValue)
+      Value.inductiveType(indRef, argsValue)
     }
 
     case InductiveVariant(consRef, consArgs, inductiveArgs) => {
       val consArgsValue: Seq[Value] = consArgs.map(_.eval)
       val inductiveArgsValue: Seq[Value] = inductiveArgs.map(_.eval)
-      Value.inductiveVariantGeneral(consRef, consArgsValue, inductiveArgsValue)
+      Value.inductiveVariant(consRef, consArgsValue, inductiveArgsValue)
     }
     
-    case Match(scrutinees, clauses) => ???
+    case Match(scrutinees, clauses) => {
+      val scrutineesNorm = scrutinees.map(_.eval)
+      clauses.map {
+        clause => clause.map(_.normalize)
+      }.tryMatch(scrutineesNorm).getOrElse {
+        Value.Neutral(NeutralValue.Match(scrutineesNorm, clauses))
+      }
+    }
+
+    case piType: Pi => piType.eval(Value.Pi.apply)
+
+    case sigmaType: Sigma => sigmaType.eval(Value.Sigma.apply)
+
+    case Record(fields) => {
+      val fieldsValue: Map[String, Value] = fields.map {
+        (name, term) => (name, term.eval)
+      }
+      Value.Record(fieldsValue)
+    }
+
+    case RecordType(fields) => {
+      val fieldsType: Map[String, Type] = fields.map {
+        (name, term) => (name, term.infer)
+      }
+      Value.RecordType(fieldsType)
+    }
+
+    case Apply(fn, arg) => fn.eval match {
+      case Value.Lambda(_, bodyClosure) => bodyClosure(arg.eval)
+      // If the evaluation of the function stuck, the whole application is stuck
+      // Thus, no need for considering the situation that function is a global call
+      // because it is tried to be evaluated before but failed
+      case Value.Neutral(neutral) => Value.Neutral(NeutralValue.Apply(neutral, arg.eval))
+      case _ => throw TypeError(s"Cannot apply non-function: $fn", None)
+    }
+
+    case lambda: Lambda => lambda.eval(Value.Lambda.apply)
+
+    case Projection(record, field) => record.eval match {
+      case Value.Record(fields) => fields.getOrElse(field, {
+        throw TypeError(s"Missing field: $field", None)
+      })
+      case neutral: Value.Neutral => Value.Neutral(NeutralValue.Projection(neutral, field))
+      case _ => throw TypeError(s"Cannot project from non-record: $record", None)
+    }
   }
 
   def isFinal(implicit localVars: Set[Var.Local]): Boolean = this match {
@@ -141,17 +194,17 @@ enum Term extends RuntimeEntity[Type] {
     case Record(fields) => fields.values.forall(_.isFinal)
     case RecordType(fields) => fields.values.forall(_.isFinal)
     case Apply(fn, arg) => fn.isFinal && arg.isFinal
-    case Lambda(param, body) => body.isFinal(localVars + param)
+    case Lambda(param, body) => body.isFinal(localVars + param.ident)
     case Projection(record, _) => record.isFinal
   }
 }
 
-extension (params: Seq[Param[Term]]) {
+extension (params: ParamList[Term]) {
   def buildPiType(body: Term): Term = params.foldRight(body) {
     case (param, body) => Term.Pi(param, body)
   }
 
-  def buildLambda(body: Term): Term = params.map(_.ident).foldRight(body) {
+  def buildLambda(body: Term): Term = params.foldRight(body) {
     case (param, body) => Term.Lambda(param, body)
   }
 }
@@ -169,14 +222,35 @@ object Term extends EntityFactory[Term] {
   override def variable(ident: Var.Local): Term = Variable(ident)
 
   override def inductiveType(
-    inductive: Var.Defined[Term, Inductive], args: Seq[Term]
+    inductive: Var.Defined[?, Inductive], args: Seq[Term]
   ): Term = InductiveType(inductive, args)
 
   override def functionInvoke(
-    function: Var.Defined[Term, Function], args: Seq[Term]
+    function: Var.Defined[?, Function], args: Seq[Term]
   ): Term = FunctionInvoke(function, args)
 
   override def inductiveVariant(
-    cons: Var.Defined[Term, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term]
+    cons: Var.Defined[?, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term]
   ): Term = InductiveVariant(cons, consArgs, inductiveArgs)
+}
+
+private sealed trait LambdaLikeTerm {
+  def param: Param[Term]
+  def body: Term
+
+  def eval(constructor: (Type, Value => Value) => Value)(
+    implicit env: Environment.Typed[Value]
+  ): Value = {
+    val newParam = env.uniqueVariable
+    def closure(arg: Value): Value = {
+      val argVar = Typed[Value](arg, arg.infer)
+      env.withLocal(newParam, argVar) { implicit env => body.eval }
+    }
+    constructor(param.`type`.eval, closure)
+  }
+}
+
+private sealed trait PiLikeTerm extends LambdaLikeTerm {
+  def codomain: Term
+  override def body: Term = codomain
 }

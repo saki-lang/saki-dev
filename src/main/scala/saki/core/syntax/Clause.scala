@@ -1,22 +1,11 @@
 package saki.core.syntax
 
 import saki.core.Entity
-import saki.core.elaborate.buildSubstMap
+import saki.core.context.{CurrentDefinitionContext, Environment, Typed, TypedLocalMutableContext}
+import saki.core.domain.Value
+import saki.core.syntax.buildSubstMap
 
 import scala.collection.Seq
-
-extension (clauses: Seq[Clause[Term]]) {
-  /**
-   * Try to match the given arguments with the clause set.
-   * Return the body of the first matching clause.
-   */
-  def tryMatch(args: Seq[Term]): Option[Term] = {
-    clauses.map { clause =>
-      val substOpt = clause.patterns.buildSubstMap(args)
-      substOpt.map { implicit subst => clause.body.normalize }
-    }.collectFirst { case Some(body) => body }
-  }
-}
 
 /**
  * A clause (case) in a pattern matching expression.
@@ -26,4 +15,29 @@ case class Clause[T <: Entity](patterns: Seq[Pattern[T]], body: T) {
   def mapPatterns(f: Pattern[T] => Pattern[T]): Clause[T] = Clause(patterns.map(f), body)
   def forall(f: T => Boolean): Boolean = f(body) && patterns.forall(_.forall(f))
   override def toString: String = s"${patterns.mkString(", ")} => $body"
+}
+
+extension (clauses: Seq[Clause[Term]]) {
+  /**
+   * Try to match the given arguments with the clause set.
+   * Return the body of the first matching clause.
+   */
+  def tryMatch(args: Seq[Value])(
+    implicit env: Environment.Typed[Value]
+  ): Option[Value] = {
+    clauses.map { clause =>
+      val optionalSubstMap: Option[Map[Var.Local, Value]] = {
+        clause.patterns.zip(args).foldLeft(Some(Map.empty): Option[Map[Var.Local, Value]]) {
+          case (Some(subst), (pattern, value)) => pattern.buildSubstMap(value).map(subst ++ _)
+          case _ => None
+        }
+      }
+      optionalSubstMap.map { implicit substMap =>
+        val typedSubstMap = substMap.map {
+          (ident, untyped) => (ident, Typed[Value](untyped, untyped.infer))
+        }
+        clause.body.eval(env.addAll(typedSubstMap))
+      }
+    }.collectFirst { case Some(body) => body }
+  }
 }

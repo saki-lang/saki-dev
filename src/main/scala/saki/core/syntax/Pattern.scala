@@ -1,5 +1,7 @@
 package saki.core.syntax
 
+import saki.core.context.Environment
+import saki.core.domain.Value
 import saki.core.{Entity, SourceSpan}
 import saki.core.elaborate.{Match, Resolve, Synthesis}
 
@@ -73,12 +75,33 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
 }
 
 extension (self: Pattern[Term]) {
-  def buildSubstMap(term: Term): Option[Map[Var.Local, Term]] = {
-    Match.buildSubstMap(self, term)
+  def buildMatch(term: Term)(
+    implicit ctx: Environment.Untyped[Term]
+  ): Map[Var.Local, Term] = {
+    Match.buildPatternMatch(self, term)
   }
+}
 
-  def matchWith(term: Term)(implicit ctx: Synthesis.Context): Map[Var.Local, Term] = {
-    Match.matchPattern(self, term)
+extension (self: Pattern[Term]) {
+  def buildSubstMap(value: Value): Option[Map[Var.Local, Value]] = self match {
+    case Pattern.Primitive(literal) if value.isInstanceOf[Value.Primitive] => {
+      val primitive = value.asInstanceOf[Value.Primitive]
+      if literal == primitive.value then Some(Map.empty) else None
+    }
+    case Pattern.Bind(binding) => Some(Map(binding -> value))
+    case Pattern.Cons(cons, patterns) if value.isInstanceOf[Value.InductiveVariant] => {
+      val variant = value.asInstanceOf[Value.InductiveVariant]
+      if cons != variant.cons then {
+        None
+      } else {
+        assert(patterns.size == variant.consArgs.size)
+        patterns.zip(variant.consArgs).foldLeft(Some(Map.empty): Option[Map[Var.Local, Value]]) {
+          case (Some(subst), (pattern, value)) => pattern.buildSubstMap(value).map(subst ++ _)
+          case (None, (_, _)) => None
+        }
+      }
+    }
+    case _ => None
   }
 }
 

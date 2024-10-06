@@ -1,5 +1,6 @@
 package saki.core.syntax
 
+import saki.core.context.Environment
 import saki.core.elaborate.{Resolve, Synthesis}
 import saki.core.{Entity, SourceSpan}
 
@@ -80,7 +81,7 @@ enum Expr(val span: SourceSpan) extends Entity {
    * `λ (x : A) => B` | `|x: A| => B`
    */
   case Lambda(
-    param: Param[Option[Expr]],
+    param: Param[Expr],
     body: Expr,
     returnType: Option[Expr] = None
   )(implicit span: SourceSpan) extends Expr(span)
@@ -101,9 +102,13 @@ enum Expr(val span: SourceSpan) extends Entity {
     fields: Map[String, Expr]
   )(implicit span: SourceSpan) extends Expr(span)
 
-  def synth(implicit ctx: Synthesis.Context): Synthesis.Synth = Synthesis.synth(this)
+  def synth(
+    implicit env: Environment.Untyped[Term]
+  ): Synthesis.Synth = Synthesis.synth(this)
 
-  def elaborate(expected: Term)(implicit ctx: Synthesis.Context): Term = Synthesis.elaborate(this, expected)
+  def elaborate(expected: Term)(
+    implicit env: Environment.Untyped[Term]
+  ): Term = Synthesis.elaborate(this, expected)
 
   def resolve(implicit ctx: Resolve.Context): (Expr, Resolve.Context) = Resolve.resolveExpr(this)
 

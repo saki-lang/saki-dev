@@ -5,6 +5,7 @@ import saki.core.TypeError
 import saki.core.syntax.*
 import saki.core.syntax.Pattern.resolve
 import saki.core.SourceSpan
+import saki.core.context.CurrentDefinition
 import saki.util.{Graph, LateInit}
 
 import scala.annotation.targetName
@@ -15,10 +16,10 @@ object Resolve {
     variableMap: Map[String, Var] = Map.empty,
     dependencyGraph: Graph[Var.Defined[?, ?]] = Graph.directed,
     currentDefinition: Option[Var.Defined[Expr, ?]] = None,
-  ) {
+  ) extends CurrentDefinition {
+    
     def variables: Seq[Var] = variableMap.values.toSeq
-
-
+    
     @targetName("add")
     def +(variable: Var): Context = copy(variableMap = variableMap + (variable.name -> variable))
 
@@ -110,12 +111,7 @@ object Resolve {
       }
 
       case Expr.Lambda(param, body, returnType) => {
-        val (resolvedParamType, ctxParam) = param.`type` match {
-          case Some(ty) =>
-            val (resolved, ctxParam) = ty.resolve(ctx)
-            (Some(resolved), ctxParam)
-          case None => (None, ctx)
-        }
+        val (resolvedParamType, ctxParam) = param.`type`.resolve
         val (resolvedBody, ctxBody) = ctxParam.withVariable(param.ident) { body.resolve }
         val resolved = Expr.Lambda(
           param = Param(param.ident, resolvedParamType),
@@ -199,7 +195,7 @@ object Resolve {
         // add the function name to the context for recursive calls
         ctxWithParam.withDefinition(ident) { implicit ctx =>
           val (resolvedBody, bodyCtx) = body.get.resolve(ctx)
-          val (resolvedResultType, resultTypeCtx) = resultType.resolve(bodyCtx)
+          val (resolvedResultType, _) = resultType.resolve(bodyCtx)
           Function[Expr](ident, resolvedParams, resolvedResultType, isNeutral, LateInit(resolvedBody))
         }
       }
