@@ -1,6 +1,7 @@
 package saki.core.syntax
 
 import saki.core.context.Environment
+import saki.core.domain.Value
 import saki.core.elaborate.{Resolve, Synthesis}
 import saki.core.{Entity, SourceSpan}
 
@@ -103,11 +104,11 @@ enum Expr(val span: SourceSpan) extends Entity {
   )(implicit span: SourceSpan) extends Expr(span)
 
   def synth(
-    implicit env: Environment.Untyped[Term]
+    implicit env: Environment.Typed[Value]
   ): Synthesis.Synth = Synthesis.synth(this)
 
   def elaborate(expected: Term)(
-    implicit env: Environment.Untyped[Term]
+    implicit env: Environment.Typed[Value]
   ): Term = Synthesis.elaborate(this, expected)
 
   def resolve(implicit ctx: Resolve.Context): (Expr, Resolve.Context) = Resolve.resolveExpr(this)

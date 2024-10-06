@@ -94,6 +94,8 @@ enum Value extends RuntimeEntity[Type] {
       Term.inductiveType(inductive, args.map(_.readBack))
     }
   }
+  
+  def unify(that: Type): Boolean = ???
 
 }
 

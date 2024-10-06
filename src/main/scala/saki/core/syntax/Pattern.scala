@@ -2,8 +2,9 @@ package saki.core.syntax
 
 import saki.core.context.Environment
 import saki.core.domain.Value
-import saki.core.{Entity, SourceSpan}
+import saki.core.{Entity, PatternError, SizeError, SourceSpan, SymbolError, ValueError}
 import saki.core.elaborate.{Match, Resolve, Synthesis}
+import saki.core.syntax.buildMatch
 
 import scala.collection.Seq
 
@@ -75,14 +76,65 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
 }
 
 extension (self: Pattern[Term]) {
-  def buildMatch(term: Term)(
-    implicit ctx: Environment.Untyped[Term]
-  ): Map[Var.Local, Term] = {
-    Match.buildPatternMatch(self, term)
-  }
-}
+  
+  def buildMatch(`type`: Term)(
+    implicit env: Environment.Typed[Value]
+  ): Map[Var.Local, Term] = self match {
 
-extension (self: Pattern[Term]) {
+    case Pattern.Primitive(_) => Map.empty
+    case Pattern.Bind(binding) => Map(binding -> `type`)
+
+    // When calling an inductive directly results in a type.
+    // e.g. In this example, `Option(A)` returns a type:
+    // ```
+    //  inductive Option(A: 'Type) {
+    //    None : this
+    //    Some : A -> this
+    //  }
+    // ```
+    case Pattern.Cons(cons, patterns) if `type`.isInstanceOf[Term.InductiveType] => {
+      val inductiveType = `type`.asInstanceOf[Term.InductiveType]
+      val consDef: Constructor[Term] = cons.definition.toOption match {
+        case Some(definition) => definition.asInstanceOf[Constructor[Term]]
+        case None => env.definitions.getOrElse(cons, SymbolError.undefined(cons.name, self.span)) match {
+          case consDef: Constructor[Term] => consDef
+          case _ => SymbolError.notConstructor(cons.name, self.span)
+        }
+      }
+      if consDef.params.size != patterns.size then {
+        SizeError.mismatch(consDef.params.size, patterns.size, self.span)
+      } else if consDef.owner != inductiveType.inductive then {
+        ValueError.mismatch(consDef.owner.name, inductiveType.inductive.name, self.span)
+      } else {
+        patterns.zip(consDef.params).foldLeft(Map.empty: Map[Var.Local, Term]) {
+          case (subst, (pattern, param)) => subst ++ pattern.buildMatch(param.`type`)
+        }
+      }
+    }
+
+    case Pattern.Cons(_, _) => {
+      PatternError.mismatch("Inductive", `type`.toString, self.span)
+    }
+
+    case Pattern.Typed(pattern, ty) => pattern.buildMatch(ty)
+
+    case Pattern.Record(fields) if `type`.isInstanceOf[Term.RecordType] => {
+      val recordType = `type`.asInstanceOf[Term.RecordType]
+      fields.foldLeft(Map.empty: Map[Var.Local, Term]) {
+        case (subst, (name, pattern)) => {
+          val field = recordType.fields.getOrElse(name, {
+            ValueError.missingField(name, recordType, pattern.span)
+          })
+          subst ++ pattern.buildMatch(field)
+        }
+      }
+    }
+
+    case Pattern.Record(_) => {
+      PatternError.mismatch("Record", `type`.toString, self.span)
+    }
+  }
+
   def buildSubstMap(value: Value): Option[Map[Var.Local, Value]] = self match {
     case Pattern.Primitive(literal) if value.isInstanceOf[Value.Primitive] => {
       val primitive = value.asInstanceOf[Value.Primitive]

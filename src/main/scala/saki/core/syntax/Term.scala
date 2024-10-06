@@ -80,10 +80,21 @@ enum Term extends RuntimeEntity[Type] {
   def normalize(
     implicit env: Environment.Typed[Value]
   ): Term = this.eval.readBack
-  
+
+  /**
+   * Infer the type of the term
+   * @param env The environment
+   * @return The inferred type
+   */
   override def infer(
     implicit env: Environment.Typed[Value]
-  ): Value = ???
+  ): Value = this match {
+    case Universe => Value.Universe
+    case Primitive(value) => Value.PrimitiveType(value.ty)
+    case PrimitiveType(_) => Value.Universe
+    case Variable(variable) => env.getTyped(variable).get.`type`
+    case FunctionInvoke(fn, args) => ???
+  }
 
   def eval(implicit env: Environment.Typed[Value]): Value = this match {
 

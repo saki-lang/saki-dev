@@ -1,6 +1,7 @@
 package saki.core.syntax
 
 import saki.core.context.Environment
+import saki.core.domain.Value
 import saki.core.elaborate.{Resolve, Synthesis}
 import saki.core.elaborate.Synthesis.synth
 import saki.core.elaborate.Resolve.resolve
@@ -19,7 +20,7 @@ object Module {
 
   def from(pristineDefinitions: Seq[Definition[Expr]]): Module = {
     var resolvingContext = Resolve.Context.empty
-    var elaboratingContext = Environment.Untyped[Term]()
+    var elaboratingContext = Environment.Typed[Value]()
     val definitions = pristineDefinitions.map { definition =>
       val (resolved, ctx) = definition.resolve(resolvingContext)
       resolvingContext = ctx
