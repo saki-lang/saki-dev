@@ -182,7 +182,7 @@ enum Term extends RuntimeEntity[Type] {
       clauses.map {
         clause => clause.map(_.normalize)
       }.tryMatch(scrutineesNorm).getOrElse {
-        Value.Neutral(NeutralValue.Match(scrutineesNorm, clauses))
+        Value.Neutral(NeutralValue.Match(scrutineesNorm, clauses.map(_.map(_.eval))))
       }
     }
 
