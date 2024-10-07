@@ -1,7 +1,7 @@
 package saki.core.context
 
+import saki.core.*
 import saki.core.syntax.*
-import saki.core.{Definition, *}
 
 trait Environment[T <: Entity] extends LocalContext[T]
   with MutableDefinitionContext
@@ -55,7 +55,7 @@ case class TypedEnvironment[T <: Entity](
   override def contains(local: Var.Local): Boolean = locals.contains(local)
 
   def withCurrentDefinition[R](definition: Var.Defined[Term, ?])(action: TypedEnvironment[T] => R): R = {
-    action(TypedEnvironment[T](definitions, Some(definition), locals))
+    action(TypedEnvironment[T](definitions + (definition -> definition.definition.get), Some(definition), locals))
   }
 
   def withLocal[R](ident: Var.Local, value: T, `type`: T)(action: TypedEnvironment[T] => R): R = {

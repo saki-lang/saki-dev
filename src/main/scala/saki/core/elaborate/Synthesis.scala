@@ -1,15 +1,11 @@
 package saki.core.elaborate
 
-import saki.core.syntax.given
-import saki.core.syntax.buildInvoke
-import saki.core.{Entity, TypeError}
-import saki.core.syntax.*
-import saki.core.Param
-import saki.core.context.{CurrentDefinitionContext, Environment, Typed}
+import saki.core.{Param, TypeError}
+import saki.core.context.{Environment, Typed}
 import saki.core.domain.{Type, Value}
+import saki.core.syntax.{*, given}
 import saki.util.unreachable
 
-import scala.annotation.unchecked.uncheckedVariance
 import scala.collection.Seq
 import scala.collection.mutable.ArrayBuffer
 
@@ -25,7 +21,7 @@ private[core] object Synthesis {
           param = lambdaParam.map(_.elaborate(piParam.`type`)),
           body = env.withLocal(lambdaParam.ident, piParam.`type`.eval, piParam.`type`.infer) {
             // Check that the body type is the same as the codomain of the Pi type
-            returnType.map(_.synth.term unify codomain) match {
+            returnType.map(_.synth.term.eval unify codomain.eval) match {
               case Some(false) => TypeError.mismatch(codomain.toString, returnType.get.toString, expr.span)
               case _ => body.elaborate(codomain)
             }
@@ -77,7 +73,7 @@ private[core] object Synthesis {
         )
       }
       case variable: Var.Local => env.locals.get(variable) match {
-        case Some(ty) => Synth(Term.Variable(variable), ty.value)
+        case Some(ty) => Synth(ty.value.readBack, ty.`type`)
         case None => TypeError.error(s"Unbound variable: ${variable.name}", expr.span)
       }
     }
@@ -110,7 +106,7 @@ private[core] object Synthesis {
         case Value.Pi(paramType, codomain) => {
           val paramIdent = env.uniqueVariable
           val param = Value.variable(paramIdent)
-          env.withLocal(paramIdent, param, paramType) { env =>
+          env.withLocal(paramIdent, param, paramType) { implicit env =>
             val (arg, argType) = argExpr.value.synth(env).unpack
             if !(argType unify paramType) then {
               TypeError.mismatch(paramType.toString, argType.toString, argExpr.value.span)
@@ -128,7 +124,7 @@ private[core] object Synthesis {
         synthClause(clause, scrutineesSynth)
       }
       val clauseBodyTypes: Seq[Term] = clausesSynth.map(_._2)
-      if !clauseBodyTypes.tail.forall(_ unify clauseBodyTypes.head) then {
+      if !clauseBodyTypes.tail.forall(_.eval unify clauseBodyTypes.head.eval) then {
         TypeError.error("Clauses have different types", expr.span)
       }
       Synth(
@@ -164,7 +160,7 @@ private[core] object Synthesis {
     val patterns = clause.patterns.map(pattern => pattern.map(_.synth.term))
     val map = patterns.zip(scrutinees).foldLeft(Map.empty: Map[Var.Local, Term]) {
       case (subst, (pattern, param)) => subst ++ pattern.buildMatch(param.`type`.readBack)
-    }.map { case (k, v) => k -> Typed[Value](v.eval, v.infer) }
+    }.map { case (k, v) => k -> Typed[Value](Value.variable(k), v.eval) }
     val (body, ty) = env.withLocals[Synth](map) { clause.body.synth }.unpack
     (Clause(patterns, body), ty.readBack)
   }
@@ -181,7 +177,7 @@ private[core] object Synthesis {
       val resultType = resultTypeExpr.elaborate(Term.Universe)
       val params = synthParams(paramExprs)
       val paramsType = params.map { param =>
-        param.ident -> Typed[Value](param.`type`.eval, param.`type`.infer)
+        param.ident -> Typed[Value](Value.variable(param.ident), param.`type`.eval)
       }
       env.withLocals(paramsType.toMap) { implicit env =>
         val function = Function[Term](Var.Defined(ident.name), params, resultType, isNeutral)

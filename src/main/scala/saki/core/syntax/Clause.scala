@@ -1,9 +1,8 @@
 package saki.core.syntax
 
 import saki.core.Entity
-import saki.core.context.{CurrentDefinitionContext, Environment, Typed, TypedLocalMutableContext}
+import saki.core.context.{Environment, Typed}
 import saki.core.domain.Value
-import saki.core.syntax.buildSubstMap
 
 import scala.collection.Seq
 
@@ -12,7 +11,6 @@ import scala.collection.Seq
  */
 case class Clause[T <: Entity](patterns: Seq[Pattern[T]], body: T) {
   def map[U <: Entity](f: T => U): Clause[U] = Clause(patterns.map(_.map(f)), f(body))
-  def mapPatterns(f: Pattern[T] => Pattern[T]): Clause[T] = Clause(patterns.map(f), body)
   def forall(f: T => Boolean): Boolean = f(body) && patterns.forall(_.forall(f))
   override def toString: String = s"${patterns.mkString(", ")} => $body"
 }

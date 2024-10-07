@@ -2,9 +2,9 @@ package saki.core.syntax
 
 import saki.core.context.Environment
 import saki.core.domain.Value
-import saki.core.elaborate.{Resolve, Synthesis}
-import saki.core.elaborate.Synthesis.synth
+import saki.core.elaborate.Resolve
 import saki.core.elaborate.Resolve.resolve
+import saki.core.elaborate.Synthesis.synth
 
 import scala.collection.Seq
 
@@ -38,6 +38,7 @@ object Module {
       env = env.copy(
         definitions = env.definitions.updated(definitionSynth.ident, definitionSynth)
       )
+      println(definitionSynth)
       definitionSynth
     }
     Module(definitions)

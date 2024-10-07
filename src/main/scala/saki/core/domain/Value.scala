@@ -1,8 +1,8 @@
 package saki.core.domain
 
-import saki.core.context.{CurrentDefinitionContext, Environment, LocalContext, TypedEnvironment, TypedLocalMutableContext}
-import saki.core.{Entity, EntityFactory, RuntimeEntity, RuntimeEntityFactory}
+import saki.core.context.Environment
 import saki.core.syntax.*
+import saki.core.{RuntimeEntity, RuntimeEntityFactory}
 
 import scala.collection.Seq
 
@@ -39,9 +39,7 @@ enum Value extends RuntimeEntity[Type] {
     val inductiveArgs: Seq[Value],
   )
 
-  override def infer(
-    implicit env: Environment.Typed[Value]
-  ): Type = this.readBack.infer
+  override def infer(implicit env: Environment.Typed[Value]): Type = this.readBack.infer
 
   def readBack(implicit env: Environment.Typed[Value]): Term = this match {
 

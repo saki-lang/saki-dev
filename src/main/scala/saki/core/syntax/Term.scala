@@ -1,10 +1,8 @@
 package saki.core.syntax
 
-import saki.core.context.{CurrentDefinition, CurrentDefinitionContext, DefinitionContext, Environment, LocalContext, Typed, TypedEnvironment, TypedLocalContext, TypedLocalMutableContext}
+import saki.core.context.{Environment, Typed}
 import saki.core.domain.{NeutralValue, Type, Value}
-import saki.core.elaborate.Unify
-import saki.core.{Entity, EntityFactory, RuntimeEntity, RuntimeEntityFactory, TypeError}
-import saki.util.LateInit
+import saki.core.{RuntimeEntity, RuntimeEntityFactory, TypeError}
 
 import scala.collection.Seq
 
@@ -26,15 +24,13 @@ enum Term extends RuntimeEntity[Type] {
   case Lambda(param: Param[Term], body: Term) extends Term with LambdaLikeTerm
   case Projection(record: Term, field: String)
 
-  def subst(variable: Var.Local, term: Term): Term = ???
-
-  def subst(
-    implicit env: Environment.Typed[Value]
-  ): Term = this.normalize
-
-  def apply(args: Term*): Term = {
+  def apply(args: Term*)(implicit env: Environment.Typed[Value]): Term = {
     args.foldLeft(this) {
-      case (Lambda(param, body), arg) => body.subst(param.ident, arg)
+      case (Lambda(param, body), arg) => {
+        env.withLocal(param.ident, Typed[Value](arg.eval, arg.infer)) { env =>
+          body.eval(env).readBack(env)
+        }
+      }
       case (fn, arg) => Apply(fn, arg)
     }
   }
@@ -69,16 +65,6 @@ enum Term extends RuntimeEntity[Type] {
     case Projection(record, field) => s"$record.$field"
   }
 
-  def unify(that: Term): Boolean = Unify.unify(this, that)
-
-  /**
-   * Unify by eta conversion
-   * (λx. M) N ~> M[x := N]
-   */
-  def etaUnify(lambda: Term.Lambda): Boolean = {
-    Unify.unify(lambda.body, this.apply(Term.Variable(lambda.param.ident)))
-  }
-
   def normalize(
     implicit env: Environment.Typed[Value]
   ): Term = this.eval.readBack
@@ -88,9 +74,7 @@ enum Term extends RuntimeEntity[Type] {
    * @param env The environment
    * @return The inferred type
    */
-  override def infer(
-    implicit env: Environment.Typed[Value]
-  ): Value = this match {
+  override def infer(implicit env: Environment.Typed[Value]): Value = this match {
     case Universe => Value.Universe
     case Primitive(value) => Value.PrimitiveType(value.ty)
     case PrimitiveType(_) => Value.Universe
@@ -179,9 +163,7 @@ enum Term extends RuntimeEntity[Type] {
     
     case Match(scrutinees, clauses) => {
       val scrutineesNorm = scrutinees.map(_.eval)
-      clauses.map {
-        clause => clause.map(_.normalize)
-      }.tryMatch(scrutineesNorm).getOrElse {
+      clauses.tryMatch(scrutineesNorm).getOrElse {
         Value.Neutral(NeutralValue.Match(scrutineesNorm, clauses.map(_.map(_.eval))))
       }
     }
@@ -283,12 +265,12 @@ private sealed trait LambdaLikeTerm {
   def eval(constructor: (Type, Value => Value) => Value)(
     implicit env: Environment.Typed[Value]
   ): Value = {
-    val newParam = env.uniqueVariable
+    val paramType = param.`type`.eval
     def closure(arg: Value): Value = {
-      val argVar = Typed[Value](arg, arg.infer)
-      env.withLocal(newParam, argVar) { implicit env => body.eval }
+      val argVar = Typed[Value](arg, paramType)
+      env.withLocal(param.ident, argVar) { implicit env => body.eval(env) }
     }
-    constructor(param.`type`.eval, closure)
+    constructor(paramType, closure)
   }
 }
 

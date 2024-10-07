@@ -19,6 +19,8 @@ val exampleCode: String = {
       case Nat::Succ(a') => Nat::Succ(plus(a', b))
   }
 
+  def twoPlusThree: Nat = plus(Nat::Succ(Nat::Succ(Nat::Zero)), Nat::Succ(Nat::Succ(Nat::Succ(Nat::Zero))))
+
   def fib(n : Nat): Nat = match n {
       case Nat::Zero => Nat::Zero
       case Nat::Succ(Nat::Zero) => Nat::Succ(Nat::Zero)

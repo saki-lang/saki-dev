@@ -1,6 +1,6 @@
 package saki.core.syntax
 
-import saki.core.{Entity, EntityFactory, RuntimeEntityFactory, TypeError}
+import saki.core.{Entity, EntityFactory, TypeError}
 import saki.util.LateInit
 
 import scala.collection.Seq

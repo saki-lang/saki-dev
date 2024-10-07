@@ -2,9 +2,8 @@ package saki.core.syntax
 
 import saki.core.context.Environment
 import saki.core.domain.Value
-import saki.core.{Entity, PatternError, SizeError, SourceSpan, SymbolError, ValueError}
-import saki.core.elaborate.{Match, Resolve, Synthesis}
-import saki.core.syntax.buildMatch
+import saki.core.elaborate.Resolve
+import saki.core.*
 
 import scala.collection.Seq
 
@@ -96,7 +95,7 @@ extension (self: Pattern[Term]) {
     case Pattern.Cons(cons, patterns) if `type`.isInstanceOf[Term.InductiveType] => {
       val inductiveType = `type`.asInstanceOf[Term.InductiveType]
       val consDef: Constructor[Term] = cons.definition.toOption match {
-        case Some(definition) => definition.asInstanceOf[Constructor[Term]]
+        case Some(definition) => definition
         case None => env.definitions.getOrElse(cons, SymbolError.undefined(cons.name, self.span)) match {
           case consDef: Constructor[Term] => consDef
           case _ => SymbolError.notConstructor(cons.name, self.span)

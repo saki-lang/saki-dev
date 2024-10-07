@@ -1,14 +1,11 @@
 package saki.core.elaborate
 
-import scala.collection.Seq
-import saki.core.TypeError
+import saki.core.{SourceSpan, TypeError}
 import saki.core.syntax.*
-import saki.core.syntax.Pattern.resolve
-import saki.core.SourceSpan
-import saki.core.context.CurrentDefinition
 import saki.util.{Graph, LateInit}
 
 import scala.annotation.targetName
+import scala.collection.Seq
 
 object Resolve {
 

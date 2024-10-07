@@ -1,6 +1,6 @@
 package saki.core
 
-import saki.core.context.{CurrentDefinitionContext, Environment, TypedEnvironment, TypedLocalMutableContext}
+import saki.core.context.Environment
 import saki.core.domain.Value
 import saki.core.syntax.{Constructor, Function, Inductive, Var}
 

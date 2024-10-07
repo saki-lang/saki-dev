@@ -1,7 +1,5 @@
 package saki.core
 
-import saki.core.domain.Type
-
 export syntax.{
   Literal,
   LiteralType,

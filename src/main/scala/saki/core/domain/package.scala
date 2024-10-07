@@ -1,5 +1,8 @@
 package saki.core
 
-package object domain {
-
+export domain.{
+  Value,
+  Type,
 }
+
+package object domain
