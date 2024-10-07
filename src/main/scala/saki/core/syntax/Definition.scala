@@ -1,6 +1,6 @@
 package saki.core.syntax
 
-import saki.core.{Entity, EntityFactory, TypeError}
+import saki.core.{Entity, EntityFactory, RuntimeEntityFactory, TypeError}
 import saki.util.LateInit
 
 import scala.collection.Seq
@@ -20,7 +20,7 @@ enum Var {
   }
 
   override def equals(that: Any): Boolean = that match {
-    case that: Var.Defined[?, ?] => this.name == that.name
+    case that: Var.Defined[Term, ?] => this.name == that.name
     case that: Var.Local => this.name == that.name
     case _ => false
   }
@@ -30,9 +30,9 @@ enum Var {
 
 extension [T <: Entity, Def[E <: Entity] <: Definition[E]](self: Var.Defined[T, Def]) {
 
-  def signature(implicit factory: EntityFactory[T]): Signature[T] = self.definition.get.signature
+  def signature(implicit factory: EntityFactory[T, T]): Signature[T] = self.definition.get.signature
 
-  def buildInvoke(implicit factory: EntityFactory[T]): T = self.definition.toOption match {
+  def buildInvoke(implicit factory: EntityFactory[T, T]): T = self.definition.toOption match {
 
     case Some(_: Function[T]) => {
       val signature: Signature[T] = self.definition.get.signature
@@ -120,14 +120,14 @@ type ArgList[T <: Entity] = Seq[Argument[T]]
 
 trait FnLike[T <: Entity] {
   def params: ParamList[T]
-  def paramToVars(implicit factory: EntityFactory[T]): Seq[T] = params.map(_.ident).map(factory.variable)
+  def paramToVars(implicit factory: EntityFactory[T, T]): Seq[T] = params.map(_.ident).map(factory.variable)
   def arguments[T1 <: Entity](argValues: Seq[T1]): Seq[(Var.Local, T1)] = params.map(_.ident).zip(argValues)
 }
 
 sealed trait Definition[T <: Entity] extends FnLike[T] {
   def ident: Var.Defined[T, ?]
-  def resultType(implicit ev: EntityFactory[T]): T
-  def signature(implicit ev: EntityFactory[T]): Signature[T] = Signature(params, resultType)
+  def resultType(implicit ev: EntityFactory[T, T]): T
+  def signature(implicit ev: EntityFactory[T, T]): Signature[T] = Signature(params, resultType)
 }
 
 case class Function[T <: Entity](
@@ -141,7 +141,7 @@ case class Function[T <: Entity](
   val body: LateInit[T] = LateInit[T](),
 ) extends Definition[T] {
 
-  def resultType(implicit ev: EntityFactory[T]): T = resultType
+  def resultType(implicit ev: EntityFactory[T, T]): T = resultType
 
   override def toString: String = {
     s"def ${ident.name}(${params.mkString(", ")}): $resultType = \n\t$body"
@@ -154,7 +154,7 @@ case class Inductive[T <: Entity](
   constructors: Seq[Constructor[T]],
 ) extends Definition[T] {
 
-  def resultType(implicit ev: EntityFactory[T]): T = ev.universe
+  def resultType(implicit ev: EntityFactory[T, T]): T = ev.universe
 
   override def toString: String = {
     s"inductive ${ident.name}(${params.mkString(", ")})"
@@ -167,7 +167,7 @@ case class Constructor[T <: Entity](
   override val params: ParamList[T],
 ) extends Definition[T] {
   
-  def resultType(implicit factory: EntityFactory[T]): T = {
+  def resultType(implicit factory: EntityFactory[T, T]): T = {
     factory.inductiveType(owner, owner.definition.get.paramToVars)
   }
 

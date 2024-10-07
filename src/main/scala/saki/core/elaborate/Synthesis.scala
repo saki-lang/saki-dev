@@ -60,7 +60,7 @@ private[core] object Synthesis {
 
     case Expr.Variable(ref) => ref match {
       case definitionVar: Var.Defined[Term, ?] => definitionVar.definition.toOption match {
-        case None => env.getDefinition[Term](definitionVar) match {
+        case None => env.getDefinition(definitionVar) match {
           case Some(definition) => {
             definition.ident.definition :=! definition
             Synth(
@@ -175,55 +175,52 @@ private[core] object Synthesis {
   
   def synthDefinition(definition: Definition[Expr])(
     implicit env: Environment.Typed[Value]
-  ): Definition[Term] = env.withCurrentDefinition(definition.ident) {
-
-    implicit env => definition match {
-
-      case Function(ident, paramExprs, resultTypeExpr, isNeutral, pristineBody) => {
-        // TODO: Compute `isNeutral` using a reference graph
-        val resultType = resultTypeExpr.elaborate(Term.Universe)
-        val params = synthParams(paramExprs)
-        val paramsType = params.map { param => 
-          param.ident -> Typed[Value](param.`type`.eval, param.`type`.infer)
-        }
-        env.withLocals(paramsType.toMap) { implicit env => 
-          val function: Function[Term] = Function[Term](Var.Defined(ident.name), params, resultType, isNeutral)
-          function.ident.definition := function
-          function.body := env.withCurrentDefinition(ident) {
-            pristineBody.get.elaborate(resultType)
-          }
-          function
-        }
+  ): Definition[Term] = definition match {
+    case Function(ident, paramExprs, resultTypeExpr, isNeutral, pristineBody) => {
+      // TODO: Compute `isNeutral` using a reference graph
+      val resultType = resultTypeExpr.elaborate(Term.Universe)
+      val params = synthParams(paramExprs)
+      val paramsType = params.map { param =>
+        param.ident -> Typed[Value](param.`type`.eval, param.`type`.infer)
       }
-
-      case inductiveExpr: Inductive[Expr] => {
-        val params = synthParams(inductiveExpr.params)(env)
-        val constructors = ArrayBuffer.empty[Constructor[Term]]
-        val inductiveDefinition: Inductive[Term] = Inductive(Var.Defined(inductiveExpr.ident.name), params, constructors)
-        inductiveDefinition.ident.definition := inductiveDefinition
-        // To support recursive inductive types, we need to add the inductive type to the context
-        // before synthesizing the constructors
-        env.withCurrentDefinition[Inductive[Term]](inductiveDefinition.ident) { implicit env =>
-          constructors ++= inductiveExpr.constructors.map { constructor =>
-            // TODO: Check whether `Var.Local(inductiveDefinition.ident.name)` works as expected
-            val constructorParams: ArrayBuffer[Param[Term]] = ArrayBuffer.empty
-            val signature = Signature(constructorParams, Term.Variable(Var.Local(inductiveDefinition.ident.name)))
-            val constructorDefinition: Constructor[Term] = {
-              val consIdent: Var.Defined[Term, Constructor] = Var.Defined(constructor.ident.name)
-              val indIdent: Var.Defined[Term, Inductive] = inductiveDefinition.ident
-              Constructor(consIdent, indIdent, constructorParams)
-            }
-            constructorDefinition.ident.definition := constructorDefinition
-            constructorParams ++= synthParams(constructor.params)
-            constructorDefinition
-          }
-          inductiveDefinition
+      env.withLocals(paramsType.toMap) { implicit env =>
+        val function = Function[Term](Var.Defined(ident.name), params, resultType, isNeutral)
+        function.ident.definition := function
+        function.body := env.withCurrentDefinition(function.ident) {
+          pristineBody.get.elaborate(resultType)
         }
+        function
       }
-
-      case Constructor(_, _, _) => unreachable
     }
+
+    case inductiveExpr: Inductive[Expr] => {
+      val params = synthParams(inductiveExpr.params)(env)
+      val constructors = ArrayBuffer.empty[Constructor[Term]]
+      val inductiveDefinition: Inductive[Term] = Inductive(Var.Defined(inductiveExpr.ident.name), params, constructors)
+      inductiveDefinition.ident.definition := inductiveDefinition
+      // To support recursive inductive types, we need to add the inductive type to the context
+      // before synthesizing the constructors
+      env.withCurrentDefinition[Inductive[Term]](inductiveDefinition.ident) { implicit env =>
+        constructors ++= inductiveExpr.constructors.map { constructor =>
+          // TODO: Check whether `Var.Local(inductiveDefinition.ident.name)` works as expected
+          val constructorParams: ArrayBuffer[Param[Term]] = ArrayBuffer.empty
+          val signature = Signature(constructorParams, Term.Variable(Var.Local(inductiveDefinition.ident.name)))
+          val constructorDefinition: Constructor[Term] = {
+            val consIdent: Var.Defined[Term, Constructor] = Var.Defined(constructor.ident.name)
+            val indIdent: Var.Defined[Term, Inductive] = inductiveDefinition.ident
+            Constructor(consIdent, indIdent, constructorParams)
+          }
+          constructorDefinition.ident.definition := constructorDefinition
+          constructorParams ++= synthParams(constructor.params)
+          constructorDefinition
+        }
+        inductiveDefinition
+      }
+    }
+
+    case Constructor(_, _, _) => unreachable
   }
+  
 
   def synthParams(paramExprs: Seq[Param[Expr]])(
     implicit env: Environment.Typed[Value]

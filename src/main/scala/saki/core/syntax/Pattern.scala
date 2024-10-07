@@ -19,7 +19,7 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
   )(implicit span: SourceSpan) extends Pattern[T](span)
 
   case Cons(
-    cons: Var.Defined[?, Constructor],
+    cons: Var.Defined[T, Constructor],
     patterns: Seq[Pattern[T]],
   )(implicit span: SourceSpan) extends Pattern[T](span)
 
@@ -52,7 +52,8 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
   def map[U <: Entity](f: T => U): Pattern[U] = this match {
     case Primitive(value) => Pattern.Primitive(value)
     case Bind(binding) => Pattern.Bind(binding)
-    case Cons(cons, patterns) => Pattern.Cons(cons, patterns.map(_.map(f)))
+    // TODO: Fix here, don't force convert
+    case Cons(cons, patterns) => Pattern.Cons(cons.asInstanceOf, patterns.map(_.map(f)))
     case Typed(pattern, ty) => Pattern.Typed(pattern.map(f), f(ty))
     case Record(fields) => Pattern.Record(fields.map((name, pattern) => (name, pattern.map(f))))
   }

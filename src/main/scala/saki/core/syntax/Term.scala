@@ -3,7 +3,7 @@ package saki.core.syntax
 import saki.core.context.{CurrentDefinition, CurrentDefinitionContext, DefinitionContext, Environment, LocalContext, Typed, TypedEnvironment, TypedLocalContext, TypedLocalMutableContext}
 import saki.core.domain.{NeutralValue, Type, Value}
 import saki.core.elaborate.Unify
-import saki.core.{Entity, EntityFactory, RuntimeEntity, TypeError}
+import saki.core.{Entity, EntityFactory, RuntimeEntity, RuntimeEntityFactory, TypeError}
 import saki.util.LateInit
 
 import scala.collection.Seq
@@ -14,9 +14,9 @@ enum Term extends RuntimeEntity[Type] {
   case Primitive(value: Literal)
   case PrimitiveType(`type`: LiteralType)
   case Variable(variable: Var.Local)
-  case FunctionInvoke(fn: Var.Defined[?, Function], args: Seq[Term])
-  case InductiveType(inductive: Var.Defined[?, Inductive], args: Seq[Term])
-  case InductiveVariant(cons: Var.Defined[?, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term])
+  case FunctionInvoke(fn: Var.Defined[Term, Function], args: Seq[Term])
+  case InductiveType(inductive: Var.Defined[Term, Inductive], args: Seq[Term])
+  case InductiveVariant(cons: Var.Defined[Term, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term])
   case Match(scrutinees: Seq[Term], clauses: Seq[Clause[Term]])
   case Pi(param: Param[Term], codomain: Term) extends Term with PiLikeTerm
   case Sigma(param: Param[Term], codomain: Term) extends Term with PiLikeTerm
@@ -75,7 +75,9 @@ enum Term extends RuntimeEntity[Type] {
    * Unify by eta conversion
    * (λx. M) N ~> M[x := N]
    */
-  def etaUnify(lambda: Term.Lambda): Boolean = Unify.unify(lambda.body, this.apply(Term.Variable(lambda.param.ident)))
+  def etaUnify(lambda: Term.Lambda): Boolean = {
+    Unify.unify(lambda.body, this.apply(Term.Variable(lambda.param.ident)))
+  }
 
   def normalize(
     implicit env: Environment.Typed[Value]
@@ -93,7 +95,42 @@ enum Term extends RuntimeEntity[Type] {
     case Primitive(value) => Value.PrimitiveType(value.ty)
     case PrimitiveType(_) => Value.Universe
     case Variable(variable) => env.getTyped(variable).get.`type`
-    case FunctionInvoke(fn, args) => ???
+    case FunctionInvoke(fnRef, _) => {
+      env.definitions(fnRef).asInstanceOf[Function[Term]].resultType.eval
+    }
+    case InductiveType(indRef, _) => {
+      env.definitions(indRef).asInstanceOf[Inductive[Term]].resultType.eval
+    }
+    case InductiveVariant(consRef, _, _) => {
+      env.definitions(consRef).asInstanceOf[Constructor[Term]].resultType.eval
+    }
+    case Match(_, clauses) => {
+      val clausesType: Seq[Value] = clauses.map(_.body.infer)
+      if clausesType.tail.forall(_ unify clausesType.head) then clausesType.head
+      else throw TypeError("Clauses have different types", None)
+      clausesType.head
+    }
+    case Pi(_, _) => Value.Universe
+    case Sigma(_, _) => Value.Universe
+    case Record(fields) => Value.RecordType(fields.map {
+      (name, term) => (name, term.infer)
+    })
+    case RecordType(_) => Value.Universe
+    case Record(fields) => Value.Record(fields.map {
+      (name, value) => (name, value.infer)
+    })
+    case Apply(fn, arg) => fn.infer match {
+      case Value.Pi(paramType, codomain) => {
+        val argType = arg.infer
+        if !(argType unify paramType) then {
+          throw TypeError(s"Type mismatch: $paramType != $argType", None)
+        }
+        // To obtain the concrete return type, feed the concrete argument to the codomain closure
+        codomain(arg.eval)
+      }
+      case _ => throw TypeError("Cannot apply non-function", None)
+    }
+    
   }
 
   def eval(implicit env: Environment.Typed[Value]): Value = this match {
@@ -107,10 +144,7 @@ enum Term extends RuntimeEntity[Type] {
     case Variable(variable) => env.getValue(variable).get
 
     case FunctionInvoke(fnRef, argTerms) => {
-      // Use the evaluated function in the environment if possible to avoid re-evaluation
-      val fn = env.getDefinition(fnRef).getOrElse {
-        throw IllegalStateException(s"Unbound function: ${fnRef.name}")
-      }.asInstanceOf[Function[Value | Term]]
+      val fn = env.definitions(fnRef).asInstanceOf[Function[Term]]
       env.currentDefinition match {
         case Some(current) if current.name == fnRef.name => {
           // Recursive call, keep it a neutral value
@@ -123,10 +157,7 @@ enum Term extends RuntimeEntity[Type] {
             val argVarList: Seq[(Var.Local, Typed[Value])] = fn.arguments(argsValue).map {
               (param, arg) => (param, Typed[Value](arg, arg.infer))
             }
-            val body = fn.body.get match {
-              case body: Value => body.readBack
-              case body: Term => body
-            }
+            val body: Term = fn.body.get
             env.withLocals(argVarList.toMap) { implicit env => body.eval }
           } else {
             Value.functionInvoke(fn.ident, argsValue)
@@ -220,9 +251,9 @@ extension (params: ParamList[Term]) {
   }
 }
 
-given EntityFactory[Term] = Term
+given RuntimeEntityFactory[Term] = Term
 
-object Term extends EntityFactory[Term] {
+object Term extends RuntimeEntityFactory[Term] {
 
   override def unit: Term = Primitive(Literal.UnitValue)
 
@@ -233,15 +264,15 @@ object Term extends EntityFactory[Term] {
   override def variable(ident: Var.Local): Term = Variable(ident)
 
   override def inductiveType(
-    inductive: Var.Defined[?, Inductive], args: Seq[Term]
+    inductive: Var.Defined[Term, Inductive], args: Seq[Term]
   ): Term = InductiveType(inductive, args)
 
   override def functionInvoke(
-    function: Var.Defined[?, Function], args: Seq[Term]
+    function: Var.Defined[Term, Function], args: Seq[Term]
   ): Term = FunctionInvoke(function, args)
 
   override def inductiveVariant(
-    cons: Var.Defined[?, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term]
+    cons: Var.Defined[Term, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term]
   ): Term = InductiveVariant(cons, consArgs, inductiveArgs)
 }
 

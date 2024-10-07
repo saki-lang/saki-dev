@@ -1,7 +1,7 @@
 package saki.core.domain
 
 import saki.core.context.{CurrentDefinitionContext, Environment, LocalContext, TypedEnvironment, TypedLocalMutableContext}
-import saki.core.{Entity, EntityFactory, RuntimeEntity}
+import saki.core.{Entity, EntityFactory, RuntimeEntity, RuntimeEntityFactory}
 import saki.core.syntax.*
 
 import scala.collection.Seq
@@ -29,12 +29,12 @@ enum Value extends RuntimeEntity[Type] {
   case RecordType(fields: Map[String, Type])
 
   case InductiveType(
-    val inductive: Var.Defined[?, Inductive],
+    val inductive: Var.Defined[Term, Inductive],
     val args: Seq[Value],
   )
 
   case InductiveVariant(
-    val cons: Var.Defined[?, Constructor],
+    val cons: Var.Defined[Term, Constructor],
     val consArgs: Seq[Value],
     val inductiveArgs: Seq[Value],
   )
@@ -99,7 +99,7 @@ enum Value extends RuntimeEntity[Type] {
 
 }
 
-object Value extends EntityFactory[Value] {
+object Value extends RuntimeEntityFactory[Value] {
 
   override def unit: Type = Value.Primitive(Literal.UnitValue)
 
@@ -109,15 +109,17 @@ object Value extends EntityFactory[Value] {
 
   override def variable(ident: Var.Local): Value = Neutral(NeutralValue.Variable(ident))
 
-  override def functionInvoke(function: Var.Defined[?, Function], args: Seq[Type]): Type = {
+  override def functionInvoke(function: Var.Defined[Term, Function], args: Seq[Type]): Type = {
     Neutral(NeutralValue.FunctionInvoke(function, args))
   }
 
-  override def inductiveType(inductive: Var.Defined[?, Inductive], args: Seq[Type]): Type = {
+  override def inductiveType(inductive: Var.Defined[Term, Inductive], args: Seq[Type]): Type = {
     Value.InductiveType(inductive, args)
   }
 
-  override def inductiveVariant(cons: Var.Defined[?, Constructor], consArgs: Seq[Type], inductiveArgs: Seq[Type]): Type = {
+  override def inductiveVariant(
+    cons: Var.Defined[Term, Constructor], consArgs: Seq[Type], inductiveArgs: Seq[Type]
+  ): Type = {
     Value.InductiveVariant(cons, consArgs, inductiveArgs)
   }
 

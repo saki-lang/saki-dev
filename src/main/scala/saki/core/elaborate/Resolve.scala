@@ -16,7 +16,7 @@ object Resolve {
     variableMap: Map[String, Var] = Map.empty,
     dependencyGraph: Graph[Var.Defined[?, ?]] = Graph.directed,
     currentDefinition: Option[Var.Defined[Expr, ?]] = None,
-  ) extends CurrentDefinition {
+  ) {
     
     def variables: Seq[Var] = variableMap.values.toSeq
     

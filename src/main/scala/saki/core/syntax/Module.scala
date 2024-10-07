@@ -20,23 +20,23 @@ object Module {
 
   def from(pristineDefinitions: Seq[Definition[Expr]]): Module = {
     var resolvingContext = Resolve.Context.empty
-    var elaboratingContext = Environment.Typed[Value]()
+    var env = Environment.Typed[Value]()
     val definitions = pristineDefinitions.map { definition =>
       val (resolved, ctx) = definition.resolve(resolvingContext)
       resolvingContext = ctx
       resolved
     }.map { definition =>
-      val definitionSynth = definition.synth(elaboratingContext)
+      val definitionSynth = definition.synth(env)
       definitionSynth match {
         case inductive: Inductive[Term] => inductive.constructors.foreach { constructor =>
-          elaboratingContext = elaboratingContext.copy(
-            definitions = elaboratingContext.definitions.updated(constructor.ident, constructor)
+          env = env.copy(
+            definitions = env.definitions.updated(constructor.ident, constructor)
           )
         }
         case _ => ()
       }
-      elaboratingContext = elaboratingContext.copy(
-        definitions = elaboratingContext.definitions.updated(definitionSynth.ident, definitionSynth)
+      env = env.copy(
+        definitions = env.definitions.updated(definitionSynth.ident, definitionSynth)
       )
       definitionSynth
     }

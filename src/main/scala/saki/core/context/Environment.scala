@@ -13,8 +13,8 @@ object Environment {
 }
 
 case class TypedEnvironment[T <: Entity](
-  override val definitions: Map[Var.Defined[? <: Entity, ?], Definition[?]] = Map.empty,
-  override val currentDefinition: Option[Var.Defined[? <: Entity, ?]] = None,
+  override val definitions: Map[Var.Defined[Term, ?], Definition[Term]] = Map.empty,
+  override val currentDefinition: Option[Var.Defined[Term, ?]] = None,
   val locals: Map[Var.Local, Typed[T]] = Map.empty[Var.Local, Typed[T]],
 ) extends Environment[T] with TypedLocalMutableContext[T] {
 
@@ -38,7 +38,7 @@ case class TypedEnvironment[T <: Entity](
   
   override def getTyped(ident: Var.Local): Option[Typed[T]] = locals.get(ident)
   
-  override def add[U <: Entity, Def[E <: Entity] <: Definition[E]](definition: Def[U]): TypedEnvironment[T] = {
+  override def add[Def[E <: Entity] <: Definition[E]](definition: Def[Term]): TypedEnvironment[T] = {
     TypedEnvironment[T](
       definitions = definitions + (definition.ident -> definition),
       currentDefinition = currentDefinition,
@@ -46,15 +46,15 @@ case class TypedEnvironment[T <: Entity](
     )
   }
 
-  override def getDefinition[U <: Entity](definition: Var.Defined[U, ?]): Option[Definition[U]] = {
-    definitions.get(definition).map(_.asInstanceOf[Definition[U]])
+  override def getDefinition(definition: Var.Defined[Term, ?]): Option[Definition[Term]] = {
+    definitions.get(definition)
   }
   
   override def getValue(local: Var.Local): Option[T] = locals.get(local).map(_.value)
   
   override def contains(local: Var.Local): Boolean = locals.contains(local)
 
-  def withCurrentDefinition[R](definition: Var.Defined[?, ?])(action: TypedEnvironment[T] => R): R = {
+  def withCurrentDefinition[R](definition: Var.Defined[Term, ?])(action: TypedEnvironment[T] => R): R = {
     action(TypedEnvironment[T](definitions, Some(definition), locals))
   }
 
@@ -75,7 +75,9 @@ object TypedEnvironment {
 
   def empty[T <: Entity]: TypedEnvironment[T] = TypedEnvironment[T]()
   
-  def global[T <: Entity](definitions: Map[Var.Defined[?, ?], Definition[?]]): TypedEnvironment[T] = TypedEnvironment[T](definitions = definitions)
+  def global[T <: Entity](definitions: Map[Var.Defined[Term, ?], Definition[Term]]): TypedEnvironment[T] = {
+    TypedEnvironment[T](definitions = definitions)
+  }
 
   def apply[T <: Entity](other: CurrentDefinitionContext): TypedEnvironment[T] = {
     new TypedEnvironment[T](
@@ -87,8 +89,8 @@ object TypedEnvironment {
 }
 
 case class UntypedEnvironment[T <: Entity](
-  override val definitions: Map[Var.Defined[? <: Entity, ?], Definition[?]] = Map.empty,
-  override val currentDefinition: Option[Var.Defined[? <: Entity, ?]] = None,
+  override val definitions: Map[Var.Defined[Term, ?], Definition[Term]] = Map.empty,
+  override val currentDefinition: Option[Var.Defined[Term, ?]] = None,
   val locals: Map[Var.Local, T] = Map.empty[Var.Local, T],
 ) extends Environment[T] with LocalMutableContext[T] {
 
@@ -114,7 +116,7 @@ case class UntypedEnvironment[T <: Entity](
 
   override def contains(local: Var.Local): Boolean = locals.contains(local)
 
-  override def add[U <: Entity, Def[E <: Entity] <: Definition[E]](definition: Def[U]): UntypedEnvironment[T] = {
+  override def add[Def[E <: Entity] <: Definition[E]](definition: Def[Term]): UntypedEnvironment[T] = {
     UntypedEnvironment[T](
       definitions = definitions + (definition.ident -> definition),
       currentDefinition = currentDefinition,
@@ -122,11 +124,11 @@ case class UntypedEnvironment[T <: Entity](
     )
   }
 
-  override def getDefinition[U <: Entity](definition: Var.Defined[U, ?]): Option[Definition[U]] = {
-    definitions.get(definition).map(_.asInstanceOf[Definition[U]])
+  override def getDefinition(definition: Var.Defined[Term, ?]): Option[Definition[Term]] = {
+    definitions.get(definition)
   }
 
-  def withCurrentDefinition[R](definition: Var.Defined[?, ?])(action: UntypedEnvironment[T] => R): R = {
+  def withCurrentDefinition[R](definition: Var.Defined[Term, ?])(action: UntypedEnvironment[T] => R): R = {
     action(UntypedEnvironment[T](definitions, Some(definition), locals))
   }
 
@@ -143,7 +145,7 @@ object UntypedEnvironment {
 
   def empty[T <: Entity]: UntypedEnvironment[T] = UntypedEnvironment[T]()
 
-  def global[T <: Entity](definitions: Map[Var.Defined[?, ?], Definition[?]]): UntypedEnvironment[T] = {
+  def global[T <: Entity](definitions: Map[Var.Defined[Term, ?], Definition[Term]]): UntypedEnvironment[T] = {
     UntypedEnvironment[T](definitions = definitions)
   }
 

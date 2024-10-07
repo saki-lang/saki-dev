@@ -14,7 +14,7 @@ trait RuntimeEntity[IT <: Entity] extends Entity {
   ): IT
 }
 
-trait EntityFactory[T <: Entity] {
+trait EntityFactory[T <: Entity, D <: Entity] {
 
   def unit: T
 
@@ -24,11 +24,13 @@ trait EntityFactory[T <: Entity] {
 
   def variable(ident: Var.Local): T
 
-  def inductiveType(inductive: Var.Defined[?, Inductive], args: Seq[T]): T
+  def inductiveType(inductive: Var.Defined[D, Inductive], args: Seq[T]): T
 
-  def functionInvoke(function: Var.Defined[?, Function], args: Seq[T]): T
+  def functionInvoke(function: Var.Defined[D, Function], args: Seq[T]): T
 
-  def inductiveVariant(cons: Var.Defined[?, Constructor], consArgs: Seq[T], inductiveArgs: Seq[T]): T
+  def inductiveVariant(cons: Var.Defined[D, Constructor], consArgs: Seq[T], inductiveArgs: Seq[T]): T
   
 }
+
+trait RuntimeEntityFactory[T <: Entity] extends EntityFactory[T, Term]
 

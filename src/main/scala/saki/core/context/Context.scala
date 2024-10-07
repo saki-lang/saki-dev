@@ -39,11 +39,11 @@ trait TypedLocalMutableContext[T <: Entity] extends TypedLocalContext[T] {
 
 trait DefinitionContext {
 
-  def definitions: Map[Var.Defined[?, ?], Definition[?]]
+  def definitions: Map[Var.Defined[Term, ?], Definition[Term]]
 
-  def getDefinition[U <: Entity](definition: Var.Defined[U, ?]): Option[Definition[U]]
+  def getDefinition(definition: Var.Defined[Term, ?]): Option[Definition[Term]]
 
-  def getDefinitionByName(name: String): Option[Definition[?]] = {
+  def getDefinitionByName(name: String): Option[Definition[Term]] = {
     definitions.collectFirst {
       case (varDef, definition) if varDef.name == name => definition
     }
@@ -52,13 +52,13 @@ trait DefinitionContext {
 }
 
 trait CurrentDefinition {
-  def currentDefinition: Option[Var.Defined[?, ?]]
+  def currentDefinition: Option[Var.Defined[Term, ?]]
 }
 
 trait CurrentDefinitionContext extends DefinitionContext with CurrentDefinition
 
 trait MutableDefinitionContext extends DefinitionContext {
-  def add[T <: Entity, Def[E <: Entity] <: Definition[E]](definition: Def[T]): MutableDefinitionContext
+  def add[Def[E <: Entity] <: Definition[E]](definition: Def[Term]): MutableDefinitionContext
 }
 
 case class Typed[+T <: Entity](value: T, `type`: T) {
