@@ -13,6 +13,7 @@ enum Term extends RuntimeEntity[Type] {
   case PrimitiveType(`type`: LiteralType)
   case Variable(variable: Var.Local)
   case FunctionInvoke(fn: Var.Defined[Term, Function], args: Seq[Term])
+  case OverloadedFunctionInvoke(fn: Var.Defined[Term, OverloadedFunction], args: Seq[Term])
   case InductiveType(inductive: Var.Defined[Term, Inductive], args: Seq[Term])
   case InductiveVariant(cons: Var.Defined[Term, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term])
   case Match(scrutinees: Seq[Term], clauses: Seq[Clause[Term]])
@@ -23,6 +24,7 @@ enum Term extends RuntimeEntity[Type] {
   case Apply(fn: Term, arg: Term)
   case Lambda(param: Param[Term], body: Term) extends Term with LambdaLikeTerm
   case Projection(record: Term, field: String)
+  case SuperPosition(lhs: Term, rhs: Term)
 
   def apply(args: Term*)(implicit env: Environment.Typed[Value]): Term = {
     args.foldLeft(this) {
@@ -75,34 +77,48 @@ enum Term extends RuntimeEntity[Type] {
    * @return The inferred type
    */
   override def infer(implicit env: Environment.Typed[Value]): Value = this match {
+
     case Universe => Value.Universe
+
     case Primitive(value) => Value.PrimitiveType(value.ty)
+
     case PrimitiveType(_) => Value.Universe
+
     case Variable(variable) => env.getTyped(variable).get.`type`
+
     case FunctionInvoke(fnRef, _) => {
       env.definitions(fnRef).asInstanceOf[Function[Term]].resultType.eval
     }
+
     case InductiveType(indRef, _) => {
       env.definitions(indRef).asInstanceOf[Inductive[Term]].resultType.eval
     }
+
     case InductiveVariant(consRef, _, _) => {
       env.definitions(consRef).asInstanceOf[Constructor[Term]].resultType.eval
     }
+
     case Match(_, clauses) => {
       val clausesType: Seq[Value] = clauses.map(_.body.infer)
       if clausesType.tail.forall(_ unify clausesType.head) then clausesType.head
       else throw TypeError("Clauses have different types", None)
       clausesType.head
     }
+
     case Pi(_, _) => Value.Universe
+
     case Sigma(_, _) => Value.Universe
+
     case Record(fields) => Value.RecordType(fields.map {
       (name, term) => (name, term.infer)
     })
+
     case RecordType(_) => Value.Universe
+
     case Record(fields) => Value.Record(fields.map {
       (name, value) => (name, value.infer)
     })
+
     case Apply(fn, arg) => fn.infer match {
       case Value.Pi(paramType, codomain) => {
         val argType = arg.infer
@@ -113,6 +129,15 @@ enum Term extends RuntimeEntity[Type] {
         codomain(arg.eval)
       }
       case _ => throw TypeError("Cannot apply non-function", None)
+    }
+
+    case Lambda(param, body) => Value.Pi(param.`type`.infer, _ => body.infer)
+
+    case Projection(record, field) => record.infer match {
+      case Value.RecordType(fields) => fields.getOrElse(field, {
+        throw TypeError(s"Missing field: $field", None)
+      })
+      case _ => throw TypeError("Cannot project from non-record", None)
     }
     
   }
@@ -147,6 +172,51 @@ enum Term extends RuntimeEntity[Type] {
             Value.functionInvoke(fn.ident, argsValue)
           }
         }
+      }
+    }
+
+    case OverloadedFunctionInvoke(fnRef, argTerms) => {
+      val fn = env.definitions(fnRef).asInstanceOf[OverloadedFunction[Term]]
+      val argsValue: Seq[Value] = argTerms.map(_.eval)
+
+      val (body, isNeutral) = argsValue.foldLeft(fn.body: OverloadedState[Term]) {
+        case (OverloadedState.SuperPosition(states), argument) => {
+          val argType = argument.infer
+          val candidatesStates = states.map {
+            (param, state) => (param.map(_.eval), state)
+          }.filter {
+            (param, _) => param.`type` <:< argType
+          }
+          // Find the first state that
+          val validSolution = candidatesStates.filter { (param, _) =>
+            // Ensure there is no other state that is closer to the argument type
+            !candidatesStates.map(_._1).exists(param.`type` <:< _.`type`)
+          }
+          if validSolution.size > 1 then {
+            // There are multiple valid solutions, create a superposition state
+            TypeError.overloadingMultipleMatch(fnRef.name, None)
+          }
+          // If there is only one valid solution, return it
+          validSolution.headOption.getOrElse(TypeError.overloadingNoMatch(fnRef.name, None))._2
+        }
+        case _ => {
+          TypeError.overloadingNoMatch(fnRef.name, None)
+        }
+      } match {
+        case OverloadedState.SuperPosition(_) => {
+          // The argument type is not specific enough to determine the function
+          TypeError.overloadingNoMatch(fnRef.name, None)
+        }
+        case OverloadedState.Eigen(body, isNeutral) => (body, isNeutral)
+      }
+
+      if !isNeutral || argsValue.forall(_.readBack.isFinal(Set.empty)) then {
+        val argVarList: Seq[(Var.Local, Typed[Value])] = fn.arguments(argsValue).map {
+          (param, arg) => (param, Typed[Value](arg, arg.infer))
+        }
+        env.withLocals(argVarList.toMap) { implicit env => body.eval(env) }
+      } else {
+        Value.overloadedFunctionInvoke(fn.ident, argsValue)
       }
     }
 
@@ -237,6 +307,8 @@ given RuntimeEntityFactory[Term] = Term
 
 object Term extends RuntimeEntityFactory[Term] {
 
+  case class SuperPositionState(param: Param[Term], body: Term)
+
   override def unit: Term = Primitive(Literal.UnitValue)
 
   override def unitType: Term = PrimitiveType(LiteralType.UnitType)
@@ -252,6 +324,10 @@ object Term extends RuntimeEntityFactory[Term] {
   override def functionInvoke(
     function: Var.Defined[Term, Function], args: Seq[Term]
   ): Term = FunctionInvoke(function, args)
+
+  override def overloadedFunctionInvoke(
+    function: Var.Defined[Term, OverloadedFunction], args: Seq[Term]
+  ): Term = OverloadedFunctionInvoke(function, args)
 
   override def inductiveVariant(
     cons: Var.Defined[Term, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term]

@@ -148,6 +148,19 @@ case class Function[T <: Entity](
   }
 }
 
+case class OverloadedFunction[T <: Entity](
+  override val ident: Var.Defined[T, OverloadedFunction],
+  val body: OverloadedState.SuperPosition[T],
+) extends Definition[T] {
+  override def resultType(implicit ev: EntityFactory[T, T]): T = ???
+  override def params: ParamList[T] = ???
+}
+
+enum OverloadedState[T <: Entity] {
+  case Eigen(state: T, isNeutral: Boolean)
+  case SuperPosition(states: Set[(Param[T], OverloadedState[T])])
+}
+
 case class Inductive[T <: Entity](
   override val ident: Var.Defined[T, Inductive],
   override val params: ParamList[T],

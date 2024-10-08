@@ -55,6 +55,7 @@ private[core] object Synthesis {
     case Expr.PrimitiveType(ty) => Synth(Term.PrimitiveType(ty), Value.Universe)
 
     case Expr.Variable(ref) => ref match {
+      // Converting a definition reference to a lambda, enabling curry-style function application
       case definitionVar: Var.Defined[Term, ?] => definitionVar.definition.toOption match {
         case None => env.getDefinition(definitionVar) match {
           case Some(definition) => {

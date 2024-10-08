@@ -26,6 +26,14 @@ object TypeError {
   def error(info: String, span: SourceSpan): Nothing = {
     throw TypeError("Type error", Some(InfoSpan(span, info)))
   }
+
+  def overloadingNoMatch(name: String, span: Option[InfoSpan]): Nothing = {
+    throw TypeError(s"No matched overloading: $name", span)
+  }
+
+  def overloadingMultipleMatch(name: String, span: Option[InfoSpan]): Nothing = {
+    throw TypeError(s"Multiple matched overloading: $name", span)
+  }
 }
 
 object SymbolError {
