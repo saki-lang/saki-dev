@@ -31,7 +31,7 @@ object TypeError {
     throw TypeError(s"No matched overloading: $name", span)
   }
 
-  def overloadingMultipleMatch(name: String, span: Option[InfoSpan]): Nothing = {
+  def overloadingAmbiguous(name: String, span: Option[InfoSpan]): Nothing = {
     throw TypeError(s"Multiple matched overloading: $name", span)
   }
 }

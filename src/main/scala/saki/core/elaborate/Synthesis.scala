@@ -60,18 +60,11 @@ private[core] object Synthesis {
         case None => env.getDefinition(definitionVar) match {
           case Some(definition) => {
             definition.ident.definition :=! definition
-            Synth(
-              term = definition.params.buildLambda(definition.ident.buildInvoke(Term)).normalize,
-              `type` = definition.params.buildPiType(definition.resultType).eval,
-            )
+            synthDefinitionRef(definition)
           }
           case None => TypeError.error(s"Unbound definition: ${definitionVar.name}", expr.span)
         }
-        case Some(definition: Definition[Term]) => Synth(
-          // TODO: should we remove `rename` here? (does it make sense?)
-          term = definition.params.buildLambda(definition.ident.buildInvoke(Term)).normalize(Environment.Typed(env)),
-          `type` = definition.params.buildPiType(definition.resultType).eval,
-        )
+        case Some(definition: Definition[Term]) => synthDefinitionRef(definition)
       }
       case variable: Var.Local => env.locals.get(variable) match {
         case Some(ty) => Synth(ty.value.readBack, ty.`type`)
@@ -216,14 +209,30 @@ private[core] object Synthesis {
     }
 
     case Constructor(_, _, _) => unreachable
+    
+    case OverloadedFunction(ident, body) => {
+      // recursively traverse the states of the overloaded function, synthesis each state
+      // and merge branches with the same type arguments
+      // TODO: finish this
+      ???
+    }
   }
   
-
   def synthParams(paramExprs: Seq[Param[Expr]])(
     implicit env: Environment.Typed[Value]
   ): Seq[Param[Term]] = {
     paramExprs.map { param =>
       Param(param.ident, param.`type`.elaborate(Term.Universe))
     }
+  }
+
+  def synthDefinitionRef(definition: Definition[Term])(
+    implicit env: Environment.Typed[Value]
+  ): Synth = definition match {
+    case definition: PureDefinition[Term] => Synth(
+      term = definition.params.buildLambda(definition.ident.buildInvoke(Term)).normalize,
+      `type` = definition.params.buildPiType(definition.resultType).eval,
+    )
+    case definition: OverloadedFunction[Term] => ???
   }
 }

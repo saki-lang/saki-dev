@@ -30,28 +30,28 @@ enum Var {
 
 extension [T <: Entity, Def[E <: Entity] <: Definition[E]](self: Var.Defined[T, Def]) {
 
-  def signature(implicit factory: EntityFactory[T, T]): Signature[T] = self.definition.get.signature
-
   def buildInvoke(implicit factory: EntityFactory[T, T]): T = self.definition.toOption match {
 
-    case Some(_: Function[T]) => {
-      val signature: Signature[T] = self.definition.get.signature
+    case Some(definition: Function[T]) => {
+      val signature: Signature[T] = definition.signature
       factory.functionInvoke(self.asInstanceOf[Var.Defined[T, Function]], signature.paramToVars)
     }
 
-    case Some(_: Inductive[T]) => {
-      val signature: Signature[T] = self.definition.get.signature
+    case Some(definition: Inductive[T]) => {
+      val signature: Signature[T] = definition.signature
       factory.inductiveType(self.asInstanceOf[Var.Defined[T, Inductive]], signature.paramToVars)
     }
 
-    case Some(_: Constructor[T]) => {
+    case Some(definition: Constructor[T]) => {
       val cons = self.asInstanceOf[Var.Defined[T, Constructor]]
       factory.inductiveVariant(
         cons = cons,
-        consArgs = self.signature.paramToVars,
-        inductiveArgs = cons.owner.signature.paramToVars
+        consArgs = definition.signature.paramToVars,
+        inductiveArgs = cons.ownerSignature.paramToVars
       )
     }
+
+    case Some(definition: OverloadedFunction[T]) => ??? // TODO
 
     case None => TypeError(s"Unresolved reference: ${self.name}").raise
   }
@@ -59,6 +59,7 @@ extension [T <: Entity, Def[E <: Entity] <: Definition[E]](self: Var.Defined[T, 
 
 extension [T <: Entity](variable: Var.Defined[T, Constructor]) {
   def owner: Var.Defined[T, Inductive] = variable.definition.get.owner
+  def ownerSignature(implicit factory: EntityFactory[T, T]): Signature[T] = owner.definition.get.signature
 }
 
 case class Param[T <: Entity | Option[Entity]](
@@ -124,8 +125,11 @@ trait FnLike[T <: Entity] {
   def arguments[T1 <: Entity](argValues: Seq[T1]): Seq[(Var.Local, T1)] = params.map(_.ident).zip(argValues)
 }
 
-sealed trait Definition[T <: Entity] extends FnLike[T] {
+sealed trait Definition[T <: Entity] {
   def ident: Var.Defined[T, ?]
+}
+
+sealed trait PureDefinition[T <: Entity] extends Definition[T] with FnLike[T] {
   def resultType(implicit ev: EntityFactory[T, T]): T
   def signature(implicit ev: EntityFactory[T, T]): Signature[T] = Signature(params, resultType)
 }
@@ -133,13 +137,13 @@ sealed trait Definition[T <: Entity] extends FnLike[T] {
 case class Function[T <: Entity](
   override val ident: Var.Defined[T, Function],
   override val params: ParamList[T],
-  val resultType: T,
+  resultType: T,
   // Mark this function as a neutral function (recursive)
   // When a function is a neutral function, its invocation will not be evaluated instantly 
   // unless all its arguments are pure values
-  val isNeutral: Boolean = true,
-  val body: LateInit[T] = LateInit[T](),
-) extends Definition[T] {
+  isNeutral: Boolean = true,
+  body: LateInit[T] = LateInit[T](),
+) extends PureDefinition[T] {
 
   def resultType(implicit ev: EntityFactory[T, T]): T = resultType
 
@@ -150,22 +154,21 @@ case class Function[T <: Entity](
 
 case class OverloadedFunction[T <: Entity](
   override val ident: Var.Defined[T, OverloadedFunction],
-  val body: OverloadedState.SuperPosition[T],
-) extends Definition[T] {
-  override def resultType(implicit ev: EntityFactory[T, T]): T = ???
-  override def params: ParamList[T] = ???
-}
+  body: OverloadedFunction.BodyState.SuperPosition[T],
+) extends Definition[T] {}
 
-enum OverloadedState[T <: Entity] {
-  case Eigen(state: T, isNeutral: Boolean)
-  case SuperPosition(states: Set[(Param[T], OverloadedState[T])])
+object OverloadedFunction {
+  enum BodyState[T <: Entity] {
+    case Eigen(state: T, isNeutral: Boolean)
+    case SuperPosition(states: Set[(Param[T], BodyState[T])])
+  }
 }
 
 case class Inductive[T <: Entity](
   override val ident: Var.Defined[T, Inductive],
   override val params: ParamList[T],
   constructors: Seq[Constructor[T]],
-) extends Definition[T] {
+) extends PureDefinition[T] {
 
   def resultType(implicit ev: EntityFactory[T, T]): T = ev.universe
 
@@ -178,7 +181,7 @@ case class Constructor[T <: Entity](
   override val ident: Var.Defined[T, Constructor],
   owner: Var.Defined[T, Inductive],
   override val params: ParamList[T],
-) extends Definition[T] {
+) extends PureDefinition[T] {
   
   def resultType(implicit factory: EntityFactory[T, T]): T = {
     factory.inductiveType(owner, owner.definition.get.paramToVars)
