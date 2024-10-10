@@ -48,6 +48,20 @@ private[core] object Synthesis {
 
   def synth(expr: Expr)(implicit env: Environment.Typed[Value]): Synth = expr match {
 
+    case Expr.Unresolved(name) => {
+      try {
+        env.getTyped(name) match {
+          case Some(Typed(value, ty)) => Synth(value.readBack, ty)
+          // If the variable is not found in the environment,
+          // indicating that it is a primitive variable or an unknown variable,
+          // try to synthesize it as a primitive type
+          case None => synthPrimitiveType(name)
+        }
+      } catch { // TODO: refactor error handling
+        case TypeError(message, _) => TypeError.error(message, expr.span)
+      }
+    }
+
     case Expr.Universe() => Synth(Term.Universe, Value.Universe)
 
     case Expr.Primitive(value) => Synth(Term.Primitive(value), Value.PrimitiveType(value.ty))
@@ -55,22 +69,16 @@ private[core] object Synthesis {
     case Expr.PrimitiveType(ty) => Synth(Term.PrimitiveType(ty), Value.Universe)
 
     case Expr.Variable(ref) => ref match {
+      // Converting a definition reference to a lambda, enabling curry-style function application
       case definitionVar: Var.Defined[Term, ?] => definitionVar.definition.toOption match {
         case None => env.getDefinition(definitionVar) match {
           case Some(definition) => {
             definition.ident.definition :=! definition
-            Synth(
-              term = definition.params.buildLambda(definition.ident.buildInvoke(Term)).normalize,
-              `type` = definition.params.buildPiType(definition.resultType).eval,
-            )
+            synthDefinitionRef(definition)
           }
           case None => TypeError.error(s"Unbound definition: ${definitionVar.name}", expr.span)
         }
-        case Some(definition: Definition[Term]) => Synth(
-          // TODO: should we remove `rename` here? (does it make sense?)
-          term = definition.params.buildLambda(definition.ident.buildInvoke(Term)).normalize(Environment.Typed(env)),
-          `type` = definition.params.buildPiType(definition.resultType).eval,
-        )
+        case Some(definition: Definition[Term]) => synthDefinitionRef(definition)
       }
       case variable: Var.Local => env.locals.get(variable) match {
         case Some(ty) => Synth(ty.value.readBack, ty.`type`)
@@ -133,15 +141,60 @@ private[core] object Synthesis {
       )
     }
 
-    case Expr.Pi(param, result) => synthDependentType(param, result)
+    case Expr.Pi(param, result) => synthDependentType(param, result, Term.Pi.apply)
 
-    case Expr.Sigma(param, result) => synthDependentType(param, result)
+    case Expr.Sigma(param, result) => synthDependentType(param, result, Term.Sigma.apply)
+
+    case Expr.Lambda(param, body, returnType) => {
+      val paramIdent = param.ident
+      val (paramType, _) = param.`type`.synth.unpack
+      val paramTypeValue = paramType.eval
+      val paramVariable = Value.variable(paramIdent)
+      val (bodyTerm: Term, bodyType: Type) = env.withLocal(paramIdent, paramVariable, paramTypeValue) {
+        implicit env => body.synth(env).unpack
+      }
+      val returnTypeValue: Value = returnType match {
+        case Some(returnTypeExpr) => {
+          val (returnType, _) = returnTypeExpr.synth.unpack
+          val returnTypeValue = returnType.eval
+          if !(returnTypeValue <:< bodyType) then {
+            TypeError.mismatch(returnType.toString, bodyType.toString, returnTypeExpr.span)
+          }
+          returnTypeValue
+        }
+        case None => bodyType
+      }
+
+      // Closure for the Pi type
+      def piTypeClosure(arg: Value): Value = {
+        val argVar: Typed[Value] = Typed[Value](arg, paramTypeValue)
+        env.withLocal(param.ident, argVar) {
+          implicit env => returnTypeValue.readBack(env).eval(env)
+        }
+      }
+
+      Synth(
+        term = Term.Lambda(Param(paramIdent, paramType), bodyTerm),
+        `type` = Value.Pi(paramTypeValue, piTypeClosure),
+      )
+    }
 
     case _ => TypeError.error("Failed to synthesis expression", expr.span)
     
   }
 
-  private def synthDependentType(param: Param[Expr], result: Expr)(
+  def synthPrimitiveType(name: String): Synth = name match {
+    case "'Type" => Synth(Term.Universe, Value.Universe)
+    case "Nothing" => Synth(Term.PrimitiveType(LiteralType.NothingType), Value.Universe)
+    case "Int" | "ℤ" => Synth(Term.PrimitiveType(LiteralType.IntType), Value.Universe)
+    case "Float" | "ℝ" => Synth(Term.PrimitiveType(LiteralType.FloatType), Value.Universe)
+    case "Bool" | "\uD835\uDD39" => Synth(Term.PrimitiveType(LiteralType.BoolType), Value.Universe)
+    case "Char" => Synth(Term.PrimitiveType(LiteralType.CharType), Value.Universe)
+    case "String" => Synth(Term.PrimitiveType(LiteralType.StringType), Value.Universe)
+    case _ => TypeError.error(s"Unknown primitive type: $name")
+  }
+
+  private def synthDependentType(param: Param[Expr], result: Expr, constructor: (Param[Term], Term) => Term)(
     implicit env: Environment.Typed[Value]
   ): Synth = {
     val (paramType, paramTypeType) = param.`type`.synth.unpack
@@ -149,7 +202,7 @@ private[core] object Synthesis {
       result.synth(_).unpack
     }
     Synth(
-      term = Term.Sigma(Param(param.ident, paramType), codomain),
+      term = constructor(Param(param.ident, paramType), codomain),
       `type` = Value.Universe,
     )
   }
@@ -215,14 +268,30 @@ private[core] object Synthesis {
     }
 
     case Constructor(_, _, _) => unreachable
+    
+    case OverloadedFunction(ident, body) => {
+      // recursively traverse the states of the overloaded function, synthesis each state
+      // and merge branches with the same type arguments
+      // TODO: finish this
+      ???
+    }
   }
   
-
   def synthParams(paramExprs: Seq[Param[Expr]])(
     implicit env: Environment.Typed[Value]
   ): Seq[Param[Term]] = {
     paramExprs.map { param =>
       Param(param.ident, param.`type`.elaborate(Term.Universe))
     }
+  }
+
+  def synthDefinitionRef(definition: Definition[Term])(
+    implicit env: Environment.Typed[Value]
+  ): Synth = definition match {
+    case definition: PureDefinition[Term] => Synth(
+      term = definition.params.buildLambda(definition.ident.buildInvoke(Term)).normalize,
+      `type` = definition.params.buildPiType(definition.resultType).eval,
+    )
+    case definition: OverloadedFunction[Term] => ???
   }
 }

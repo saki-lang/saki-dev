@@ -3,6 +3,8 @@ package saki.core.context
 import saki.core.*
 import saki.core.syntax.*
 
+import scala.collection.Seq
+
 trait Environment[T <: Entity] extends LocalContext[T]
   with MutableDefinitionContext
   with CurrentDefinitionContext
@@ -19,7 +21,7 @@ case class TypedEnvironment[T <: Entity](
 ) extends Environment[T] with TypedLocalMutableContext[T] {
 
   override def get(key: Var.Local): Option[T] = locals.get(key).map(_.value)
-  
+
   override def add(ident: Var.Local, value: T, `type`: T): TypedEnvironment[T] = {
     TypedEnvironment[T](
       definitions = definitions,
@@ -37,6 +39,8 @@ case class TypedEnvironment[T <: Entity](
   }
   
   override def getTyped(ident: Var.Local): Option[Typed[T]] = locals.get(ident)
+
+  def getTyped(name: String): Option[Typed[T]] = locals.get(Var.Local(name))
   
   override def add[Def[E <: Entity] <: Definition[E]](definition: Def[Term]): TypedEnvironment[T] = {
     TypedEnvironment[T](
@@ -74,9 +78,17 @@ case class TypedEnvironment[T <: Entity](
 object TypedEnvironment {
 
   def empty[T <: Entity]: TypedEnvironment[T] = TypedEnvironment[T]()
-  
-  def global[T <: Entity](definitions: Map[Var.Defined[Term, ?], Definition[Term]]): TypedEnvironment[T] = {
-    TypedEnvironment[T](definitions = definitions)
+
+  def global[T <: Entity](definitions: Seq[Definition[Term]]): TypedEnvironment[T] = {
+    val flattenDefinitions: Seq[Definition[Term]] = definitions.flatMap {
+      case inductive: Inductive[Term] => inductive +: inductive.constructors
+      case definition => Seq(definition)
+    }
+    TypedEnvironment[T](
+      definitions = flattenDefinitions.map(definition => definition.ident -> definition).toMap,
+      currentDefinition = None,
+      locals = Map.empty[Var.Local, Typed[T]],
+    )
   }
 
   def apply[T <: Entity](other: CurrentDefinitionContext): TypedEnvironment[T] = {

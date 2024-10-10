@@ -4,6 +4,7 @@ import saki.core.context.Environment
 import saki.core.syntax.*
 import saki.core.{RuntimeEntity, RuntimeEntityFactory}
 
+import scala.annotation.targetName
 import scala.collection.Seq
 
 type Type = Value
@@ -20,23 +21,31 @@ enum Value extends RuntimeEntity[Type] {
 
   case Pi(paramType: Type, closure: Value => Value)
 
+  case OverloadedPi(
+    states: Set[(Type, Value => Value)]
+  ) extends Value with OverloadedLambdaLike
+
   case Sigma(paramType: Type, closure: Value => Value)
 
   case Lambda(paramType: Type, body: Value => Value)
+
+  case OverloadedLambda(
+    states: Set[(Type, Value => Value)]
+  ) extends Value with OverloadedLambdaLike
 
   case Record(fields: Map[String, Value])
 
   case RecordType(fields: Map[String, Type])
 
   case InductiveType(
-    val inductive: Var.Defined[Term, Inductive],
-    val args: Seq[Value],
+    inductive: Var.Defined[Term, Inductive],
+    args: Seq[Value],
   )
 
   case InductiveVariant(
-    val cons: Var.Defined[Term, Constructor],
-    val consArgs: Seq[Value],
-    val inductiveArgs: Seq[Value],
+    cons: Var.Defined[Term, Constructor],
+    consArgs: Seq[Value],
+    inductiveArgs: Seq[Value],
   )
 
   override def infer(implicit env: Environment.Typed[Value]): Type = this.readBack.infer
@@ -62,6 +71,8 @@ enum Value extends RuntimeEntity[Type] {
       )
     }
 
+    case pi: OverloadedPi => Term.OverloadedPi(pi.readBackStates)
+
     case Sigma(paramType, codomain) => {
       val paramIdent = env.uniqueVariable
       val param = Value.variable(paramIdent)
@@ -84,6 +95,8 @@ enum Value extends RuntimeEntity[Type] {
       )
     }
 
+    case lambda: OverloadedLambda => Term.OverloadedLambda(lambda.readBackStates)
+
     case Record(fields) => Term.Record(fields.map((name, value) => (name, value.readBack)))
 
     case RecordType(fields) => Term.RecordType(fields.map((name, ty) => (name, ty.readBack)))
@@ -97,21 +110,21 @@ enum Value extends RuntimeEntity[Type] {
     }
   }
   
-  infix def unify(that: Type): Boolean = (this, that) match {
+  infix def unify(that: Type)(implicit env: Environment.Typed[Value]): Boolean = (this, that) match {
     case (Universe, Universe) => true
     case (Primitive(value1), Primitive(value2)) => value1 == value2
     case (PrimitiveType(ty1), PrimitiveType(ty2)) => ty1 == ty2
     case (Neutral(value1), Neutral(value2)) => value1 unify value2
     case (Pi(paramType1, closure1), Pi(paramType2, closure2)) => {
-      val param = Value.variable(Var.Local("param"))
+      val param = Value.variable(env.uniqueVariable)
       (paramType1 unify paramType2) && (closure1(param) unify closure2(param))
     }
     case (Sigma(paramType1, closure1), Sigma(paramType2, closure2)) => {
-      val param = Value.variable(Var.Local("param"))
+      val param = Value.variable(env.uniqueVariable)
       (paramType1 unify paramType2) && (closure1(param) unify closure2(param))
     }
     case (Lambda(paramType1, body1), Lambda(paramType2, body2)) => {
-      val param = Value.variable(Var.Local("param"))
+      val param = Value.variable(env.uniqueVariable)
       (paramType1 unify paramType2) && (body1(param) unify body2(param))
     }
     case (Record(fields1), Record(fields2)) => {
@@ -142,6 +155,81 @@ enum Value extends RuntimeEntity[Type] {
     case _ => false
   }
 
+  @targetName("subtype")
+  infix def <:<(that: Type)(
+    implicit env: Environment.Typed[Value]
+  ): Boolean = (this, that) match {
+
+    // Universe levels are considered cumulative
+    case (Universe, Universe) => true
+
+    // Primitive types and values must match exactly for subtyping
+    case (Primitive(value1), Primitive(value2)) => value1 == value2
+    case (PrimitiveType(ty1), PrimitiveType(ty2)) => ty1 == ty2
+
+    // Neutral values
+    case (Neutral(value1), Neutral(value2)) => value1 <:< value2
+
+    // Function type (Pi type) subtyping: Covariant in return type, contravariant in parameter type
+    case (Pi(paramType1, closure1), Pi(paramType2, closure2)) => {
+      paramType2 <:< paramType1 && {
+        val param = Value.variable(env.uniqueVariable)
+        closure1(param) <:< closure2(param)
+      }
+    }
+
+    // Sigma type subtyping: Covariant in both parameter type and dependent type
+    case (Sigma(paramType1, closure1), Sigma(paramType2, closure2)) => {
+      paramType1 <:< paramType2 && {
+        val param = Value.variable(env.uniqueVariable)
+        closure1(param) <:< closure2(param)
+      }
+    }
+
+    // Lambda types must match in parameter type and be subtypes in their bodies
+    case (Lambda(paramType1, body1), Lambda(paramType2, body2)) => {
+      paramType1 <:< paramType2 && {
+        val param = Value.variable(env.uniqueVariable)
+        body1(param) <:< body2(param)
+      }
+    }
+
+    // Record subtyping: all fields in `that` must be present in `this` and be subtypes
+    case (Record(fields1), Record(fields2)) => {
+      fields2.forall { (name, value2) =>
+        fields1.get(name) match {
+          case Some(value1) => value1 <:< value2
+          case None => false
+        }
+      }
+    }
+
+    // RecordType subtyping: all fields in `that` must be present in `this` and be subtypes
+    case (RecordType(fields1), RecordType(fields2)) => {
+      fields2.forall { (name, ty2) =>
+        fields1.get(name) match {
+          case Some(ty1) => ty1 <:< ty2
+          case None => false
+        }
+      }
+    }
+
+    // Inductive type subtyping: inductive types must match and arguments must be subtypes
+    case (InductiveType(inductive1, args1), InductiveType(inductive2, args2)) => {
+      inductive1 == inductive2 && args1.zip(args2).forall { case (arg1, arg2) => arg1 <:< arg2 }
+    }
+
+    // Inductive variant subtyping: constructors must match, and arguments must be subtypes
+    case (InductiveVariant(cons1, consArgs1, inductiveArgs1), InductiveVariant(cons2, consArgs2, inductiveArgs2)) => {
+      cons1 == cons2 &&
+      consArgs1.zip(consArgs2).forall { case (arg1, arg2) => arg1 <:< arg2 } &&
+      inductiveArgs1.zip(inductiveArgs2).forall { case (arg1, arg2) => arg1 <:< arg2 }
+    }
+
+    // Default case: no subtyping relationship
+    case _ => false
+  }
+
 }
 
 object Value extends RuntimeEntityFactory[Value] {
@@ -158,6 +246,12 @@ object Value extends RuntimeEntityFactory[Value] {
     Neutral(NeutralValue.FunctionInvoke(function, args))
   }
 
+  override def overloadedFunctionInvoke(
+    function: Var.Defined[Term, OverloadedFunction], args: Seq[Type]
+  ): Type = {
+    Neutral(NeutralValue.OverloadedFunctionInvoke(function, args))
+  }
+
   override def inductiveType(inductive: Var.Defined[Term, Inductive], args: Seq[Type]): Type = {
     Value.InductiveType(inductive, args)
   }
@@ -170,59 +264,19 @@ object Value extends RuntimeEntityFactory[Value] {
 
 }
 
-enum NeutralValue {
+private sealed trait OverloadedLambdaLike {
 
-  case Variable(ident: Var.Local)
+  def states: Set[(Type, Value => Value)]
 
-  case Apply(fn: NeutralValue, arg: Value)
-
-  case Projection(record: Value, field: String)
-
-  // global function call
-  case FunctionInvoke(
-    val fn: Var.Defined[Term, Function],
-    val args: Seq[Value],
-  )
-
-  case Match(
-    val scrutinees: Seq[Value],
-    val clauses: Seq[Clause[Value]]
-  )
-  
-  def infer(implicit env: Environment.Typed[Value]): Type = ???
-
-  def readBack(implicit env: Environment.Typed[Value]): Term = this match {
-    case Variable(ident) => Term.Variable(ident)
-    case Apply(fn, arg) => Term.Apply(fn.readBack, arg.readBack)
-    case Projection(record, field) => Term.Projection(record.readBack, field)
-    case FunctionInvoke(fnRef, args) => Term.FunctionInvoke(fnRef, args.map(_.readBack))
-    case Match(scrutinees, clauses) => Term.Match(scrutinees.map(_.readBack), clauses.map(_.map(_.readBack)))
-  }
-
-  infix def unify(that: NeutralValue): Boolean = (this, that) match {
-
-    case (Variable(ident1), Variable(ident2)) => ident1 == ident2
-    case (Apply(fn1, arg1), Apply(fn2, arg2)) => (fn1 unify fn2) && (arg1 unify arg2)
-
-    case (Projection(record1, field1), Projection(record2, field2)) => {
-      (record1 unify record2) && (field1 == field2)
-    }
-
-    case (FunctionInvoke(fn1, args1), FunctionInvoke(fn2, args2)) => {
-      fn1 == fn2 && args1.zip(args2).forall((arg1, arg2) => arg1 unify arg2)
-    }
-
-    case (Match(scrutinees1, clauses1), Match(scrutinees2, clauses2)) => {
-      scrutinees1.zip(scrutinees2).forall((scrutinee1, scrutinee2) => scrutinee1 unify scrutinee2) &&
-      clauses1.forall { clause1 =>
-        clauses2.find(_.patterns == clause1.patterns) match {
-          case Some(clause2) => clause1.body unify clause2.body
-          case None => false
-        }
+  def readBackStates(implicit env: Environment.Typed[Value]): Set[(Param[Term], Term)] = {
+    states.map { (paramType, closure) =>
+      val paramIdent = env.uniqueVariable
+      val param = Value.variable(paramIdent)
+      val body = env.withLocal(paramIdent, param, paramType) {
+        closure(param).readBack
       }
+      (Param(paramIdent, paramType.readBack), body)
     }
-
-    case _ => false
   }
-
 }
+

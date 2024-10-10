@@ -17,8 +17,10 @@ dependencies {
     antlr 'org.antlr:antlr4:4.11.1'
     implementation 'org.antlr:antlr4-runtime:4.11.1'
 
-    testImplementation 'org.scalactic:scalactic_3:3.2.19'
-    testImplementation 'org.scalatest:scalatest_3:3.2.19'
+    testImplementation "org.scalatest:scalatest_3:3.2.19"
+    testImplementation "org.junit.platform:junit-platform-launcher:1.10.0"
+    testRuntimeOnly "org.junit.platform:junit-platform-engine:1.10.0"
+    testRuntimeOnly "org.scalatestplus:junit-5-10_3:3.2.19.0"
 }
 
 generateGrammarSource {
@@ -26,5 +28,12 @@ generateGrammarSource {
     arguments += ["-visitor", "-long-messages", "-package", "saki.grammar"]
 }
 
+
 test {
+    useJUnitPlatform {
+        includeEngines 'scalatest'
+        testLogging {
+            events("passed", "skipped", "failed", "standard_error")
+        }
+    }
 }

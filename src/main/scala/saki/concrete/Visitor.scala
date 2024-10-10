@@ -1,8 +1,8 @@
 package saki.concrete
 
 import org.antlr.v4.runtime.ParserRuleContext
-import saki.concrete.SeqExprParser.{Associativity, Operator, UnaryType}
-import saki.concrete.syntax.{Definition, ExprTree, Spanned, Statement, SyntaxTree}
+import saki.concrete.SpineParser.{Associativity, Operator, Token, UnaryType}
+import saki.concrete.syntax.{Definition, Evaluation, ExprTree, Spanned, Statement, SyntaxTree}
 import saki.core.Literal.*
 import saki.core.{Pattern, SourceSpan, UnsupportedError, Literal as LiteralValue}
 import saki.core.syntax.{ApplyMode, Argument, Clause, Param, Var}
@@ -16,6 +16,10 @@ import scala.jdk.CollectionConverters.*
 class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
 
   private var symbols: ScopedMap[String, Operator | String] = ScopedMap.empty
+
+  private def binaryOperators: Set[Operator.Binary] = this.symbols.values.collect {
+    case operator: Operator.Binary => operator
+  }.toSet
 
   private def getBinaryOperator(symbol: String)(implicit ctx: ParserRuleContext): Operator.Binary = {
     this.symbols.get(symbol) match {
@@ -53,17 +57,18 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     result
   }
 
-  override def visitProgram(ctx: ProgramContext): Seq[Definition] = {
+  override def visitProgram(ctx: ProgramContext): Seq[Definition | Evaluation] = {
     ctx.entities.asScala.flatMap(_.visit)
   }
 
   // Module Elements
 
   extension (self: ModuleEntityContext) {
-    private def visit: Seq[Definition] = self match {
+    private def visit: Seq[Definition | Evaluation] = self match {
       case ctx: ModuleEntityImplContext => visitModuleEntityImpl(ctx)
       case ctx: ModuleEntityOpDeclContext => visitModuleEntityOpDecl(ctx)
       case ctx: ModuleEntityDefContext => visitModuleEntityDef(ctx)
+      case ctx: ModuleEntityEvalContext => Seq(visitModuleEntityEval(ctx))
     }
   }
 
@@ -77,6 +82,8 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   }
 
   override def visitModuleEntityDef(ctx: ModuleEntityDefContext): Seq[Definition] = ctx.definition.visit
+
+  override def visitModuleEntityEval(ctx: ModuleEntityEvalContext): Evaluation = Evaluation(ctx.expr.visit)
 
   // Definition
 
@@ -146,6 +153,10 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
 
   // block
 
+  override def visitBlock(ctx: BlockContext): Seq[Statement] = ctx.statements.asScala.map(_.visit)
+
+  def visitBlockExpr(ctx: BlockExprContext): ExprTree = ctx.visit
+
   extension (self: BlockExprContext) {
     private def visit: ExprTree = self match {
       case ctx: BlockExprExprContext => ctx.expr.visit
@@ -156,6 +167,8 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   }
 
   // Expr
+
+  def visitExpr(ctx: ExprContext): ExprTree = ctx.visit
 
   extension (self: ExprContext) {
     private def visit: ExprTree = self match {
@@ -169,7 +182,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       case ctx: ExprLambdaContext => visitExprLambda(ctx)
       case ctx: ExprCallWithLambdaContext => visitExprCallWithLambda(ctx)
       case ctx: ExprEliminationContext => visitExprElimination(ctx)
-//      case ctx: ExprSeqContext => visitExprSeq(ctx)
+      case ctx: ExprSpineContext => visitExprSpine(ctx)
       case ctx: ExprIfContext => visitExprIf(ctx)
       case ctx: ExprMatchContext => visitExprMatch(ctx)
       case ctx: ExprArrowTypeContext => visitExprArrowType(ctx)
@@ -260,7 +273,39 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     ExprTree.Elimination(subject, member)
   }
 
-//  override def visitExprSeq(ctx: ExprSeqContext): Expr = ???
+  override def visitExprSpine(ctx: ExprSpineContext): ExprTree = {
+    // In-order traversal of the expression spine
+    def traversal(ctx: ExprContext): Seq[ExprContext] = ctx match {
+      case spine: ExprSpineContext => traversal(spine.lhs) ++ traversal(spine.rhs)
+      case expr => Seq(expr)
+    }
+
+    // Construct the expression spine
+    val tokens: Seq[Token] = traversal(ctx).map {
+      case atom: ExprAtomContext => atom.value match {
+        case operator: AtomOperatorContext => Token.Op(this.getOperator(operator.op.getText)(operator))
+        case other => Token.Atom[ExprTree](visitExprAtom(atom))
+      }
+      case other => Token.Atom[ExprTree](other.visit)
+    }
+
+    val spineExprs = SpineParser.parseExpressions(tokens, this.binaryOperators)
+
+    given ParserRuleContext = ctx
+
+    def visitSpineParserExpr(expr: SpineParser.Expr): ExprTree = expr match {
+      case SpineParser.Expr.Atom(atom) => atom.asInstanceOf[ExprTree]
+      case SpineParser.Expr.UnaryExpr(op, expr) => {
+        ExprTree.FunctionCall(ExprTree.Variable(op.symbol), Seq(Argument(visitSpineParserExpr(expr))))
+      }
+      case SpineParser.Expr.BinaryExpr(op, lhs, rhs) => {
+        ExprTree.FunctionCall(ExprTree.Variable(op.symbol), Seq(Argument(visitSpineParserExpr(lhs)), Argument(visitSpineParserExpr(rhs))))
+      }
+    }
+
+    val spine = spineExprs.map(visitSpineParserExpr)
+    ExprTree.FunctionCall(spine.head, spine.tail.map(Argument(_, ApplyMode.Explicit)))
+  }
 
   override def visitExprIf(ctx: ExprIfContext): ExprTree = {
     given ParserRuleContext = ctx
@@ -354,6 +399,8 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   }
 
   // Statement
+
+  def visitStatement(ctx: StatementContext): Statement = ctx.visit
 
   extension (self: StatementContext) {
     private def visit: Statement = self match {
@@ -489,7 +536,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
         codomain <- accReturnType  // Ensure the accumulated return type is defined
       } yield ExprTree.Pi(Param(param.ident, paramType), codomain)
       // Construct the Lambda expression with the updated body and return type (which could be None)
-      val lambdaExpr = ExprTree.Lambda(param, accBody, piReturnType)
+      val lambdaExpr = ExprTree.Lambda(param, accBody, returnType)
       // Accumulate the updated Lambda and Pi-type return type
       (lambdaExpr, piReturnType)
     }._1  // Return only the Lambda expression, ignoring the accumulated return type
