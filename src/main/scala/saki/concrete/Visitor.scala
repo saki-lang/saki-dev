@@ -146,6 +146,10 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
 
   // block
 
+  override def visitBlock(ctx: BlockContext): Seq[Statement] = ctx.statements.asScala.map(_.visit)
+
+  def visitBlockExpr(ctx: BlockExprContext): ExprTree = ctx.visit
+
   extension (self: BlockExprContext) {
     private def visit: ExprTree = self match {
       case ctx: BlockExprExprContext => ctx.expr.visit
@@ -156,6 +160,8 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   }
 
   // Expr
+
+  def visitExpr(ctx: ExprContext): ExprTree = ctx.visit
 
   extension (self: ExprContext) {
     private def visit: ExprTree = self match {
@@ -355,6 +361,8 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
 
   // Statement
 
+  def visitStatement(ctx: StatementContext): Statement = ctx.visit
+
   extension (self: StatementContext) {
     private def visit: Statement = self match {
       case ctx: StatementExprContext => visitStatementExpr(ctx)
@@ -489,7 +497,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
         codomain <- accReturnType  // Ensure the accumulated return type is defined
       } yield ExprTree.Pi(Param(param.ident, paramType), codomain)
       // Construct the Lambda expression with the updated body and return type (which could be None)
-      val lambdaExpr = ExprTree.Lambda(param, accBody, piReturnType)
+      val lambdaExpr = ExprTree.Lambda(param, accBody, returnType)
       // Accumulate the updated Lambda and Pi-type return type
       (lambdaExpr, piReturnType)
     }._1  // Return only the Lambda expression, ignoring the accumulated return type

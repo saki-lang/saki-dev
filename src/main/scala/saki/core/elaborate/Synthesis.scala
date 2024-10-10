@@ -48,6 +48,20 @@ private[core] object Synthesis {
 
   def synth(expr: Expr)(implicit env: Environment.Typed[Value]): Synth = expr match {
 
+    case Expr.Unresolved(name) => {
+      try {
+        env.getTyped(name) match {
+          case Some(Typed(value, ty)) => Synth(value.readBack, ty)
+          // If the variable is not found in the environment,
+          // indicating that it is a primitive variable or an unknown variable,
+          // try to synthesize it as a primitive type
+          case None => synthPrimitiveType(name)
+        }
+      } catch { // TODO: refactor error handling
+        case TypeError(message, _) => TypeError.error(message, expr.span)
+      }
+    }
+
     case Expr.Universe() => Synth(Term.Universe, Value.Universe)
 
     case Expr.Primitive(value) => Synth(Term.Primitive(value), Value.PrimitiveType(value.ty))
@@ -127,15 +141,51 @@ private[core] object Synthesis {
       )
     }
 
-    case Expr.Pi(param, result) => synthDependentType(param, result)
+    case Expr.Pi(param, result) => synthDependentType(param, result, Term.Pi.apply)
 
-    case Expr.Sigma(param, result) => synthDependentType(param, result)
+    case Expr.Sigma(param, result) => synthDependentType(param, result, Term.Sigma.apply)
+
+    case Expr.Lambda(param, body, returnType) => {
+      val paramIdent = param.ident
+      val (paramType, _) = param.`type`.synth.unpack
+      val paramTypeValue = paramType.eval
+      val paramVariable = Value.variable(paramIdent)
+      val (bodyTerm: Term, bodyType: Type) = env.withLocal(paramIdent, paramVariable, paramTypeValue) {
+        implicit env => body.synth(env).unpack
+      }
+      val returnTypeValue: Value = returnType match {
+        case Some(returnTypeExpr) => {
+          val (returnType, _) = returnTypeExpr.synth.unpack
+          val returnTypeValue = returnType.eval
+          if !(returnTypeValue <:< bodyType) then {
+            TypeError.mismatch(returnType.toString, bodyType.toString, returnTypeExpr.span)
+          }
+          returnTypeValue
+        }
+        case None => bodyType
+      }
+      Synth(
+        term = Term.Lambda(Param(paramIdent, paramType), bodyTerm),
+        `type` = Value.Pi(paramTypeValue, _ => returnTypeValue),
+      )
+    }
 
     case _ => TypeError.error("Failed to synthesis expression", expr.span)
     
   }
 
-  private def synthDependentType(param: Param[Expr], result: Expr)(
+  def synthPrimitiveType(name: String): Synth = name match {
+    case "'Type" => Synth(Term.Universe, Value.Universe)
+    case "Nothing" => Synth(Term.PrimitiveType(LiteralType.NothingType), Value.Universe)
+    case "Int" | "ℤ" => Synth(Term.PrimitiveType(LiteralType.IntType), Value.Universe)
+    case "Float" | "ℝ" => Synth(Term.PrimitiveType(LiteralType.FloatType), Value.Universe)
+    case "Bool" | "\uD835\uDD39" => Synth(Term.PrimitiveType(LiteralType.BoolType), Value.Universe)
+    case "Char" => Synth(Term.PrimitiveType(LiteralType.CharType), Value.Universe)
+    case "String" => Synth(Term.PrimitiveType(LiteralType.StringType), Value.Universe)
+    case _ => TypeError.error(s"Unknown primitive type: $name")
+  }
+
+  private def synthDependentType(param: Param[Expr], result: Expr, constructor: (Param[Term], Term) => Term)(
     implicit env: Environment.Typed[Value]
   ): Synth = {
     val (paramType, paramTypeType) = param.`type`.synth.unpack
@@ -143,7 +193,7 @@ private[core] object Synthesis {
       result.synth(_).unpack
     }
     Synth(
-      term = Term.Sigma(Param(param.ident, paramType), codomain),
+      term = constructor(Param(param.ident, paramType), codomain),
       `type` = Value.Universe,
     )
   }

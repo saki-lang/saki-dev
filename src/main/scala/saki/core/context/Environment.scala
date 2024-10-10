@@ -19,7 +19,7 @@ case class TypedEnvironment[T <: Entity](
 ) extends Environment[T] with TypedLocalMutableContext[T] {
 
   override def get(key: Var.Local): Option[T] = locals.get(key).map(_.value)
-  
+
   override def add(ident: Var.Local, value: T, `type`: T): TypedEnvironment[T] = {
     TypedEnvironment[T](
       definitions = definitions,
@@ -37,6 +37,8 @@ case class TypedEnvironment[T <: Entity](
   }
   
   override def getTyped(ident: Var.Local): Option[Typed[T]] = locals.get(ident)
+
+  def getTyped(name: String): Option[Typed[T]] = locals.get(Var.Local(name))
   
   override def add[Def[E <: Entity] <: Definition[E]](definition: Def[Term]): TypedEnvironment[T] = {
     TypedEnvironment[T](
