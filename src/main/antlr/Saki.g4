@@ -28,7 +28,7 @@ expr
     |   '(' lambdaParamList=paramList ')' (':' returnType=expr)? '=>' body=blockExpr                   # exprLambda
     |   func=expr ('|' lambdaParamList=untypedParamList '|' (':' returnType=expr)?)? body=block  # exprCallWithLambda
     |   subject=expr '.' member=Identifier ('[' implicitArgList=argList ']')?     # exprElimination
-//    |   lhs=expr rhs=expr                                                 # exprSeq
+    |   lhs=expr rhs=expr                                                 # exprSpine
     // Control
     |   'if' NL* cond=blockExpr NL* 'then' NL* then=blockExpr NL* 'else' NL* else=blockExpr                    # exprIf
     |   'match' value=expr '{' NL* cases+=matchCase (NL+ cases+=matchCase)* NL* '}'                      # exprMatch
@@ -41,6 +41,7 @@ expr
     |   'record' (':' super=expr)? '{' NL* fields+=identTypePair (NL+ fields+=identTypePair)* NL* '}' # exprRecordType
     |   recordType=expr '^' '{' NL* fields+=fieldAssignment (NL+ fields+=fieldAssignment)* NL* '}' # exprRecord
     ;
+
 
 blockExpr
     :   expr        # blockExprExpr

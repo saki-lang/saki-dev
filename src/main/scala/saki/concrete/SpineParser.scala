@@ -4,8 +4,9 @@ import scala.annotation.targetName
 import scala.collection.mutable
 import scala.util.boundary
 import scala.util.boundary.break
+import scala.collection.Seq
 
-object SeqExprParser:
+object SpineParser:
 
   enum Token {
     case LeftParenthesis
@@ -130,7 +131,7 @@ object SeqExprParser:
             throw new IllegalArgumentException("Expected ')'")
           }
           expression
-        case token@Token.Atom(value) =>
+        case token @ Token.Atom(_) =>
           this.consumeToken()
           Expr.Atom(token.value)
         case _ => throw new IllegalArgumentException(s"Unexpected token: ${currentToken.toString}")
@@ -340,4 +341,4 @@ object SeqExprParser:
     OperatorExpressionParser(tokens, binaryOperators).expressions
   }
 
-end SeqExprParser
+end SpineParser
