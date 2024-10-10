@@ -11,6 +11,7 @@ moduleEntity
     |   'impl' ('[' paramList ']')? type=expr
             '{' NL* (defs+=definition (NL+ defs+=definition)*)? NL* '}'         # moduleEntityImpl
     |   operatorDeclaration                                                     # moduleEntityOpDecl
+    |   'eval' value=expr                                                       # moduleEntityEval
     ;
 
 expr

@@ -3,7 +3,7 @@ package saki.cli
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 import saki.core.{Error, InfoSpan}
 import saki.concrete.Visitor
-import saki.concrete.syntax.Definition
+import saki.concrete.syntax.{Definition, Evaluation}
 import saki.core.syntax.Module
 import saki.grammar.{SakiLexer, SakiParser}
 
@@ -52,8 +52,14 @@ def printSourceWithHighlight(source: String, span: InfoSpan): Unit = {
 def compileModule(source: String): Module = {
   val lexer = SakiLexer(CharStreams.fromString(source))
   val parser = SakiParser(CommonTokenStream(lexer))
-  val definitions = Visitor().visitProgram(parser.program())
+  val entities = Visitor().visitProgram(parser.program())
+  val definitions = entities.collect { case defn: Definition => defn }
+  val evaluations = entities.collect { case eval: Evaluation => eval }
   catchError(source) {
-    Module.from(definitions.map(_.emit))
+    val module = Module.from(definitions.map(_.emit))
+    evaluations.foreach { evaluation =>
+      println(s"${module.eval(evaluation.expr.emit)}")
+    }
+    module
   }
 }

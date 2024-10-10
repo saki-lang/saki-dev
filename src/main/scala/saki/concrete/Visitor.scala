@@ -2,7 +2,7 @@ package saki.concrete
 
 import org.antlr.v4.runtime.ParserRuleContext
 import saki.concrete.SpineParser.{Associativity, Operator, Token, UnaryType}
-import saki.concrete.syntax.{Definition, ExprTree, Spanned, Statement, SyntaxTree}
+import saki.concrete.syntax.{Definition, Evaluation, ExprTree, Spanned, Statement, SyntaxTree}
 import saki.core.Literal.*
 import saki.core.{Pattern, SourceSpan, UnsupportedError, Literal as LiteralValue}
 import saki.core.syntax.{ApplyMode, Argument, Clause, Param, Var}
@@ -57,17 +57,18 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     result
   }
 
-  override def visitProgram(ctx: ProgramContext): Seq[Definition] = {
+  override def visitProgram(ctx: ProgramContext): Seq[Definition | Evaluation] = {
     ctx.entities.asScala.flatMap(_.visit)
   }
 
   // Module Elements
 
   extension (self: ModuleEntityContext) {
-    private def visit: Seq[Definition] = self match {
+    private def visit: Seq[Definition | Evaluation] = self match {
       case ctx: ModuleEntityImplContext => visitModuleEntityImpl(ctx)
       case ctx: ModuleEntityOpDeclContext => visitModuleEntityOpDecl(ctx)
       case ctx: ModuleEntityDefContext => visitModuleEntityDef(ctx)
+      case ctx: ModuleEntityEvalContext => Seq(visitModuleEntityEval(ctx))
     }
   }
 
@@ -81,6 +82,8 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   }
 
   override def visitModuleEntityDef(ctx: ModuleEntityDefContext): Seq[Definition] = ctx.definition.visit
+
+  override def visitModuleEntityEval(ctx: ModuleEntityEvalContext): Evaluation = Evaluation(ctx.expr.visit)
 
   // Definition
 

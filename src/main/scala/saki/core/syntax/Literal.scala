@@ -41,4 +41,14 @@ enum LiteralType {
   case FloatType
   case CharType
   case StringType
+
+  override def toString: String = this match {
+    case NothingType => "Nothing"
+    case UnitType => "Unit"
+    case BoolType => "Bool"
+    case IntType => "Int"
+    case FloatType => "Float"
+    case CharType => "Char"
+    case StringType => "String"
+  }
 }

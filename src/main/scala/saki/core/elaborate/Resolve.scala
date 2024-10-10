@@ -1,5 +1,6 @@
 package saki.core.elaborate
 
+import saki.core.context.{DefinitionContext, Environment}
 import saki.core.{SourceSpan, TypeError}
 import saki.core.syntax.*
 import saki.util.{Graph, LateInit}
@@ -48,7 +49,10 @@ object Resolve {
   }
 
   object Context {
-    // def apply(): Resolve.Context = empty
+    def apply(env: DefinitionContext): Resolve.Context = {
+      val variables = env.definitions.keys
+      Context(variableMap = variables.map(variable => variable.name -> variable).toMap)
+    }
     def apply(env: Map[String, Var]): Resolve.Context = new Context(env)
     def empty: Resolve.Context = Context()
   }
