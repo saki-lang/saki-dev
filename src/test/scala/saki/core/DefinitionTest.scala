@@ -55,12 +55,12 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     module.eval(parseExpr("fib(n0)")) should be (module.eval(parseExpr("n0")))
 
     // Test fibonacci: fib(1) = 1, fib(2) = 1, fib(3) = 2, fib(4) = 3, fib(5) = 5, fib(6) = 8
-    module.eval(parseExpr("fib(n1)")) should be(module.eval(parseExpr("n1")))
-    module.eval(parseExpr("fib(n2)")) should be(module.eval(parseExpr("n1")))
-    module.eval(parseExpr("fib(n3)")) should be(module.eval(parseExpr("n2")))
-    module.eval(parseExpr("fib(n4)")) should be(module.eval(parseExpr("n3")))
-    module.eval(parseExpr("fib(n5)")) should be(module.eval(parseExpr("n5")))
-    module.eval(parseExpr("fib(n6)")) should be(module.eval(parseExpr("n8")))
+    module.eval(parseExpr("fib(n1)")) should be (module.eval(parseExpr("n1")))
+    module.eval(parseExpr("fib(n2)")) should be (module.eval(parseExpr("n1")))
+    module.eval(parseExpr("fib(n3)")) should be (module.eval(parseExpr("n2")))
+    module.eval(parseExpr("fib(n4)")) should be (module.eval(parseExpr("n3")))
+    module.eval(parseExpr("fib(n5)")) should be (module.eval(parseExpr("n5")))
+    module.eval(parseExpr("fib(n6)")) should be (module.eval(parseExpr("n8")))
   }
 
 }
