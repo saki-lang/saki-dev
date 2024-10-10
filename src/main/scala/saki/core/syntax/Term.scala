@@ -166,11 +166,23 @@ enum Term extends RuntimeEntity[Type] {
       case _ => throw TypeError("Cannot apply non-function", None)
     }
 
-    // Lambda returns a non-dependent function type
-    case Lambda(param, body) => Value.Pi(param.`type`.infer, _ => body.infer)
+    // Lambda returns a dependent function type
+    case Lambda(param, body) => {
+      val paramType = param.`type`.infer
+      def closure(arg: Value): Value = {
+        val argVar = Typed[Value](arg, paramType)
+        env.withLocal(param.ident, argVar) { implicit env => body.infer(env) }
+      }
+      Value.Pi(paramType, closure)
+    }
 
-    case OverloadedLambda(states) => Value.OverloadedPi(states.map {
-      (param, body) => (param.`type`.infer, _ => body.infer)
+    case OverloadedLambda(states) => Value.OverloadedPi(states.map { (param, body) =>
+      val paramType = param.`type`.infer
+      def closure(arg: Value): Value = {
+        val argVar = Typed[Value](arg, paramType)
+        env.withLocal(param.ident, argVar) { implicit env => body.infer(env) }
+      }
+      (paramType, closure)
     })
 
     case Projection(record, field) => record.infer match {

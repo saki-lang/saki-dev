@@ -164,9 +164,18 @@ private[core] object Synthesis {
         }
         case None => bodyType
       }
+
+      // Closure for the Pi type
+      def piTypeClosure(arg: Value): Value = {
+        val argVar: Typed[Value] = Typed[Value](arg, paramTypeValue)
+        env.withLocal(param.ident, argVar) {
+          implicit env => returnTypeValue.readBack(env).eval(env)
+        }
+      }
+
       Synth(
         term = Term.Lambda(Param(paramIdent, paramType), bodyTerm),
-        `type` = Value.Pi(paramTypeValue, _ => returnTypeValue),
+        `type` = Value.Pi(paramTypeValue, piTypeClosure),
       )
     }
 

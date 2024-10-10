@@ -109,9 +109,9 @@ class ExprTest extends AnyFlatSpec with should.Matchers {
       Value.Pi(
         Value.Universe, A => Value.Pi(
           Value.Universe, B => Value.Pi(
-            A, t => Value.Pi(
+            A, _ => Value.Pi(
               Value.Pi(A, _ => B),
-              f => f(t)
+              _ => B
             )
           )
         )
