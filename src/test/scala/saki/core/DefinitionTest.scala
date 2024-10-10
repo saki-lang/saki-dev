@@ -5,7 +5,7 @@ import org.scalatest.matchers.*
 import saki.cli.compileModule
 
 class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
-  it should "" in {
+  it should "fibonacci" in {
     val code = {
       """
         type Nat = inductive {
@@ -61,6 +61,43 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     module.eval(parseExpr("fib(n4)")) should be (module.eval(parseExpr("n3")))
     module.eval(parseExpr("fib(n5)")) should be (module.eval(parseExpr("n5")))
     module.eval(parseExpr("fib(n6)")) should be (module.eval(parseExpr("n8")))
+  }
+
+  it should "eq refl" in {
+    val code = {
+      // TODO: definition should also be dependently typed
+      """
+        def eq(A: 'Type, a b: A): 'Type = ∀(P: A -> 'Type) -> P(a) -> P(b)
+
+        def refl(A: 'Type, a: A): eq(A, a, a) = {
+            (P: A -> 'Type, pa: P(a)) => pa
+        }
+
+        def symmetry(A: 'Type, a b: A, e: eq(A, a, b): eq(A, b, a) = {
+            e((b: A) => eq(A, b, a), refl(A, a))
+        }
+      """
+    }
+    compileModule(code)
+  }
+
+  it should "option" in {
+    val code = {
+      """
+        type Option[A: 'Type] = inductive {
+            None
+            Some(A)
+        }
+
+        def map[A: 'Type, B: 'Type](option: Option[A], transform: A -> B): Option[B] = {
+            match option {
+                case Option[A]::None => Option[B]::None
+                case Option[A]::Some(value) => Option[B]::Some(transform(value))
+            }
+        }
+      """
+    }
+    val module = compileModule(code)
   }
 
 }

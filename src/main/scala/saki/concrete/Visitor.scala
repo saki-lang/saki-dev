@@ -465,6 +465,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     val inductiveIdent = ctx.inductive.getText
     val constructorIdent = s"${inductiveIdent}::${ctx.constructor.getText}"
     if ctx.indExplicitArgList != null || ctx.indImplicitArgList != null then {
+      // TODO: support constructor with arguments
       UnsupportedError.unsupported("Pattern constructor with arguments", ctx.span)
     }
     val patterns = Option(ctx.consPatternList).map(_.patterns.asScala.map(_.visit.get)).getOrElse(Seq.empty)

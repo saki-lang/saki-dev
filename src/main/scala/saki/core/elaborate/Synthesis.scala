@@ -2,7 +2,7 @@ package saki.core.elaborate
 
 import saki.core.{Param, TypeError}
 import saki.core.context.{Environment, Typed}
-import saki.core.domain.{Type, Value}
+import saki.core.domain.{NeutralValue, Type, Value}
 import saki.core.syntax.{*, given}
 import saki.util.unreachable
 
@@ -41,9 +41,7 @@ private[core] object Synthesis {
   }
 
   case class Synth(term: Term, `type`: Type) {
-
     def unpack: (Term, Type) = (term, `type`)
-
   }
 
   def synth(expr: Expr)(implicit env: Environment.Typed[Value]): Synth = expr match {
@@ -244,6 +242,9 @@ private[core] object Synthesis {
 
     case inductiveExpr: Inductive[Expr] => {
       val params = synthParams(inductiveExpr.params)(env)
+      val inductiveParamBindingMap = params.map { param =>
+        (param.ident, Typed(Value.variable(param.ident), param.`type`.eval))
+      }.toMap
       val constructors = ArrayBuffer.empty[Constructor[Term]]
       val inductiveDefinition: Inductive[Term] = Inductive(Var.Defined(inductiveExpr.ident.name), params, constructors)
       inductiveDefinition.ident.definition := inductiveDefinition
@@ -260,7 +261,9 @@ private[core] object Synthesis {
             Constructor(consIdent, indIdent, constructorParams)
           }
           constructorDefinition.ident.definition := constructorDefinition
-          constructorParams ++= synthParams(constructor.params)
+          constructorParams ++= env.withLocals(inductiveParamBindingMap) {
+            synthParams(constructor.params)
+          }
           constructorDefinition
         }
         inductiveDefinition

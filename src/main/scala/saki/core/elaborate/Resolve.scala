@@ -73,7 +73,20 @@ object Resolve {
 
       case Expr.Unresolved(name) => ctx.get(name) match {
         case Some(variable) => (Expr.Variable(variable), ctx)
-        case None => TypeError.error(s"Unresolved variable: $name", span)
+        case None => {
+          val resolved: Expr = name match {
+            case "'Type" => Expr.Universe()
+            case "Nothing" => Expr.PrimitiveType(LiteralType.NothingType)
+            case "Unit" => Expr.PrimitiveType(LiteralType.UnitType)
+            case "Bool" | "\uD835\uDD39" => Expr.PrimitiveType(LiteralType.BoolType)
+            case "Int" | "ℤ" => Expr.PrimitiveType(LiteralType.IntType)
+            case "Float" | "ℝ" => Expr.PrimitiveType(LiteralType.FloatType)
+            case "Char" => Expr.PrimitiveType(LiteralType.CharType)
+            case "String" => Expr.PrimitiveType(LiteralType.StringType)
+            case _ => TypeError.error(s"Unresolved variable: $name", span)
+          }
+          (resolved, ctx)
+        }
       }
 
       case Expr.Hole(_) => {
@@ -210,10 +223,10 @@ object Resolve {
       }
 
       case Inductive(ident, params, constructors) => {
-        val (resolvedParams, _) = params.resolve(global)
+        val (resolvedParams, ctx) = params.resolve(global)
         global += ident
         val resolvedConstructors: Seq[Constructor[Expr]] = constructors.map { constructor =>
-          val (resolvedConsParams, _) = constructor.params.resolve(global)
+          val (resolvedConsParams, _) = constructor.params.resolve(ctx + ident)
           global += constructor.ident
           Constructor[Expr](constructor.ident, constructor.owner, resolvedConsParams)
         }
