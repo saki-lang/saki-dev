@@ -69,7 +69,7 @@ enum Term extends RuntimeEntity[Type] {
     case Record(fields) => s"{ ${fields.map { case (k, v) => s"$k = $v" }.mkString(", ")} }"
     case RecordType(fields) => s"record { ${fields.map { case (k, v) => s"$k: $v" }.mkString(", ")} }"
     case Apply(fn, arg) => s"$fn($arg)"
-    case Lambda(param, body) => s"λ(${param.name}) => $body"
+    case Lambda(param, body) => s"λ(${param.name} : ${param.`type`}) => $body"
     case OverloadedLambda(_) => s"#SuperPositionLambda"
     case Projection(record, field) => s"$record.$field"
   }

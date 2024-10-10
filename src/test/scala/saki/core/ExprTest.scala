@@ -6,7 +6,7 @@ import org.scalatest.matchers.should
 import saki.cli.catchError
 import saki.concrete.Visitor
 import saki.core.context.Environment
-import saki.core.domain.Value
+import saki.core.domain.{NeutralValue, Value}
 import saki.core.syntax.Var
 import saki.grammar.{SakiLexer, SakiParser}
 
@@ -22,6 +22,19 @@ class ExprTest extends AnyFlatSpec with should.Matchers {
   extension (literalType: LiteralType) {
     def term: Term.PrimitiveType = Term.PrimitiveType(literalType)
     def value: Value.PrimitiveType = Value.PrimitiveType(literalType)
+  }
+
+  extension (value: Value) {
+    def neutral: NeutralValue = value match {
+      case Value.Neutral(neutral) => neutral
+      case _ => throw new Exception("Not a neutral value.")
+    }
+
+    def apply(arg: Value): Value = value match {
+      case Value.Lambda(_, closure) => closure(arg)
+      case Value.Neutral(neutral) => Value.Neutral(NeutralValue.Apply(neutral, arg))
+      case _ => throw new Exception("Not a function.")
+    }
   }
 
   import Literal.*
@@ -50,30 +63,58 @@ class ExprTest extends AnyFlatSpec with should.Matchers {
   }
 
   it should "synth primitive type Int" in {
-    val (expr, value) = synthExpr("1")
-    expr should be (Term.Primitive(IntValue(1)))
-    value should be (Value.PrimitiveType(IntType))
+    val (term, ty) = synthExpr("1")
+    term should be (Term.Primitive(IntValue(1)))
+    ty should be (Value.PrimitiveType(IntType))
   }
 
   it should "synth lambda" in {
-    val (expr, value) = synthExpr("(x: Int) => x")
-    expr should be (Term.Lambda(Param(!"x", IntType.term), Term.Variable(!"x")))
-    value.readBack should be (Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType)).readBack)
+    val (term, ty) = synthExpr("(x: Int) => x")
+    term should be (Term.Lambda(Param(!"x", IntType.term), Term.Variable(!"x")))
+    ty.readBack should be (Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType)).readBack)
   }
 
   it should "synth lambda with explicit type" in {
-    val (expr, value) = synthExpr("(x: Int): Int => x")
-    expr should be (Term.Lambda(Param(!"x", IntType.term), Term.Variable(!"x")))
-    value.readBack should be (Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType)).readBack)
+    val (term, ty) = synthExpr("(x: Int): Int => x")
+    term should be (Term.Lambda(Param(!"x", IntType.term), Term.Variable(!"x")))
+    ty.readBack should be (Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType)).readBack)
   }
 
-  it should "synth high-order lambda with explicit type" in {
-    val (expr, value) = synthExpr("(x: Int) => (y: Int) => x")
-    expr should be (Term.Lambda(Param(!"x", IntType.term), Term.Lambda(Param(!"y", IntType.term), Term.Variable(!"x"))))
-    value.readBack should be (
+  it should "synth high-order lambda" in {
+    val (term, ty) = synthExpr("(x: Int) => (y: Int) => x")
+    term should be (Term.Lambda(Param(!"x", IntType.term), Term.Lambda(Param(!"y", IntType.term), Term.Variable(!"x"))))
+    ty.readBack should be (
       Value.Pi(
         Value.PrimitiveType(LiteralType.IntType),
         _ => Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType))
+      ).readBack
+    )
+  }
+
+  it should "synth dependent typed lambda" in {
+    val (term, ty) = synthExpr("(A: 'Type) => (B: 'Type) => (t: A) => (f: A -> B) => f(t)")
+    term.normalize should be (
+      Value.Lambda(
+        Value.Universe, A => Value.Lambda(
+          Value.Universe, B => Value.Lambda(
+            A, t => Value.Lambda(
+              Value.Pi(A, _ => B),
+              f => f(t)
+            )
+          )
+        )
+      ).readBack
+    )
+    ty.readBack should be (
+      Value.Pi(
+        Value.Universe, A => Value.Pi(
+          Value.Universe, B => Value.Pi(
+            A, t => Value.Pi(
+              Value.Pi(A, _ => B),
+              f => f(t)
+            )
+          )
+        )
       ).readBack
     )
   }
@@ -107,6 +148,6 @@ class ExprTest extends AnyFlatSpec with should.Matchers {
 
   it should "if expr" in {
     val (expr, _) = synthCodeBlock("if true then 114 else 514")
-    expr should be (IntValue(114).term.normalize)
+    expr.normalize should be (IntValue(114).term)
   }
 }
