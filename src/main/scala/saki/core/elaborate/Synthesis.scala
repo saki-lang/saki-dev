@@ -1,6 +1,6 @@
 package saki.core.elaborate
 
-import saki.core.{Param, TypeError}
+import saki.core.{Entity, Param, TypeError}
 import saki.core.context.{Environment, Typed}
 import saki.core.domain.{NeutralValue, Type, Value}
 import saki.core.syntax.{*, given}
@@ -9,7 +9,7 @@ import saki.util.unreachable
 import scala.collection.Seq
 import scala.collection.mutable.ArrayBuffer
 
-private[core] object Synthesis {
+private[core] object Synthesis:
 
   def elaborate(expr: Expr, expectedType: Term)(
     implicit env: Environment.Typed[Value]
@@ -27,7 +27,10 @@ private[core] object Synthesis {
             }
           }
         )
-        case ty => TypeError.mismatch("Π (x : A) -> B", ty.toString, expr.span)
+        case ty => {
+          // TODO: Rewrite this error message
+          TypeError.mismatch("Π (x : A) -> B", ty.toString, expr.span)
+        }
       }
     }
     case Expr.Hole(_) =>  TypeError.error("Holes are not allowed in this context", expr.span)
@@ -72,11 +75,14 @@ private[core] object Synthesis {
         case None => env.getDefinition(definitionVar) match {
           case Some(definition) => {
             definition.ident.definition :=! definition
-            synthDefinitionRef(definition)
+            synthDecl(definition)
           }
-          case None => TypeError.error(s"Unbound definition: ${definitionVar.name}", expr.span)
+          case None => env.declarations.get(definitionVar) match {
+            case Some(declaration) => synthDecl(declaration)
+            case None => TypeError.error(s"Unresolved reference: ${definitionVar.name}", expr.span)
+          }
         }
-        case Some(definition: Definition[Term]) => synthDefinitionRef(definition)
+        case Some(definition: Definition[Term]) => synthDecl(definition)
       }
       case variable: Var.Local => env.locals.get(variable) match {
         case Some(ty) => Synth(ty.value.readBack, ty.`type`)
@@ -195,8 +201,8 @@ private[core] object Synthesis {
   private def synthDependentType(param: Param[Expr], result: Expr, constructor: (Param[Term], Term) => Term)(
     implicit env: Environment.Typed[Value]
   ): Synth = {
-    val (paramType, paramTypeType) = param.`type`.synth.unpack
-    val (codomain, _) = env.withLocal(param.ident, paramType.eval, paramTypeType) {
+    val (paramType, _) = param.`type`.synth.unpack
+    val (codomain, _) = env.withLocal(param.ident, Value.variable(param.ident), paramType.eval) {
       result.synth(_).unpack
     }
     Synth(
@@ -224,46 +230,44 @@ private[core] object Synthesis {
     implicit env: Environment.Typed[Value]
   ): Definition[Term] = definition match {
     case Function(ident, paramExprs, resultTypeExpr, isNeutral, pristineBody) => {
-      // TODO: Compute `isNeutral` using a reference graph
-      val resultType = resultTypeExpr.elaborate(Term.Universe)
-      val params = synthParams(paramExprs)
-      val paramsType = params.map { param =>
-        param.ident -> Typed[Value](Value.variable(param.ident), param.`type`.eval)
+      val (params, envParams) = synthParams(paramExprs)
+      val (resultType, _) = resultTypeExpr.synth(envParams).unpack
+      // Try to obtain the declaration of the function from the environment
+      val defVar: Var.Defined[Term, Function] = env.declarations.get(Var.Defined(ident.name)) match {
+        case Some(decl) => decl.ident.asInstanceOf[Var.Defined[Term, Function]]
+        case _ => Var.Defined[Term, Function](ident.name)
       }
-      env.withLocals(paramsType.toMap) { implicit env =>
-        val function = Function[Term](Var.Defined(ident.name), params, resultType, isNeutral)
-        function.ident.definition := function
-        function.body := env.withCurrentDefinition(function.ident) {
-          pristineBody.get.elaborate(resultType)
-        }
-        function
+      val function = Function[Term](defVar, params, resultType, isNeutral)
+      function.ident.definition := function
+      function.body := envParams.withCurrentDefinition(function.ident) {
+        implicit env => pristineBody.get.elaborate(resultType)(env)
       }
+      function
     }
 
     case inductiveExpr: Inductive[Expr] => {
-      val params = synthParams(inductiveExpr.params)(env)
-      val inductiveParamBindingMap = params.map { param =>
-        (param.ident, Typed(Value.variable(param.ident), param.`type`.eval))
-      }.toMap
+      val (params, envParams) = synthParams(inductiveExpr.params)(env)
       val constructors = ArrayBuffer.empty[Constructor[Term]]
-      val inductiveDefinition: Inductive[Term] = Inductive(Var.Defined(inductiveExpr.ident.name), params, constructors)
+      // Try to obtain the declaration of the inductive from the environment
+      val defVar: Var.Defined[Term, Inductive] = env.declarations.get(Var.Defined(inductiveExpr.ident.name)) match {
+        case Some(decl) => decl.ident.asInstanceOf[Var.Defined[Term, Inductive]]
+        case _ => Var.Defined[Term, Inductive](inductiveExpr.ident.name)
+      }
+      val inductiveDefinition: Inductive[Term] = Inductive(defVar, params, constructors)
       inductiveDefinition.ident.definition := inductiveDefinition
       // To support recursive inductive types, we need to add the inductive type to the context
       // before synthesizing the constructors
-      env.withCurrentDefinition[Inductive[Term]](inductiveDefinition.ident) { implicit env =>
+      envParams.withCurrentDefinition[Inductive[Term]](inductiveDefinition.ident) { implicit env =>
         constructors ++= inductiveExpr.constructors.map { constructor =>
           // TODO: Check whether `Var.Local(inductiveDefinition.ident.name)` works as expected
           val constructorParams: ArrayBuffer[Param[Term]] = ArrayBuffer.empty
-          val signature = Signature(constructorParams, Term.Variable(Var.Local(inductiveDefinition.ident.name)))
           val constructorDefinition: Constructor[Term] = {
             val consIdent: Var.Defined[Term, Constructor] = Var.Defined(constructor.ident.name)
             val indIdent: Var.Defined[Term, Inductive] = inductiveDefinition.ident
             Constructor(consIdent, indIdent, constructorParams)
           }
           constructorDefinition.ident.definition := constructorDefinition
-          constructorParams ++= env.withLocals(inductiveParamBindingMap) {
-            synthParams(constructor.params)
-          }
+          constructorParams ++= synthParams(constructor.params)._1
           constructorDefinition
         }
         inductiveDefinition
@@ -279,22 +283,37 @@ private[core] object Synthesis {
       ???
     }
   }
-  
+
+  /**
+   * Synthesize the parameters of a function
+   * @param paramExprs Sequence of Param[Expr]
+   * @param env Environment
+   * @return 1. Sequence of Param[Term]
+   *         2. Updated environment
+   */
   def synthParams(paramExprs: Seq[Param[Expr]])(
     implicit env: Environment.Typed[Value]
-  ): Seq[Param[Term]] = {
-    paramExprs.map { param =>
-      Param(param.ident, param.`type`.elaborate(Term.Universe))
+  ): (Seq[Param[Term]], Environment.Typed[Value]) = {
+    paramExprs.foldLeft((Seq.empty[Param[Term]], env: Environment.Typed[Value])) {
+      case ((params, env), paramExpr) => {
+        val param = Param(paramExpr.ident, paramExpr.`type`.elaborate(Term.Universe)(env))
+        (params :+ param, env.add(param.ident, Value.variable(param.ident), param.`type`.eval(env)))
+      }
     }
   }
 
-  def synthDefinitionRef(definition: Definition[Term])(
+  def synthDecl(decl: Decl[Term])(
     implicit env: Environment.Typed[Value]
-  ): Synth = definition match {
+  ): Synth = decl match {
     case definition: PureDefinition[Term] => Synth(
       term = definition.params.buildLambda(definition.ident.buildInvoke(Term)).normalize,
       `type` = definition.params.buildPiType(definition.resultType).eval,
     )
+    case declaration: Declaration[Term, ?] => Synth(
+      term = declaration.signature.params.buildLambda(declaration.ident.buildInvoke(Term)).normalize,
+      `type` = declaration.signature.params.buildPiType(declaration.signature.resultType).eval,
+    )
     case definition: OverloadedFunction[Term] => ???
   }
-}
+
+end Synthesis

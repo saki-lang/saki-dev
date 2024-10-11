@@ -17,6 +17,7 @@ object Environment {
 case class TypedEnvironment[T <: Entity](
   override val definitions: Map[Var.Defined[Term, ?], Definition[Term]] = Map.empty,
   override val currentDefinition: Option[Var.Defined[Term, ?]] = None,
+  val declarations: Map[Var.Defined[Term, ?], Declaration[Term, ?]] = Map.empty,
   val locals: Map[Var.Local, Typed[T]] = Map.empty[Var.Local, Typed[T]],
 ) extends Environment[T] with TypedLocalMutableContext[T] {
 
@@ -26,6 +27,7 @@ case class TypedEnvironment[T <: Entity](
     TypedEnvironment[T](
       definitions = definitions,
       currentDefinition = currentDefinition,
+      declarations = declarations,
       locals = locals + (ident -> Typed(value, `type`)),
     )
   }
@@ -34,6 +36,7 @@ case class TypedEnvironment[T <: Entity](
     TypedEnvironment[T](
       definitions = definitions,
       currentDefinition = currentDefinition,
+      declarations = declarations,
       locals = this.locals ++ locals,
     )
   }
@@ -46,6 +49,7 @@ case class TypedEnvironment[T <: Entity](
     TypedEnvironment[T](
       definitions = definitions + (definition.ident -> definition),
       currentDefinition = currentDefinition,
+      declarations = declarations,
       locals = locals,
     )
   }
@@ -53,13 +57,18 @@ case class TypedEnvironment[T <: Entity](
   override def getDefinition(definition: Var.Defined[Term, ?]): Option[Definition[Term]] = {
     definitions.get(definition)
   }
-  
+
   override def getValue(local: Var.Local): Option[T] = locals.get(local).map(_.value)
   
   override def contains(local: Var.Local): Boolean = locals.contains(local)
 
   def withCurrentDefinition[R](definition: Var.Defined[Term, ?])(action: TypedEnvironment[T] => R): R = {
-    action(TypedEnvironment[T](definitions + (definition -> definition.definition.get), Some(definition), locals))
+    action(TypedEnvironment[T](
+      definitions = definitions + (definition -> definition.definition.get),
+      currentDefinition = Some(definition),
+      declarations = declarations,
+      locals = locals,
+    ))
   }
 
   def withLocal[R](ident: Var.Local, value: T, `type`: T)(action: TypedEnvironment[T] => R): R = {
@@ -87,6 +96,7 @@ object TypedEnvironment {
     TypedEnvironment[T](
       definitions = flattenDefinitions.map(definition => definition.ident -> definition).toMap,
       currentDefinition = None,
+      declarations = Map.empty,
       locals = Map.empty[Var.Local, Typed[T]],
     )
   }
@@ -95,6 +105,7 @@ object TypedEnvironment {
     new TypedEnvironment[T](
       currentDefinition = other.currentDefinition,
       definitions = other.definitions,
+      declarations = Map.empty,
     )
   }
   

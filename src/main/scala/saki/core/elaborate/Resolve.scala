@@ -187,20 +187,24 @@ object Resolve {
   }
   
   extension (definition: Definition[Expr]) {
+    def preResolve(implicit ctx: Resolve.Context): Resolve.Context = {
+      ctx.copy(variableMap = ctx.variableMap + (definition.ident.name -> definition.ident))
+    }
+
     def resolve(implicit ctx: Resolve.Context): (Definition[Expr], Resolve.Context) = {
       resolveDefinition(definition)
     }
   }
 
   def resolveDefinition(
-    pristineDefinition: Definition[Expr]
+    definition: Definition[Expr]
   )(implicit ctx: Resolve.Context): (Definition[Expr], Resolve.Context) = {
 
     // TODO: support mutual recursion (need another pass to pre-build declarations)
 
     var global: Resolve.Context = ctx
 
-    val resolvedDefinition: Definition[Expr] = pristineDefinition match {
+    val resolvedDefinition: Definition[Expr] = definition match {
 
       case Function(ident, params, resultType, isNeutral, body) => {
         val (resolvedParams, ctxWithParam) = params.resolve(global)

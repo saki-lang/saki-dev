@@ -58,7 +58,7 @@ def compileModule(source: String): Module = {
   catchError(source) {
     val module = Module.from(definitions.map(_.emit))
     evaluations.foreach { evaluation =>
-      println(s"${module.eval(evaluation.expr.emit)}")
+      println(s"${module.evaluate(evaluation.expr.emit)}")
     }
     module
   }

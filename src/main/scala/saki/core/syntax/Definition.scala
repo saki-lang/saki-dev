@@ -26,6 +26,13 @@ enum Var {
   }
 
   override def toString: String = this.name
+
+  def to[U <: Entity, Def[E <: Entity] <: Definition[E]]: Var.Defined[U, Def] = {
+    this match {
+      case Defined(name, _) => Defined(name)
+      case Local(name) => Local(name).asInstanceOf[Var.Defined[U, Def]]
+    }
+  }
 }
 
 extension [T <: Entity, Def[E <: Entity] <: Definition[E]](self: Var.Defined[T, Def]) {
@@ -125,9 +132,12 @@ trait FnLike[T <: Entity] {
   def arguments[T1 <: Entity](argValues: Seq[T1]): Seq[(Var.Local, T1)] = params.map(_.ident).zip(argValues)
 }
 
-sealed trait Definition[T <: Entity] {
+trait Decl[T <: Entity] {
   def ident: Var.Defined[T, ?]
+  def toIdent[U <: Entity]: Var.Defined[U, ?]
 }
+
+sealed trait Definition[T <: Entity] extends Decl[T]
 
 sealed trait PureDefinition[T <: Entity] extends Definition[T] with FnLike[T] {
   def resultType(implicit ev: EntityFactory[T, T]): T
@@ -141,11 +151,13 @@ case class Function[T <: Entity](
   // Mark this function as a neutral function (recursive)
   // When a function is a neutral function, its invocation will not be evaluated instantly 
   // unless all its arguments are pure values
-  isNeutral: Boolean = true,
+  isNeutral: Boolean,
   body: LateInit[T] = LateInit[T](),
 ) extends PureDefinition[T] {
 
-  def resultType(implicit ev: EntityFactory[T, T]): T = resultType
+  override def resultType(implicit ev: EntityFactory[T, T]): T = resultType
+
+  override def toIdent[U <: Entity]: Var.Defined[U, Function] = Var.Defined(ident.name)
 
   override def toString: String = {
     s"def ${ident.name}(${params.mkString(", ")}): $resultType = \n\t$body"
@@ -155,7 +167,9 @@ case class Function[T <: Entity](
 case class OverloadedFunction[T <: Entity](
   override val ident: Var.Defined[T, OverloadedFunction],
   body: OverloadedFunction.BodyState.SuperPosition[T],
-) extends Definition[T] {}
+) extends Definition[T] {
+  override def toIdent[U <: Entity]: Var.Defined[U, OverloadedFunction] = Var.Defined(ident.name)
+}
 
 object OverloadedFunction {
   enum BodyState[T <: Entity] {
@@ -175,6 +189,7 @@ case class Inductive[T <: Entity](
   override def toString: String = {
     s"inductive ${ident.name}(${params.mkString(", ")})"
   }
+  override def toIdent[U <: Entity]: Var.Defined[U, Inductive] = Var.Defined(ident.name)
 }
 
 case class Constructor[T <: Entity](
@@ -190,4 +205,13 @@ case class Constructor[T <: Entity](
   override def toString: String = {
     s"cons(${owner.name}) ${ident.name}(${params.mkString(", ")})"
   }
+
+  override def toIdent[U <: Entity]: Var.Defined[U, Constructor] = Var.Defined(ident.name)
+}
+
+case class Declaration[T <: Entity, Def[E <: Entity] <: Definition[E]](
+  ident: Var.Defined[T, Def],
+  signature: Signature[T],
+) extends Decl[T] {
+  override def toIdent[U <: Entity]: Var.Defined[U, Def] = Var.Defined(ident.name)
 }

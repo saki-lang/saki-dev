@@ -5,7 +5,7 @@ import saki.cli.catchError
 import saki.concrete.Visitor
 import saki.core.context.Environment
 import saki.core.domain.{NeutralValue, Value}
-import saki.core.syntax.Var
+import saki.core.syntax.{Var, Module}
 import saki.grammar.{SakiLexer, SakiParser}
 
 trait SakiTestExt {
@@ -31,6 +31,18 @@ trait SakiTestExt {
       case Value.Lambda(_, closure) => closure(arg)
       case Value.Neutral(neutral) => Value.Neutral(NeutralValue.Apply(neutral, arg))
       case _ => throw new Exception("Not a function.")
+    }
+  }
+
+  extension (module: Module) {
+    def eval(code: String): Module.EvalResult = {
+      val stripedCode = code.strip()
+      val lexer = SakiLexer(CharStreams.fromString(stripedCode))
+      val parser = SakiParser(CommonTokenStream(lexer))
+      val expr = Visitor().visitExpr(parser.expr())
+      catchError(stripedCode) {
+        module.evaluate(expr.emit)
+      }
     }
   }
 

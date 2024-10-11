@@ -279,7 +279,13 @@ enum Term extends RuntimeEntity[Type] {
 
     case Apply(fn, arg) => fn.eval match {
       
-      case Value.Lambda(_, bodyClosure) => bodyClosure(arg.eval)
+      case Value.Lambda(paramType, bodyClosure) => {
+        val argType = arg.infer
+        if !(paramType <:< argType) then {
+          throw TypeError(s"Type mismatch: $paramType != $argType", None)
+        }
+        bodyClosure(arg.eval)
+      }
       
       case Value.OverloadedLambda(states) => {
 

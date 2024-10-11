@@ -30,7 +30,7 @@ enum NeutralValue {
     clauses: Seq[Clause[Value]]
   )
 
-  def infer(implicit env: Environment.Typed[Value]): Type = ???
+  def infer(implicit env: Environment.Typed[Value]): Type = this.readBack.infer
 
   def readBack(implicit env: Environment.Typed[Value]): Term = this match {
     case Variable(ident) => Term.Variable(ident)

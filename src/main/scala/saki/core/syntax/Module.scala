@@ -3,7 +3,7 @@ package saki.core.syntax
 import saki.core.context.Environment
 import saki.core.domain.Value
 import saki.core.elaborate.Resolve
-import saki.core.elaborate.Resolve.resolve
+import saki.core.elaborate.Resolve.{preResolve, resolve}
 import saki.core.elaborate.Synthesis.synth
 import saki.core.syntax.Module.EvalResult
 
@@ -16,7 +16,7 @@ case class Module(definitions: Set[Definition[Term]]) {
 
   lazy val env: Environment.Typed[Value] = Environment.Typed.global[Value](definitions.toSeq)
 
-  def eval(expr: Expr): EvalResult = {
+  def evaluate(expr: Expr): EvalResult = {
     val (term, ty) = expr.resolve(Resolve.Context(env))._1.synth(env).unpack
     EvalResult(term.normalize(env), ty.readBack(env))
   }
@@ -28,7 +28,15 @@ object Module {
   def empty: Module = Module(Set.empty)
 
   def from(pristineDefinitions: Seq[Definition[Expr]]): Module = {
-    val (_, finalEnv) = pristineDefinitions.foldLeft((Resolve.Context.empty, Environment.Typed[Value]())) {
+    // Pre-resolve phase
+    val preResolveContext = pristineDefinitions.foldLeft(Resolve.Context.empty) {
+      (ctx, definition) => definition.preResolve(ctx)
+    }
+
+    // TODO: Pre-build environment for mutual recursion
+
+    // Resolve phase
+    val (_, finalEnv) = pristineDefinitions.foldLeft((preResolveContext, Environment.Typed[Value]())) {
       case ((resolvingContext, env), definition) => {
         val (resolved, newCtx) = definition.resolve(resolvingContext)
         val definitionSynth = resolved.synth(env)

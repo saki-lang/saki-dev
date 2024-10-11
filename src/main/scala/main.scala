@@ -62,5 +62,5 @@ def main(): Unit = {
   println("\n\n=================================================\n\n")
 
   val evaluations = entities.collect { case eval: Evaluation => eval }
-  evaluations.foreach { evaluation => println(module.eval(evaluation.expr.emit)) }
+  evaluations.foreach { evaluation => println(module.evaluate(evaluation.expr.emit)) }
 }
