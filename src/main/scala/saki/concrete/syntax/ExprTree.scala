@@ -25,6 +25,10 @@ enum ExprTree(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] with
     `type`: LiteralType,
   )(implicit ctx: ParserRuleContext)
 
+  case TypeOf(
+    value: ExprTree,
+  )(implicit ctx: ParserRuleContext)
+
   case Elimination(
     value: ExprTree,
     member: String,
@@ -90,6 +94,8 @@ enum ExprTree(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] with
     case PrimitiveValue(value) => CoreExpr.Primitive(value)
     case PrimitiveType(ty) => CoreExpr.PrimitiveType(ty)
 
+    case TypeOf(value) => CoreExpr.TypeOf(value.emit)
+
     case Lambda(paramExpr, bodyExpr, returnTypeExpr) => {
       // TODO: optional-param lambda
       val param: Param[CoreExpr] = paramExpr.map(param => param.map(_.emit).get)
@@ -110,8 +116,13 @@ enum ExprTree(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] with
       statements.init.foldRight(returnValue) {
         case (statement, body) => statement match {
           case Statement.Let(name, ty, value) => {
-            val bodyLambda = CoreExpr.Lambda(Param(Var.Local(name), ty.map(_.emit).get), body)
-            CoreExpr.Apply(bodyLambda, Argument(value.emit))
+            val valueCoreExpr = value.emit
+            val typeCoreExpr = ty match {
+              case Some(ty) => ty.emit
+              case None => CoreExpr.TypeOf(valueCoreExpr)
+            }
+            val bodyLambda = CoreExpr.Lambda(Param(Var.Local(name), typeCoreExpr), body)
+            CoreExpr.Apply(bodyLambda, Argument(valueCoreExpr))
           }
           case Statement.Expression(expr) => expr.emit
         }

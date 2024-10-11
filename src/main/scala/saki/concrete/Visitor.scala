@@ -528,13 +528,13 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   )(implicit ctx: ParserRuleContext): ExprTree = {
     given ParserRuleContext = ctx
     // Fold over parameters to construct both the Lambda expression and the Pi-type return type
-    params.foldRight((body, returnType)) { case (param, (accBody, accReturnType)) =>
+    params.foldRight((body, returnType)) { case (param, (accBody, returnType)) =>
       // Handling optional types by short-circuiting if any component is None
       // Ensures that the Pi type is constructed only when both the parameter type
       // and the codomain (return type) are well-defined.
       val piReturnType = for {
         paramType <- param.`type`  // Ensure the parameter type is defined
-        codomain <- accReturnType  // Ensure the accumulated return type is defined
+        codomain <- returnType  // Ensure the accumulated return type is defined
       } yield ExprTree.Pi(Param(param.ident, paramType), codomain)
       // Construct the Lambda expression with the updated body and return type (which could be None)
       val lambdaExpr = ExprTree.Lambda(param, accBody, returnType)

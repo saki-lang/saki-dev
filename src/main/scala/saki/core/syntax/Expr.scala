@@ -31,6 +31,10 @@ enum Expr(val span: SourceSpan) extends Entity {
     `type`: LiteralType
   )(implicit span: SourceSpan) extends Expr(span)
 
+  case TypeOf(
+    value: Expr
+  )(implicit span: SourceSpan) extends Expr(span)
+
   /**
    * Application of a function to an argument.
    * `fn arg` | `fn(arg)`

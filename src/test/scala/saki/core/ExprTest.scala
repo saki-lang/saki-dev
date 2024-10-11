@@ -28,12 +28,29 @@ class ExprTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
   }
 
   it should "synth high-order lambda" in {
-    val (term, ty) = synthExpr("(x: Int) => (y: Int) => x")
-    term should be (Term.Lambda(Param(!"x", IntType.term), Term.Lambda(Param(!"y", IntType.term), Term.Variable(!"x"))))
-    ty.readBack should be (
+    val (term, ty) = synthExpr("(x: Int) => (y: Float) => (z: String): Int => x")
+    term should be(
+      Term.Lambda(
+        Param(!"x", IntType.term),
+        Term.Lambda(
+          Param(!"y", FloatType.term),
+          Term.Lambda(
+            Param(!"z", StringType.term),
+            Term.Variable(!"x")
+          )
+        )
+      )
+    )
+    ty.readBack should be(
       Value.Pi(
         Value.PrimitiveType(LiteralType.IntType),
-        _ => Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType))
+        _ => Value.Pi(
+          Value.PrimitiveType(LiteralType.FloatType),
+          _ => Value.Pi(
+            Value.PrimitiveType(LiteralType.StringType),
+            _ => Value.PrimitiveType(LiteralType.IntType)
+          )
+        )
       ).readBack
     )
   }
@@ -53,6 +70,34 @@ class ExprTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
       ).readBack
     )
     ty.readBack should be (
+      Value.Pi(
+        Value.Universe, A => Value.Pi(
+          Value.Universe, B => Value.Pi(
+            A, _ => Value.Pi(
+              Value.Pi(A, _ => B),
+              _ => B
+            )
+          )
+        )
+      ).readBack
+    )
+  }
+
+  it should "synth simplified dependent typed lambda" in {
+    val (term, ty) = synthExpr("(A B: 'Type, t: A, f: A -> B) => f(t)")
+    term.normalize should be(
+      Value.Lambda(
+        Value.Universe, A => Value.Lambda(
+          Value.Universe, B => Value.Lambda(
+            A, t => Value.Lambda(
+              Value.Pi(A, _ => B),
+              f => f(t)
+            )
+          )
+        )
+      ).readBack
+    )
+    ty.readBack should be(
       Value.Pi(
         Value.Universe, A => Value.Pi(
           Value.Universe, B => Value.Pi(
@@ -96,5 +141,16 @@ class ExprTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
   it should "if expr" in {
     val (expr, _) = synthCodeBlock("if true then 114 else 514")
     expr.normalize should be (IntValue(114).term)
+  }
+
+  it should "eq refl" in {
+    val code = {
+      """
+        let eq = (A: 'Type, a b: A): 'Type => ∀(P: A -> 'Type) -> P(a) -> P(b)
+        let refl = (A: 'Type, a: A): eq(A, a, a) => (P: A -> 'Type, pa: P(a)) => pa
+        let symmetry = (A: 'Type, a b: A, e: eq(A, a, b)): eq(A, b, a) => e((b: A) => eq(A, b, a), refl(A, a))
+      """
+    }
+    val (expr, _) = synthCodeBlock(code)
   }
 }

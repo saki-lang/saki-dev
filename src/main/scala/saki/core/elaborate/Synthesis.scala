@@ -69,6 +69,10 @@ private[core] object Synthesis:
 
     case Expr.PrimitiveType(ty) => Synth(Term.PrimitiveType(ty), Value.Universe)
 
+    case Expr.TypeOf(value) => value.synth(env).unpack match {
+      case (_, ty: Value) => Synth(ty.readBack, Value.Universe)
+    }
+
     case Expr.Variable(ref) => ref match {
       // Converting a definition reference to a lambda, enabling curry-style function application
       case definitionVar: Var.Defined[Term, ?] => definitionVar.definition.toOption match {
@@ -154,33 +158,37 @@ private[core] object Synthesis:
       val (paramType, _) = param.`type`.synth.unpack
       val paramTypeValue = paramType.eval
       val paramVariable = Value.variable(paramIdent)
-      val (bodyTerm: Term, bodyType: Type) = env.withLocal(paramIdent, paramVariable, paramTypeValue) {
-        implicit env => body.synth(env).unpack
-      }
-      val returnTypeValue: Value = returnType match {
-        case Some(returnTypeExpr) => {
-          val (returnType, _) = returnTypeExpr.synth.unpack
-          val returnTypeValue = returnType.eval
-          if !(returnTypeValue <:< bodyType) then {
-            TypeError.mismatch(returnType.toString, bodyType.toString, returnTypeExpr.span)
+
+      env.withLocal(paramIdent, paramVariable, paramTypeValue) { implicit env =>
+
+        val (bodyTerm: Term, bodyType: Type) = body.synth(env).unpack
+
+        val returnTypeValue: Value = returnType match {
+          case Some(returnTypeExpr) => {
+            val (returnType, _) = returnTypeExpr.synth.unpack
+            val returnTypeValue = returnType.eval
+            if !(returnTypeValue <:< bodyType) then {
+              TypeError.mismatch(returnType.toString, bodyType.readBack.toString, returnTypeExpr.span)
+            }
+            returnTypeValue
           }
-          returnTypeValue
+          case None => bodyType
         }
-        case None => bodyType
-      }
 
-      // Closure for the Pi type
-      def piTypeClosure(arg: Value): Value = {
-        val argVar: Typed[Value] = Typed[Value](arg, paramTypeValue)
-        env.withLocal(param.ident, argVar) {
-          implicit env => returnTypeValue.readBack(env).eval(env)
+        // Closure for the Pi type
+        def piTypeClosure(arg: Value): Value = {
+          val argVar: Typed[Value] = Typed[Value](arg, paramTypeValue)
+          env.withLocal(param.ident, argVar) {
+            implicit env => returnTypeValue.readBack(env).eval(env)
+          }
         }
-      }
 
-      Synth(
-        term = Term.Lambda(Param(paramIdent, paramType), bodyTerm),
-        `type` = Value.Pi(paramTypeValue, piTypeClosure),
-      )
+        Synth(
+          term = Term.Lambda(Param(paramIdent, paramType), bodyTerm),
+          `type` = Value.Pi(paramTypeValue, piTypeClosure),
+        )
+
+      }
     }
 
     case _ => TypeError.error("Failed to synthesis expression", expr.span)

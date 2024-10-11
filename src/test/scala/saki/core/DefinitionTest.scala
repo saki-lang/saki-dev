@@ -121,7 +121,7 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
             (P: A -> 'Type, pa: P(a)) => pa
         }
 
-        def symmetry(A: 'Type, a b: A, e: eq(A, a, b): eq(A, b, a) = {
+        def symmetry(A: 'Type, a b: A, e: eq(A, a, b)): eq(A, b, a) = {
             e((b: A) => eq(A, b, a), refl(A, a))
         }
       """
