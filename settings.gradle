@@ -1,2 +1,9 @@
-rootProject.name = 'saki'
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
 
+rootProject.name = 'saki'
+include('saki')

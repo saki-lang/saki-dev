@@ -2,7 +2,7 @@ package saki.core
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.*
-import saki.cli.compileModule
+import saki.tool.compileModule
 
 class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
   it should "fibonacci" in {

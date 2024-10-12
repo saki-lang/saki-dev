@@ -1,12 +1,12 @@
 package saki.core
 
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
-import saki.cli.catchError
 import saki.concrete.Visitor
 import saki.core.context.Environment
 import saki.core.domain.{NeutralValue, Value}
 import saki.core.syntax.{Var, Module}
 import saki.grammar.{SakiLexer, SakiParser}
+import saki.tool.catchError
 
 trait SakiTestExt {
   extension (str: String) def unary_! : Var.Local = Var.Local(str)

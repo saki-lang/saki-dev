@@ -1,4 +1,4 @@
-package saki.cli
+package saki.tool
 
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 import saki.core.{Error, InfoSpan}
@@ -49,7 +49,7 @@ def printSourceWithHighlight(source: String, span: InfoSpan): Unit = {
   }
 }
 
-def compileModule(source: String): Module = {
+def compileModule(source: String, doEvaluation: Boolean = true): Module = {
   val lexer = SakiLexer(CharStreams.fromString(source))
   val parser = SakiParser(CommonTokenStream(lexer))
   val entities = Visitor().visitProgram(parser.program())
@@ -57,7 +57,7 @@ def compileModule(source: String): Module = {
   val evaluations = entities.collect { case eval: Evaluation => eval }
   catchError(source) {
     val module = Module.from(definitions.map(_.emit))
-    evaluations.foreach { evaluation =>
+    if doEvaluation then evaluations.foreach { evaluation =>
       println(s"${module.evaluate(evaluation.expr.emit)}")
     }
     module
