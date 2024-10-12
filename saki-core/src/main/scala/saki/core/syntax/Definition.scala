@@ -35,35 +35,6 @@ enum Var {
   }
 }
 
-extension [T <: Entity, Def[E <: Entity] <: Definition[E]](self: Var.Defined[T, Def]) {
-
-  def buildInvoke(implicit factory: EntityFactory[T, T]): T = self.definition.toOption match {
-
-    case Some(definition: Function[T]) => {
-      val signature: Signature[T] = definition.signature
-      factory.functionInvoke(self.asInstanceOf[Var.Defined[T, Function]], signature.paramToVars)
-    }
-
-    case Some(definition: Inductive[T]) => {
-      val signature: Signature[T] = definition.signature
-      factory.inductiveType(self.asInstanceOf[Var.Defined[T, Inductive]], signature.paramToVars)
-    }
-
-    case Some(definition: Constructor[T]) => {
-      val cons = self.asInstanceOf[Var.Defined[T, Constructor]]
-      factory.inductiveVariant(
-        cons = cons,
-        consArgs = definition.signature.paramToVars,
-        inductiveArgs = cons.ownerSignature.paramToVars
-      )
-    }
-
-    case Some(definition: OverloadedFunction[T]) => ??? // TODO
-
-    case None => TypeError(s"Unresolved reference: ${self.name}").raise
-  }
-}
-
 extension [T <: Entity](variable: Var.Defined[T, Constructor]) {
   def owner: Var.Defined[T, Inductive] = variable.definition.get.owner
   def ownerSignature(implicit factory: EntityFactory[T, T]): Signature[T] = owner.definition.get.signature
@@ -145,7 +116,8 @@ trait Decl[T <: Entity] {
 
 sealed trait Definition[T <: Entity] extends Decl[T]
 
-sealed trait PureDefinition[T <: Entity] extends Definition[T] with FnLike[T] {
+// Too young, too simple, sometimes naive
+sealed trait NaiveDefinition[T <: Entity] extends Definition[T] with FnLike[T] {
   def resultType(implicit ev: EntityFactory[T, T]): T
   def signature(implicit ev: EntityFactory[T, T]): Signature[T] = Signature(params, resultType)
 }
@@ -159,7 +131,7 @@ case class Function[T <: Entity](
   // unless all its arguments are pure values
   isRecursive: Boolean,
   body: LateInit[T] = LateInit[T](),
-) extends PureDefinition[T] {
+) extends NaiveDefinition[T] {
 
   override def resultType(implicit ev: EntityFactory[T, T]): T = resultType
 
@@ -170,25 +142,18 @@ case class Function[T <: Entity](
   }
 }
 
-case class OverloadedFunction[T <: Entity](
-  override val ident: Var.Defined[T, OverloadedFunction],
-  body: OverloadedFunction.BodyState.SuperPosition[T],
+case class Overloaded[T <: Entity](
+  override val ident: Var.Defined[T, Overloaded],
+  overloads: Seq[Function[T]],
 ) extends Definition[T] {
-  override def toIdent[U <: Entity]: Var.Defined[U, OverloadedFunction] = Var.Defined(ident.name)
-}
-
-object OverloadedFunction {
-  enum BodyState[T <: Entity] {
-    case Eigen(state: T, isNeutral: Boolean)
-    case SuperPosition(states: Set[(Param[T], BodyState[T])])
-  }
+  override def toIdent[U <: Entity]: Var.Defined[U, Overloaded] = Var.Defined(ident.name)
 }
 
 case class Inductive[T <: Entity](
   override val ident: Var.Defined[T, Inductive],
   override val params: ParamList[T],
   constructors: Seq[Constructor[T]],
-) extends PureDefinition[T] {
+) extends NaiveDefinition[T] {
 
   def resultType(implicit ev: EntityFactory[T, T]): T = ev.universe
 
@@ -202,7 +167,7 @@ case class Constructor[T <: Entity](
   override val ident: Var.Defined[T, Constructor],
   owner: Var.Defined[T, Inductive],
   override val params: ParamList[T],
-) extends PureDefinition[T] {
+) extends NaiveDefinition[T] {
   
   def resultType(implicit factory: EntityFactory[T, T]): T = {
     factory.inductiveType(owner, owner.definition.get.paramToVars)
@@ -220,4 +185,33 @@ case class Declaration[T <: Entity, Def[E <: Entity] <: Definition[E]](
   signature: Signature[T],
 ) extends Decl[T] {
   override def toIdent[U <: Entity]: Var.Defined[U, Def] = Var.Defined(ident.name)
+}
+
+extension [Def[E <: Entity] <: Definition[E]](self: Var.Defined[Term, Def]) {
+
+  def buildInvoke: Term = self.definition.toOption match {
+
+    case Some(definition: Function[Term]) => {
+      val signature: Signature[Term] = definition.signature
+      Term.FunctionInvoke(self.asInstanceOf[Var.Defined[Term, Function]], signature.paramToVars)
+    }
+
+    case Some(definition: Inductive[Term]) => {
+      val signature: Signature[Term] = definition.signature
+      Term.InductiveType(self.asInstanceOf[Var.Defined[Term, Inductive]], signature.paramToVars)
+    }
+
+    case Some(definition: Constructor[Term]) => {
+      val cons = self.asInstanceOf[Var.Defined[Term, Constructor]]
+      Term.InductiveVariant(
+        cons = cons,
+        consArgs = definition.signature.paramToVars,
+        inductiveArgs = cons.ownerSignature.paramToVars
+      )
+    }
+
+    case Some(_: Overloaded[?]) => TypeError("Overloaded function cannot be invoked directly").raise
+
+    case None => TypeError(s"Unresolved reference: ${self.name}").raise
+  }
 }

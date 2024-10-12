@@ -237,7 +237,7 @@ private[core] object Synthesis:
   def synthDefinition(definition: Definition[Expr])(
     implicit env: Environment.Typed[Value]
   ): Definition[Term] = definition match {
-    case Function(ident, paramExprs, resultTypeExpr, isNeutral, pristineBody) => {
+    case Function(ident, paramExprs, resultTypeExpr, isRecursive, pristineBody) => {
       val (params, envParams) = synthParams(paramExprs)
       val (resultType, _) = resultTypeExpr.synth(envParams).unpack
       // Try to obtain the declaration of the function from the environment
@@ -245,7 +245,7 @@ private[core] object Synthesis:
         case Some(decl) => decl.ident.asInstanceOf[Var.Defined[Term, Function]]
         case _ => Var.Defined[Term, Function](ident.name)
       }
-      val function = Function[Term](defVar, params, resultType, isNeutral)
+      val function = Function[Term](defVar, params, resultType, isRecursive)
       function.ident.definition := function
       function.body := envParams.withCurrentDefinition(function.ident) {
         implicit env => pristineBody.get.elaborate(resultType)(env)
@@ -284,11 +284,9 @@ private[core] object Synthesis:
 
     case Constructor(_, _, _) => unreachable
     
-    case OverloadedFunction(ident, body) => {
-      // recursively traverse the states of the overloaded function, synthesis each state
-      // and merge branches with the same type arguments
-      // TODO: finish this
-      ???
+    case Overloaded(ident, body) => {
+      val overloads = body.map(_.synth.asInstanceOf[Function[Term]])
+      Overloaded(ident.asInstanceOf[Var.Defined[Term, Overloaded]], overloads)
     }
   }
 
@@ -313,15 +311,16 @@ private[core] object Synthesis:
   def synthDecl(decl: Decl[Term])(
     implicit env: Environment.Typed[Value]
   ): Synth = decl match {
-    case definition: PureDefinition[Term] => Synth(
-      term = definition.params.buildLambda(definition.ident.buildInvoke(Term)).normalize,
+    case definition: NaiveDefinition[Term] => Synth(
+      term = definition.params.buildLambda(definition.ident.buildInvoke).normalize,
       `type` = definition.params.buildPiType(definition.resultType).eval,
     )
     case declaration: Declaration[Term, ?] => Synth(
-      term = declaration.signature.params.buildLambda(declaration.ident.buildInvoke(Term)).normalize,
+      term = declaration.signature.params.buildLambda(declaration.ident.buildInvoke).normalize,
       `type` = declaration.signature.params.buildPiType(declaration.signature.resultType).eval,
     )
-    case definition: OverloadedFunction[Term] => ???
+    // TODO: build lambda for overloaded definitions
+    case definition: Overloaded[Term] => ???
   }
 
 end Synthesis

@@ -13,9 +13,9 @@ enum Term extends RuntimeEntity[Type] {
   case PrimitiveType(`type`: LiteralType)
   case Variable(variable: Var.Local)
   case FunctionInvoke(fn: Var.Defined[Term, Function], args: Seq[Term])
-  case OverloadedFunctionInvoke(
-    fn: Var.Defined[Term, OverloadedFunction], args: Seq[Term]
-  ) extends Term with OverloadedFunctionInvokeExt
+  case OverloadInvoke(
+    fn: Var.Defined[Term, Overloaded], args: Seq[Term]
+  ) extends Term with OverloadInvokeExt
   case InductiveType(inductive: Var.Defined[Term, Inductive], args: Seq[Term])
   case InductiveVariant(cons: Var.Defined[Term, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term])
   case Match(scrutinees: Seq[Term], clauses: Seq[Clause[Term]])
@@ -47,7 +47,7 @@ enum Term extends RuntimeEntity[Type] {
     case PrimitiveType(ty) => ty.toString
     case Variable(variable) => variable.name
     case FunctionInvoke(fn, args) => s"${fn.name}(${args.mkString(", ")})"
-    case OverloadedFunctionInvoke(fn, args) => s"${fn.name}(${args.mkString(", ")})"
+    case OverloadInvoke(fn, args) => s"${fn.name}(${args.mkString(", ")})"
     case InductiveType(inductive, args) => {
       val argsStr = if args.nonEmpty then s"(${args.mkString(", ")})" else ""
       s"${inductive.name}$argsStr"
@@ -97,13 +97,12 @@ enum Term extends RuntimeEntity[Type] {
       env.definitions(fnRef).asInstanceOf[Function[Term]].resultType.eval
     }
 
-    case invoke: OverloadedFunctionInvoke => {
-      val (body, params, _) = invoke.getMatchedState
-      // Infer the function body type with the argument values
-      val paramMap = params.map { param =>
-        (param.ident, Typed[Value](Value.variable(param.ident), param.`type`))
+    case invoke: OverloadInvoke => {
+      val (func, _) = invoke.getOverload
+      val paramMap = func.params.map { param =>
+        (param.ident, Typed[Value](Value.variable(param.ident), param.`type`.eval))
       }.toMap
-      env.withLocals(paramMap) { implicit env => body.state.infer(env) }
+      env.withLocals(paramMap) { implicit env => func.resultType.eval(env) }
     }
 
     case InductiveType(indRef, _) => {
@@ -227,15 +226,17 @@ enum Term extends RuntimeEntity[Type] {
       }
     }
 
-    case invoke: OverloadedFunctionInvoke => {
-      val (body, params, argValues) = invoke.getMatchedState
-      if !body.isNeutral || argValues.forall(_.readBack.isFinal(Set.empty)) then {
-        val argVarList: Seq[(Var.Local, Typed[Value])] = params.zip(argValues).map {
+    case invoke: OverloadInvoke => {
+      val (function, argValues) = invoke.getOverload
+      if !function.isRecursive || argValues.forall(_.readBack.isFinal(Set.empty)) then {
+        val argVarList: Seq[(Var.Local, Typed[Value])] = function.params.zip(argValues).map {
           (param, arg) => (param.ident, Typed[Value](arg, arg.infer))
         }
-        env.withLocals(argVarList.toMap) { implicit env => body.state.eval(env) }
+        env.withLocals(argVarList.toMap) {
+          implicit env => function.body.get.eval(env)
+        }
       } else {
-        Value.overloadedFunctionInvoke(invoke.fn, argValues)
+        Value.functionInvoke(function.ident, argValues)
       }
     }
 
@@ -344,7 +345,7 @@ enum Term extends RuntimeEntity[Type] {
     case Variable(variable) => localVars.contains(variable)
     case Universe | Primitive(_) | PrimitiveType(_) => true
     case FunctionInvoke(_, args) => args.forall(_.isFinal)
-    case OverloadedFunctionInvoke(_, args) => args.forall(_.isFinal)
+    case OverloadInvoke(_, args) => args.forall(_.isFinal)
     case InductiveType(_, args) => args.forall(_.isFinal)
     case InductiveVariant(_, consArgs, inductiveArgs) => consArgs.forall(_.isFinal) && inductiveArgs.forall(_.isFinal)
     case Match(scrutinees, clauses) => scrutinees.forall(_.isFinal) && clauses.forall(_.forall(_.isFinal))
@@ -393,10 +394,6 @@ object Term extends RuntimeEntityFactory[Term] {
   override def functionInvoke(
     function: Var.Defined[Term, Function], args: Seq[Term]
   ): Term = FunctionInvoke(function, args)
-
-  override def overloadedFunctionInvoke(
-    function: Var.Defined[Term, OverloadedFunction], args: Seq[Term]
-  ): Term = OverloadedFunctionInvoke(function, args)
 
   override def inductiveVariant(
     cons: Var.Defined[Term, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term]
@@ -451,8 +448,8 @@ private sealed trait OverloadedTerm {
   }
 }
 
-trait OverloadedFunctionInvokeExt {
-  def fn: Var.Defined[Term, OverloadedFunction]
+trait OverloadInvokeExt {
+  def fn: Var.Defined[Term, Overloaded]
   def args: Seq[Term]
 
   /**
@@ -461,39 +458,23 @@ trait OverloadedFunctionInvokeExt {
    * @return 1. The most suitable eigenstate of the overloaded function body
    *         2. The parameters of the state
    */
-  def getMatchedState(
+  def getOverload(
     implicit env: Environment.Typed[Value]
-  ): (OverloadedFunction.BodyState.Eigen[Term], Seq[Param[Value]], Seq[Value]) = {
-    val fn = env.definitions(this.fn).asInstanceOf[OverloadedFunction[Term]]
+  ): (Function[Term], Seq[Value]) = {
+    val fn = env.definitions(this.fn).asInstanceOf[Overloaded[Term]]
     val argsValue: Seq[Value] = this.args.map(_.eval)
 
-    import OverloadedFunction.BodyState
-
-    val initialQueue: Seq[(BodyState[Term], Seq[Param[Value]])] = Seq((fn.body, Seq.empty))
-
-    // Iterate through each argument value, collecting potential branches that match the argument types
-    val candidateBranches = argsValue.foldLeft(initialQueue) { (branches, arg) =>
-      branches.collect {
-        // Filter-map the branches that match the argument type
-        case (BodyState.SuperPosition(states), params) => {
-          val argType = arg.infer
-          // Map each state to evaluate its parameter type and filter those
-          // that are subtypes of the current argument type
-          val candidatesStates = states.map {
-            (param, state) => (param.map(_.eval), state)
-          }.filter { (param, _) => param.`type` <:< argType }
-          // Transform all candidates to the next state
-          candidatesStates.map { case (param, state) => (state, params :+ param) }
-        }
-      }.flatten
-    }.filter {
-      // Only keep the branches that are eigenstates
-      // (i.e. accept exactly given number of arguments)
-      case (BodyState.Eigen(_, _), _) => true
-      case _ => false
+    // Filter out the candidate overloads that fit the argument types
+    val candidateOverloads = fn.overloads.filter { overload =>
+      val params = overload.params
+      if params.size != argsValue.size then false
+      else params.zip(argsValue).forall {
+        (param, arg) => param.`type`.eval <:< arg.infer
+      }
     }
 
-    if candidateBranches.isEmpty then {
+    // If no candidate overload fits the argument types, throw an error
+    if candidateOverloads.isEmpty then {
       throw TypeError.overloadingNoMatch(this.fn.name, None)
     }
 
@@ -502,31 +483,27 @@ trait OverloadedFunctionInvokeExt {
 
     // Iterate through each parameter position, eliminating branches that are not
     // the most specific at that position
-    var remainingBranches = candidateBranches
-    val numParams = remainingBranches.head._2.length
+    var remainingOverloads: Seq[Function[Term]] = candidateOverloads
+    val numParams = remainingOverloads.head.params.length
 
-    for (i <- 0 until numParams if remainingBranches.size > 1) {
+    for (i <- 0 until numParams if remainingOverloads.size > 1) {
+      // Cache the current parameter type at position i for each overload
+      val currentOtherParamTypes: Seq[Type] = remainingOverloads.map(_.params(i).`type`.eval)
       // Filter branches to keep those with the most specific parameter type at position i
-      remainingBranches = remainingBranches.filter { case (_, currentParams) =>
-        val currentParamType = currentParams(i).`type`
+      remainingOverloads = remainingOverloads.filter { overload =>
+        val currentSelfParamType = overload.params(i).`type`.eval
         // Check whether the current parameter type is more specific than or equal to all other parameter types
         // at this position across the remaining branches.
-        remainingBranches.forall { case (_, otherParams) =>
-          val otherParamType = otherParams(i).`type`
-          // Keep the current branch if its parameter type is either more specific than or
-          // not a subtype of the other parameter type.
-          currentParamType <:< otherParamType || !(otherParamType <:< currentParamType)
+        currentOtherParamTypes.forall { otherParamType =>
+          currentSelfParamType <:< otherParamType || !(otherParamType <:< currentSelfParamType)
         }
       }
     }
 
-    if (remainingBranches.size != 1) {
+    if (remainingOverloads.size != 1) {
       throw TypeError(s"Failed to determine the most specific overload for function ${fn.ident.name}", None)
     }
 
-    remainingBranches.head match {
-      case (eigen: BodyState.Eigen[Term], accumulatedParams) => (eigen, accumulatedParams, argsValue)
-      case _ => throw TypeError(s"Failed to determine the most specific overload for function ${fn.ident.name}", None)
-    }
+    (remainingOverloads.head, argsValue)
   }
 }

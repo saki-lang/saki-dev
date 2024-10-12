@@ -246,12 +246,6 @@ object Value extends RuntimeEntityFactory[Value] {
     Neutral(NeutralValue.FunctionInvoke(function, args))
   }
 
-  override def overloadedFunctionInvoke(
-    function: Var.Defined[Term, OverloadedFunction], args: Seq[Type]
-  ): Type = {
-    Neutral(NeutralValue.OverloadedFunctionInvoke(function, args))
-  }
-
   override def inductiveType(inductive: Var.Defined[Term, Inductive], args: Seq[Type]): Type = {
     Value.InductiveType(inductive, args)
   }

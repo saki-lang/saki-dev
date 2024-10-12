@@ -220,6 +220,8 @@ object Resolve {
           val (resolvedBody, bodyCtx) = body.get.resolve(ctx)
           val (resolvedResultType, funcCtx) = resultType.resolve(bodyCtx)
           val isRecursive = funcCtx.dependencyGraph.isInCycle(ident)
+          // update the global context with the dependency graph
+          global = global.copy(dependencyGraph = funcCtx.dependencyGraph)
           Function[Expr](ident, resolvedParams, resolvedResultType, isRecursive, LateInit(resolvedBody))
         }
       }
@@ -243,8 +245,24 @@ object Resolve {
         Inductive[Expr](ident, resolvedParams, resolvedConstructors)
       }
 
-      case OverloadedFunction(ident, body) => ???
+      case Overloaded(ident, body) => {
+        global += ident
+        val (resolvedBody, _) = body.foldLeft((Seq.empty[Function[Expr]], global)) {
+          case ((resolvedBody, ctx), function) => {
+            // For each function overloading, we need to resolve it twice.
+            // This is to avoid the previous dependency graph affect the
+            // determination of the current function's dependencies
+            //  1. Resolve the function body using global context
+            val (resolved, _) = function.resolve(global)
+            //  2. Update the dependency graph using updated context
+            val (_, newCtx) = function.resolve(ctx)
+            (resolvedBody :+ resolved.asInstanceOf[Function[Expr]], newCtx)
+          }
+        }
+        Overloaded(ident, resolvedBody)
+      }
     }
+
     (resolvedDefinition, global)
   }
 

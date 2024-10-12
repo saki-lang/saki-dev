@@ -2,7 +2,7 @@ package saki.core
 
 import saki.core.context.Environment
 import saki.core.domain.Value
-import saki.core.syntax.{Constructor, Function, Inductive, OverloadedFunction, Var}
+import saki.core.syntax.{Constructor, Function, Inductive, Overloaded, Var}
 
 import scala.collection.Seq
 
@@ -27,8 +27,6 @@ trait EntityFactory[T <: Entity, D <: Entity] {
   def inductiveType(inductive: Var.Defined[D, Inductive], args: Seq[T]): T
 
   def functionInvoke(function: Var.Defined[D, Function], args: Seq[T]): T
-
-  def overloadedFunctionInvoke(function: Var.Defined[D, OverloadedFunction], args: Seq[T]): T
 
   def inductiveVariant(cons: Var.Defined[D, Constructor], consArgs: Seq[T], inductiveArgs: Seq[T]): T
   

@@ -1,7 +1,7 @@
 package saki.core.domain
 
 import saki.core.context.Environment
-import saki.core.syntax.{Clause, Function, OverloadedFunction, Term, Var}
+import saki.core.syntax.{Clause, Function, Overloaded, Term, Var}
 
 import scala.annotation.targetName
 import scala.collection.Seq
@@ -20,11 +20,6 @@ enum NeutralValue {
     args: Seq[Value],
   )
 
-  case OverloadedFunctionInvoke(
-    fn: Var.Defined[Term, OverloadedFunction],
-    args: Seq[Value],
-  )
-
   case Match(
     scrutinees: Seq[Value],
     clauses: Seq[Clause[Value]]
@@ -37,7 +32,6 @@ enum NeutralValue {
     case Apply(fn, arg) => Term.Apply(fn.readBack, arg.readBack)
     case Projection(record, field) => Term.Projection(record.readBack, field)
     case FunctionInvoke(fnRef, args) => Term.FunctionInvoke(fnRef, args.map(_.readBack))
-    case OverloadedFunctionInvoke(fnRef, args) => Term.OverloadedFunctionInvoke(fnRef, args.map(_.readBack))
     case Match(scrutinees, clauses) => Term.Match(scrutinees.map(_.readBack), clauses.map(_.map(_.readBack)))
   }
 
