@@ -1,10 +1,10 @@
 package saki.tool
 
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
-import saki.core.{Error, InfoSpan}
 import saki.concrete.Visitor
 import saki.concrete.syntax.{Definition, Evaluation}
 import saki.core.syntax.Module
+import saki.core.{Error, InfoSpan}
 import saki.grammar.{SakiLexer, SakiParser}
 
 def catchError[R](source: String)(action: => R): R = {
