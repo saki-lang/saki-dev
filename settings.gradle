@@ -6,4 +6,6 @@ pluginManagement {
 }
 
 rootProject.name = 'saki'
-include('saki')
+include 'saki-core'
+include 'saki-concrete'
+include 'saki-cli'

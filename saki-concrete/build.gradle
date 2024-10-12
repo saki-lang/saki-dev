@@ -1,0 +1,42 @@
+plugins {
+    id 'java'
+    id 'scala'
+    id 'antlr'
+}
+
+group = 'saki'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(":saki-core")
+
+    implementation 'org.scala-lang:scala3-library_3:3.3.4'
+    implementation 'commons-collections:commons-collections:3.2.2'
+
+    antlr 'org.antlr:antlr4:4.13.2'
+    implementation 'org.antlr:antlr4-runtime:4.13.2'
+
+    testImplementation "org.scalatest:scalatest_3:3.2.19"
+    testImplementation "org.junit.platform:junit-platform-launcher:1.10.0"
+    testRuntimeOnly "org.junit.platform:junit-platform-engine:1.10.0"
+    testRuntimeOnly "org.scalatestplus:junit-5-10_3:3.2.19.0"
+}
+
+generateGrammarSource {
+    outputDirectory = file("src/main/java/saki/grammar")
+    arguments += ["-visitor", "-long-messages", "-package", "saki.grammar"]
+}
+
+test {
+    useJUnitPlatform {
+        includeEngines 'scalatest'
+        testLogging {
+            events("passed", "skipped", "failed", "standard_error")
+        }
+    }
+}
