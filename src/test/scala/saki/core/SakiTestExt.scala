@@ -65,7 +65,8 @@ trait SakiTestExt {
     val parser = SakiParser(CommonTokenStream(lexer))
     val block = Visitor().visitBlockExpr(parser.blockExpr())
     catchError(stripedCode) {
-      block.emit.synth.unpack
+      val expr = block.emit
+      expr.synth.unpack
     }
   }
 }

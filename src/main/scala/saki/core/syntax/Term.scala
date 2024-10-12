@@ -214,7 +214,7 @@ enum Term extends RuntimeEntity[Type] {
         case None | Some(_) => {
           val argsValue: Seq[Value] = argTerms.map(_.eval)
           // TODO: this need to be optimized
-          if !fn.isNeutral || argsValue.forall(_.readBack.isFinal(Set.empty)) then {
+          if !fn.isRecursive || argsValue.forall(_.readBack.isFinal(Set.empty)) then {
             val argVarList: Seq[(Var.Local, Typed[Value])] = fn.arguments(argsValue).map {
               (param, arg) => (param, Typed[Value](arg, arg.infer))
             }

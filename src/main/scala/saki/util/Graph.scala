@@ -90,20 +90,21 @@ class Graph[T](
   def isInCycle(node: T): Boolean = {
 
     // Recursive DFS function that passes updated visited and recursion stack immutably
-    def dfs(vertex: T, visited: Set[T], recStack: Set[T]): Boolean = {
-      if (recStack.contains(vertex)) true // A cycle is detected
+    def dfs(vertex: T, visited: Set[T]): Boolean = {
+      if (vertex == node) true // A cycle is detected
       else if (visited.contains(vertex)) false // Already processed, no cycle here
       else {
         // Explore neighbors recursively with updated visited and recStack sets
         val newVisited = visited + vertex
-        val newRecStack = recStack + vertex
         // If any neighbor leads to a cycle, return true
-        neighbors(vertex).exists(neighbor => dfs(neighbor, newVisited, newRecStack))
+        neighbors(vertex).exists(neighbor => dfs(neighbor, newVisited))
       }
     }
 
-    // Start DFS with empty visited and recursion stack
-    if containsVertex(node) then dfs(node, Set.empty[T], Set.empty[T]) else false
+    // Start DFS with empty visited
+    if !containsVertex(node) then false else {
+      neighbors(node).exists(neighbor => dfs(neighbor, Set.empty[T]))
+    }
   }
 
   /**
@@ -129,8 +130,8 @@ class Graph[T](
    */
   override def toString: String = {
     adjacencyList.map {
-      case (v, neighbors) => s"$v -> ${neighbors.mkString(", ")}"
-    }.mkString("\n")
+      case (v, neighbors) => s"$v -> (${neighbors.mkString(", ")})"
+    }.mkString("; ")
   }
 }
 

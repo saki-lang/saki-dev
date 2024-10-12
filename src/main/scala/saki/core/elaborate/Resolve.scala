@@ -71,8 +71,13 @@ object Resolve {
         case local: Var.Local => (Expr.Variable(local), ctx)
       }
 
+      case Expr.TypeOf(value) => {
+        val (resolved, ctx) = value.resolve
+        (Expr.TypeOf(resolved), ctx)
+      }
+
       case Expr.Unresolved(name) => ctx.get(name) match {
-        case Some(variable) => (Expr.Variable(variable), ctx)
+        case Some(variable) => Expr.Variable(variable).resolve(ctx)
         case None => {
           val resolved: Expr = name match {
             case "'Type" => Expr.Universe()
@@ -206,15 +211,16 @@ object Resolve {
 
     val resolvedDefinition: Definition[Expr] = definition match {
 
-      case Function(ident, params, resultType, isNeutral, body) => {
+      case Function(ident, params, resultType, _, body) => {
         val (resolvedParams, ctxWithParam) = params.resolve(global)
         // register the function name to global context
         global += ident
         // add the function name to the context for recursive calls
         ctxWithParam.withDefinition(ident) { implicit ctx =>
           val (resolvedBody, bodyCtx) = body.get.resolve(ctx)
-          val (resolvedResultType, _) = resultType.resolve(bodyCtx)
-          Function[Expr](ident, resolvedParams, resolvedResultType, isNeutral, LateInit(resolvedBody))
+          val (resolvedResultType, funcCtx) = resultType.resolve(bodyCtx)
+          val isRecursive = funcCtx.dependencyGraph.isInCycle(ident)
+          Function[Expr](ident, resolvedParams, resolvedResultType, isRecursive, LateInit(resolvedBody))
         }
       }
 
@@ -236,6 +242,8 @@ object Resolve {
         }
         Inductive[Expr](ident, resolvedParams, resolvedConstructors)
       }
+
+      case OverloadedFunction(ident, body) => ???
     }
     (resolvedDefinition, global)
   }

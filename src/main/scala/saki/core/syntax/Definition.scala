@@ -116,6 +116,12 @@ case class Argument[T <: Entity](
   def map[U <: Entity](transform: T => U): Argument[U] = {
     copy(value = transform(value))
   }
+
+  override def toString: String = applyMode match {
+    case ApplyMode.Explicit => value.toString
+    case ApplyMode.Implicit => s"[$value]"
+    case ApplyMode.Instance => s"{$value}"
+  }
 }
 
 case class Signature[T <: Entity](params: ParamList[T], resultType: T) extends FnLike[T] {
@@ -148,10 +154,10 @@ case class Function[T <: Entity](
   override val ident: Var.Defined[T, Function],
   override val params: ParamList[T],
   resultType: T,
-  // Mark this function as a neutral function (recursive)
-  // When a function is a neutral function, its invocation will not be evaluated instantly 
+  // Mark this function as a recursive or mutual recursive function
+  // When a function is a recursive function, its invocation will not be evaluated instantly
   // unless all its arguments are pure values
-  isNeutral: Boolean,
+  isRecursive: Boolean,
   body: LateInit[T] = LateInit[T](),
 ) extends PureDefinition[T] {
 

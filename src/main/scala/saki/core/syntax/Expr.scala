@@ -123,6 +123,7 @@ enum Expr(val span: SourceSpan) extends Entity {
     case PrimitiveType(ty) => ty.toString
     case Unresolved(name) => name
     case Variable(ref) => ref.toString
+    case TypeOf(value) => s"^($value)"
     case Hole(_) => "_"
     case Pi(param, result) => s"Π(${param.ident} : ${param.`type`}) -> $result"
     case Sigma(param, result) => s"Σ(${param.ident} : ${param.`type`}) -> $result"
