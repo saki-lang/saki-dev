@@ -6,11 +6,16 @@ import saki.core.context.Environment
 import saki.core.domain.{NeutralValue, Value}
 import saki.core.syntax.{Module, Var}
 import saki.core.catchError
+import saki.core.elaborate.Resolve
 import saki.grammar.{SakiLexer, SakiParser}
 import saki.prelude.Prelude
 
+import scala.annotation.targetName
+
 trait SakiTestExt {
-  extension (str: String) def unary_! : Var.Local = Var.Local(str)
+
+  extension (str: String) @targetName("localVar")
+  def unary_! : Var.Local = Var.Local(str)
 
   extension (literal: Literal) {
     def term: Term.Primitive = Term.Primitive(literal)
@@ -35,6 +40,9 @@ trait SakiTestExt {
     }
   }
 
+  given Environment.Typed[Value] = Prelude.environment
+  given Resolve.Context = Resolve.Context(Prelude.symbols)
+
   extension (module: Module) {
     def eval(code: String): Module.EvalResult = {
       val stripedCode = code.strip()
@@ -51,10 +59,8 @@ trait SakiTestExt {
     val stripedCode = code.strip()
     val lexer = SakiLexer(CharStreams.fromString(stripedCode))
     val parser = SakiParser(CommonTokenStream(lexer))
-    Visitor().visitExpr(parser.expr()).emit
+    Visitor().visitExpr(parser.expr()).emit.resolve._1
   }
-
-  given Environment.Typed[Value] = Prelude.environment
 
   def synthExpr(code: String): (Term, Value) = catchError(code.strip) {
     parseExpr(code).synth.unpack

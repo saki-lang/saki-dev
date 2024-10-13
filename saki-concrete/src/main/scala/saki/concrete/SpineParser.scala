@@ -113,9 +113,11 @@ object SpineParser:
 
     private def isEof: Boolean = currentTokenIndex >= tokens.size
 
-    private val precedenceGraph = OperatorExpressionParser.checkedPartialOrderGraph(binaryOperators)
+    private val precedenceGraph: Map[Operator.Binary, Set[Operator.Binary]] = {
+      OperatorExpressionParser.checkedPartialOrderGraph(binaryOperators)
+    }
 
-    private val lowestPrecedenceOperators = precedenceGraph.filter {
+    private val lowestPrecedenceOperators: Set[Operator.Binary] = precedenceGraph.filter {
       (_, tighters) => tighters.isEmpty
     }.keySet
 
@@ -239,7 +241,7 @@ object SpineParser:
 
       if (tighter(op1, op2)) Precedence.Tighter
       else if (tighter(op2, op1)) Precedence.Looser
-      else throw new IllegalArgumentException(s"Undefined precedence between operators: $op1 and $op2")
+      else Precedence.Equal // TODO: check whether this is correct
     }
 
     extension (self: Operator.Binary) {

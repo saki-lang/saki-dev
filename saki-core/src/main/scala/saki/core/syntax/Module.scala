@@ -32,7 +32,7 @@ object Module {
   def from(pristineDefinitions: Seq[Definition[Expr]]): Module = {
 
     // Pre-resolve phase
-    val preResolveContext = pristineDefinitions.foldLeft(Resolve.Context.empty) {
+    val preResolveContext = pristineDefinitions.foldLeft(Resolve.Context(Prelude.symbols)) {
       (ctx, definition) => definition.preResolve(ctx)
     }
 

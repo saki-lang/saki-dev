@@ -315,6 +315,7 @@ private[core] object Synthesis:
       term = definition.params.buildLambda(definition.buildInvoke(Term)).normalize,
       `type` = definition.params.buildPiType(definition.resultType).eval,
     )
+    
     case declaration: Declaration[Term, ?] => ???
 
     case overloaded: Overloaded[Term] => {

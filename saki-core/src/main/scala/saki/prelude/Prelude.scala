@@ -24,6 +24,8 @@ object Prelude {
     PrimitiveString.definitions,
   ).flatten
 
+  lazy val symbols: Seq[Var] = definitions.map(_.ident)
+
   lazy val environment: Environment.Typed[Value] = Environment.Typed[Value](
     definitions = Prelude.definitions.map {
       definition => definition.ident -> definition

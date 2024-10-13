@@ -216,18 +216,25 @@ enum Term extends RuntimeEntity[Type] {
           // TODO: this need to be optimized
           val allArgumentsFinal = argsValue.forall(_.readBack.isFinal(Set.empty))
           if !function.isRecursive || allArgumentsFinal then {
-            val argVarList: Seq[(Var.Local, Typed[Value])] = function.arguments(argsValue).map {
-              (param, arg) => (param, Typed[Value](arg, arg.infer))
-            }
             function match {
               case fn: DefinedFunction[Term] => {
+                // FIXME!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                // TODO: there may be a bug when arguments are not final
+                val argVarList: Seq[(Var.Local, Typed[Value])] = function.arguments(argsValue).map {
+                  (param, arg) => (param, Typed[Value](arg, arg.infer))
+                }
                 env.withLocals(argVarList.toMap) { implicit env => fn.body.get.eval(env) }
               }
               case fn: NativeFunction[Term] => {
                 // Only evaluate the native function if all arguments are final
                 if allArgumentsFinal then {
+                  val argVarList: Seq[(Var.Local, Typed[Value])] = function.arguments(argsValue).map {
+                    (param, arg) => (param, Typed[Value](arg, arg.infer))
+                  }
                   // TODO: arguments apply mode
-                  fn.invoke(argVarList.map { (_, typed) => Argument(typed.value) })
+                  env.withLocals(argVarList.toMap) { implicit env =>
+                    fn.invoke(argVarList.map { (_, typed) => Argument(typed.value) })
+                  }
                 } else {
                   Value.functionInvoke(fn.ident, argsValue)
                 }

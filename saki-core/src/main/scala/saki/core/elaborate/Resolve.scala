@@ -49,11 +49,18 @@ object Resolve {
   }
 
   object Context {
-    def apply(env: DefinitionContext): Resolve.Context = {
+
+    def apply(implicit env: DefinitionContext): Resolve.Context = {
       val variables = env.definitions.keys
       Context(variableMap = variables.map(variable => variable.name -> variable).toMap)
     }
+
+    def apply(symbols: Seq[Var]): Resolve.Context = {
+      new Context(symbols.map(symbol => symbol.name -> symbol).toMap)
+    }
+
     def apply(env: Map[String, Var]): Resolve.Context = new Context(env)
+
     def empty: Resolve.Context = Context()
   }
 
