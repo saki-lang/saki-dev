@@ -113,7 +113,7 @@ class ExprTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
 
   it should "beta reduction" in {
     val (expr, _) = synthExpr("((x: Int) => x)(114514)")
-    expr should be (IntValue(114514).term)
+    expr should be (IntValue(114514).toTerm)
   }
 
   it should "let expr" in {
@@ -124,7 +124,7 @@ class ExprTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
       """
     }
     val (expr, _) = synthCodeBlock(code)
-    expr should be (IntValue(1).term)
+    expr should be (IntValue(1).toTerm)
   }
 
   it should "let apply" in {
@@ -135,12 +135,12 @@ class ExprTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
       """
     }
     val (expr, _) = synthCodeBlock(code)
-    expr should be (IntValue(114514).term)
+    expr should be (IntValue(114514).toTerm)
   }
 
   it should "if expr" in {
     val (expr, _) = synthCodeBlock("if true then 114 else 514")
-    expr.normalize should be (IntValue(114).term)
+    expr.normalize should be (IntValue(114).toTerm)
   }
 
   it should "eq refl" in {

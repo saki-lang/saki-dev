@@ -1,6 +1,9 @@
 package saki.core.syntax
 
+import saki.core.domain.Value
+
 enum Literal {
+
   case UnitValue
   case BoolValue(value: Boolean)
   case IntValue(value: Int)
@@ -25,6 +28,9 @@ enum Literal {
     case CharValue(_) => LiteralType.CharType
     case StringValue(_) => LiteralType.StringType
   }
+
+  def toTerm: Term = Term.Primitive(this)
+  def toValue: Value = Value.Primitive(this)
 }
 
 object Literal {
@@ -34,6 +40,7 @@ object Literal {
 }
 
 enum LiteralType {
+
   case NothingType
   case UnitType
   case BoolType
@@ -51,4 +58,7 @@ enum LiteralType {
     case CharType => "Char"
     case StringType => "String"
   }
+
+  def toTerm: Term = Term.PrimitiveType(this)
+  def toValue: Value = Value.PrimitiveType(this)
 }

@@ -6,10 +6,12 @@ import saki.core.elaborate.Resolve
 import saki.core.elaborate.Resolve.{preResolve, resolve}
 import saki.core.elaborate.Synthesis.synth
 import saki.core.syntax.Module.EvalResult
+import saki.prelude.Prelude
 
 import scala.collection.Seq
 
 case class Module(definitions: Set[Definition[Term]]) {
+
   override def toString: String = {
     definitions.map(_.toString).mkString("\n\n")
   }
@@ -28,6 +30,7 @@ object Module {
   def empty: Module = Module(Set.empty)
 
   def from(pristineDefinitions: Seq[Definition[Expr]]): Module = {
+
     // Pre-resolve phase
     val preResolveContext = pristineDefinitions.foldLeft(Resolve.Context.empty) {
       (ctx, definition) => definition.preResolve(ctx)
@@ -36,7 +39,7 @@ object Module {
     // TODO: Pre-build environment for mutual recursion
 
     // Resolve phase
-    val (_, finalEnv) = pristineDefinitions.foldLeft((preResolveContext, Environment.Typed[Value]())) {
+    val (_, finalEnv) = pristineDefinitions.foldLeft((preResolveContext, Prelude.environment)) {
       case ((resolvingContext, env), definition) => {
         val (resolved, newCtx) = definition.resolve(resolvingContext)
         val definitionSynth = resolved.synth(env)

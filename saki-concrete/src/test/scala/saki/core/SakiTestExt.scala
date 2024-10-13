@@ -4,9 +4,10 @@ import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 import saki.concrete.Visitor
 import saki.core.context.Environment
 import saki.core.domain.{NeutralValue, Value}
-import saki.core.syntax.{Var, Module}
+import saki.core.syntax.{Module, Var}
 import saki.core.catchError
 import saki.grammar.{SakiLexer, SakiParser}
+import saki.prelude.Prelude
 
 trait SakiTestExt {
   extension (str: String) def unary_! : Var.Local = Var.Local(str)
@@ -53,7 +54,7 @@ trait SakiTestExt {
     Visitor().visitExpr(parser.expr()).emit
   }
 
-  given Environment.Typed[Value] = Environment.Typed.empty[Value]
+  given Environment.Typed[Value] = Prelude.environment
 
   def synthExpr(code: String): (Term, Value) = catchError(code.strip) {
     parseExpr(code).synth.unpack

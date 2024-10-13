@@ -56,8 +56,11 @@ object SpineParser:
     case Unary(override val symbol: String, kind: UnaryType)
     // symbol and partial order of the binary op
     case Binary(
-      override val symbol: String, associativity: Associativity,
-      tighterThan: Set[Binary], sameAs: Set[Binary], looserThan: Set[Binary],
+      override val symbol: String,
+      associativity: Associativity = Associativity.Left,
+      tighterThan: Set[Binary] = Set.empty,
+      sameAs: Set[Binary] = Set.empty,
+      looserThan: Set[Binary] = Set.empty,
     )
 
     val symbol: String

@@ -15,7 +15,9 @@ import scala.jdk.CollectionConverters.*
 
 class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
 
-  private var symbols: ScopedMap[String, Operator | String] = ScopedMap.empty
+  private var symbols: ScopedMap[String, Operator | String] = {
+    ScopedMap(Prelude.operators.map(op => op.symbol -> op).toMap[String, Operator | String])
+  }
 
   private def binaryOperators: Set[Operator.Binary] = this.symbols.values.collect {
     case operator: Operator.Binary => operator
