@@ -22,7 +22,7 @@ enum Value extends RuntimeEntity[Type] {
   case Pi(paramType: Type, closure: Value => Value)
 
   case OverloadedPi(
-    states: Set[(Type, Value => Value)]
+    states: Map[Type, Value => Value]
   ) extends Value with OverloadedLambdaLike
 
   case Sigma(paramType: Type, closure: Value => Value)
@@ -30,7 +30,7 @@ enum Value extends RuntimeEntity[Type] {
   case Lambda(paramType: Type, body: Value => Value)
 
   case OverloadedLambda(
-    states: Set[(Type, Value => Value)]
+    states: Map[Type, Value => Value]
   ) extends Value with OverloadedLambdaLike
 
   case Record(fields: Map[String, Value])
@@ -60,39 +60,21 @@ enum Value extends RuntimeEntity[Type] {
 
     case Neutral(value) => value.readBack
 
-    case Pi(paramType, codomain) => {
-      val paramIdent = env.uniqueVariable
-      val param = Value.variable(paramIdent)
-      Term.Pi(
-        Param(paramIdent, paramType.readBack),
-        env.withLocal(paramIdent, param, paramType) {
-          codomain(Value.variable(paramIdent)).readBack
-        }
-      )
+    case Pi(paramType, codomainClosure) => {
+      val (param, codomain) = Value.readBackClosure(paramType, codomainClosure)
+      Term.Pi(param, codomain)
     }
 
     case pi: OverloadedPi => Term.OverloadedPi(pi.readBackStates)
 
-    case Sigma(paramType, codomain) => {
-      val paramIdent = env.uniqueVariable
-      val param = Value.variable(paramIdent)
-      Term.Sigma(
-        Param(paramIdent, paramType.readBack),
-        env.withLocal(paramIdent, param, paramType) {
-          codomain(Value.variable(paramIdent)).readBack
-        }
-      )
+    case Sigma(paramType, codomainClosure) => {
+      val (param, codomain) = Value.readBackClosure(paramType, codomainClosure)
+      Term.Sigma(param, codomain)
     }
 
-    case Lambda(paramType, body) => {
-      val paramIdent = env.uniqueVariable
-      val param = Value.variable(paramIdent)
-      Term.Lambda(
-        Param(paramIdent, paramType.readBack),
-        env.withLocal(paramIdent, param, paramType) {
-          body(Value.variable(paramIdent)).readBack
-        }
-      )
+    case Lambda(paramType, bodyClosure) => {
+      val (param, body) = Value.readBackClosure(paramType, bodyClosure)
+      Term.Lambda(param, body)
     }
 
     case lambda: OverloadedLambda => Term.OverloadedLambda(lambda.readBackStates)
@@ -256,13 +238,34 @@ object Value extends RuntimeEntityFactory[Value] {
     Value.InductiveVariant(cons, consArgs, inductiveArgs)
   }
 
+  /**
+   * Read back a closure to a lambda term with a parameter
+   *
+   * @param paramType The type of the parameter
+   * @param closure The closure to read back
+   * @param env The environment to use for reading back
+   * @return 1. The parameter of the lambda term
+   *         2. The body of the lambda term
+   * @see [[Term.evalParameterized]]
+   */
+  private[core] def readBackClosure(paramType: Type, closure: Value => Value)(
+    implicit env: Environment.Typed[Value]
+  ): (Param[Term], Term) = {
+    val paramIdent = env.uniqueVariable
+    val param = Value.variable(paramIdent)
+    val term = env.withLocal(paramIdent, param, paramType) {
+      closure(Value.variable(paramIdent)).readBack
+    }
+    (Param(paramIdent, paramType.readBack), term)
+  }
+
 }
 
 private sealed trait OverloadedLambdaLike {
 
-  def states: Set[(Type, Value => Value)]
+  def states: Map[Type, Value => Value]
 
-  def readBackStates(implicit env: Environment.Typed[Value]): Set[(Param[Term], Term)] = {
+  def readBackStates(implicit env: Environment.Typed[Value]): Map[Param[Term], Term] = {
     states.map { (paramType, closure) =>
       val paramIdent = env.uniqueVariable
       val param = Value.variable(paramIdent)

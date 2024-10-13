@@ -312,15 +312,18 @@ private[core] object Synthesis:
     implicit env: Environment.Typed[Value]
   ): Synth = decl match {
     case definition: NaiveDefinition[Term] => Synth(
-      term = definition.params.buildLambda(definition.ident.buildInvoke).normalize,
+      term = definition.params.buildLambda(definition.buildInvoke(Term)).normalize,
       `type` = definition.params.buildPiType(definition.resultType).eval,
     )
-    case declaration: Declaration[Term, ?] => Synth(
-      term = declaration.signature.params.buildLambda(declaration.ident.buildInvoke).normalize,
-      `type` = declaration.signature.params.buildPiType(declaration.signature.resultType).eval,
-    )
-    // TODO: build lambda for overloaded definitions
-    case definition: Overloaded[Term] => ???
+    case declaration: Declaration[Term, ?] => ???
+
+    case overloaded: Overloaded[Term] => {
+      val paths = overloaded.overloads.map(overloaded => (overloaded.params, overloaded.resultType))
+      val lambda = Term.overloaded(Term.OverloadedLambda.apply, paths)
+      val pi = Term.overloaded(Term.OverloadedLambda.apply, paths)
+      Synth(lambda, pi.eval)
+    }
+
   }
 
 end Synthesis

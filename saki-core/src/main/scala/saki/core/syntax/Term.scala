@@ -3,6 +3,7 @@ package saki.core.syntax
 import saki.core.context.{Environment, Typed}
 import saki.core.domain.{NeutralValue, Type, Value}
 import saki.core.{RuntimeEntity, RuntimeEntityFactory, TypeError}
+import saki.util.unreachable
 
 import scala.collection.Seq
 
@@ -20,13 +21,13 @@ enum Term extends RuntimeEntity[Type] {
   case InductiveVariant(cons: Var.Defined[Term, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term])
   case Match(scrutinees: Seq[Term], clauses: Seq[Clause[Term]])
   case Pi(param: Param[Term], codomain: Term) extends Term with PiLikeTerm
-  case OverloadedPi(states: Set[(Param[Term], Term)]) extends Term with OverloadedTerm
+  case OverloadedPi(states: Map[Param[Term], Term]) extends Term with OverloadedTermExt[OverloadedPi]
   case Sigma(param: Param[Term], codomain: Term) extends Term with PiLikeTerm
   case Record(fields: Map[String, Term])
   case RecordType(fields: Map[String, Term])
   case Apply(fn: Term, arg: Term)
   case Lambda(param: Param[Term], body: Term) extends Term with LambdaLikeTerm
-  case OverloadedLambda(states: Set[(Param[Term], Term)]) extends Term with OverloadedTerm
+  case OverloadedLambda(states: Map[Param[Term], Term]) extends Term with OverloadedTermExt[OverloadedLambda]
 
   case Projection(record: Term, field: String)
 
@@ -398,26 +399,49 @@ object Term extends RuntimeEntityFactory[Term] {
   override def inductiveVariant(
     cons: Var.Defined[Term, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term]
   ): Term = InductiveVariant(cons, consArgs, inductiveArgs)
-}
 
-/**
- * Evaluates a parameterized term and returns a closure.
- *
- * @param param The parameter of the term.
- * @param term The term to be evaluated.
- * @param env The environment in which the term is evaluated.
- * @return A tuple containing the evaluated type of the parameter
- *         and a closure that takes a value and returns a value.
- */
-private def evalParameterizedTermToClosure(param: Param[Term], term: Term)(
-  implicit env: Environment.Typed[Value]
-): (Type, Value => Value) = {
-  val paramType = param.`type`.eval
-  def closure(arg: Value): Value = {
-    val argVar = Typed[Value](arg, paramType)
-    env.withLocal(param.ident, argVar) { implicit env => term.eval(env) }
+  def overloaded[T <: Term & OverloadedTermExt[T]](
+    constructor: Map[Param[Term], Term] => T,
+    paths: Seq[(Seq[Param[Term]], Term)],
+  ): T = paths.foldLeft(constructor(Map.empty)) {
+    case (overloaded, (path, body)) => addOverloadedPath(overloaded, path, body)
   }
-  (paramType, closure)
+
+  private def addOverloadedPath[T <: Term & OverloadedTermExt[T]](
+    overloaded: T, path: Seq[Param[Term]], body: Term,
+  ): T = path match {
+    case Nil => overloaded
+    case head +: tail => {
+      val updatedState: Term = overloaded.states.get(head) match {
+        case Some(term: Term.OverloadedLambda) => addOverloadedPath(term, tail, body)
+        case Some(_) => TypeError.overloadDefinitionAmbiguous(head.ident.name, None)
+        case None => if tail.isEmpty then body else addOverloadedPath(overloaded.copy(Map.empty), tail, body)
+      }
+      overloaded.copy(overloaded.states + (head -> updatedState))
+    }
+  }
+
+  /**
+   * Evaluates a parameterized term and returns a closure.
+   *
+   * @param param The parameter of the term.
+   * @param term  The term to be evaluated.
+   * @param env   The environment in which the term is evaluated.
+   * @return 1. Evaluated type of the parameter
+   *         2. A closure that takes a value and returns a value.
+   * @see [[Value.readBackClosure]]
+   */
+  private[core] def evalParameterized(param: Param[Term], term: Term)(
+    implicit env: Environment.Typed[Value]
+  ): (Type, Value => Value) = {
+    val paramType = param.`type`.eval
+    def closure(arg: Value): Value = {
+      val argVar = Typed[Value](arg, paramType)
+      env.withLocal(param.ident, argVar) { implicit env => term.eval(env) }
+    }
+    (paramType, closure)
+  }
+
 }
 
 private sealed trait LambdaLikeTerm {
@@ -427,8 +451,14 @@ private sealed trait LambdaLikeTerm {
   def eval(constructor: (Type, Value => Value) => Value)(
     implicit env: Environment.Typed[Value]
   ): Value = {
-    val (paramType, closure) = evalParameterizedTermToClosure(param, body)
+    val (paramType, closure) = Term.evalParameterized(param, body)
     constructor(paramType, closure)
+  }
+
+  def toOverloaded: OverloadedTermExt[?] & Term = this match {
+    case lambda: Term.Lambda => Term.OverloadedLambda(Map(lambda.param -> lambda.body))
+    case pi: Term.Pi => Term.OverloadedPi(Map(pi.param -> pi.codomain))
+    case _ => unreachable
   }
 }
 
@@ -437,18 +467,84 @@ private sealed trait PiLikeTerm extends LambdaLikeTerm {
   override def body: Term = codomain
 }
 
-private sealed trait OverloadedTerm {
-  def states: Set[(Param[Term], Term)]
+private sealed trait OverloadedTermExt[S <: Term & OverloadedTermExt[S]] {
 
-  def eval(constructor: Set[(Type, Value => Value)] => Value)(
+  def states: Map[Param[Term], Term]
+
+  def eval(constructor: Map[Type, Value => Value] => Value)(
     implicit env: Environment.Typed[Value]
   ): Value = {
-    val statesValue = states.map(evalParameterizedTermToClosure)
-    constructor(statesValue)
+    // Normalize the states (unify the parameters with identical type but different names)
+    val parameterizedTerms: Seq[(Param[Term], Term)] = states.toSeq.map(Term.evalParameterized).map {
+      (paramType, closure) => Value.readBackClosure(paramType, closure)
+    }
+
+    // Check whether there is any parameter type that is associated with multiple names
+    val normalizedParams: Seq[(Var.Local, Type)] = parameterizedTerms.map {
+      (param, _) => (param.ident, param.`type`.eval)
+    }
+    assert(!normalizedParams.exists { (ident, ty) =>
+      normalizedParams.count((ident2, ty2) => (ty unify ty2) && ident != ident2) > 1
+    })
+
+    // Merge the states with identical parameter types
+    //  1. Group the states by parameter type
+    val grouped: Map[Param[Term], Seq[Term]] = parameterizedTerms.groupMap(_._1)(_._2)
+
+    //  2. Merge the states with identical parameter types
+    val merged: Map[Param[Term], Term] = grouped.map { (param, terms) =>
+      assert(terms.nonEmpty)
+      if terms.size == 1 then {
+        param -> terms.head
+      } else {
+        // There are multiple states with the same parameter type, merge them
+        val merged: Term & OverloadedTermExt[?] = terms.map {
+          // case 1: The term is a lambda-like term, convert it to an overloaded lambda
+          case lambdaLikeTerm: LambdaLikeTerm => lambdaLikeTerm.toOverloaded
+          // case 2: The term is an overloaded lambda, keep it as is
+          case overloaded: OverloadedTermExt[?] => overloaded
+          // case 3: The term is not a lambda-like term, indicating an ambiguous overload
+          case _ => TypeError.overloadedTermAmbiguous(param.ident.name, None)
+        }.reduce { (merged, overloaded) => merged.merge(overloaded) }
+        param -> merged
+      }
+    }
+
+    // TODO: This need to be optimized, because the states
+    //  are already evaluated before
+    constructor(merged.map(Term.evalParameterized))
+  }
+
+  def copy(states: Map[Param[Term], Term]): S
+
+  @SuppressWarnings(Array("unchecked"))
+  private def merge(other: OverloadedTermExt[?]): S = {
+    assert(this.getClass == other.getClass)
+    val mergedStates = (this.states.keySet ++ other.states.keySet).map { param =>
+      val term: Term = (this.states.get(param), other.states.get(param)) match {
+        case (Some(term1: Term), Some(term2: Term)) => (term1, term2) match {
+          // States are overloaded lambdas, merge them recursively
+          case (overloaded1: OverloadedTermExt[?], overloaded2: OverloadedTermExt[?]) => {
+            // Recursively merge the states
+            try overloaded1.asInstanceOf[S].merge(overloaded2.asInstanceOf[S]) catch {
+              // If the merge fails, the states are not compatible (e.g. trying to merge a Pi and a Lambda)
+              case _: ClassCastException => TypeError.overloadDefinitionAmbiguous(param.ident.name, None)
+            }
+          }
+          // States are not overloaded lambdas, indicating an ambiguous overload
+          case _ => TypeError.overloadDefinitionAmbiguous(param.ident.name, None)
+        }
+        case (Some(term: Term), _) => term
+        case (_, Some(term: Term)) => term
+        case (None, None) => unreachable
+      }
+      param -> term
+    }.toMap[Param[Term], Term]
+    this.copy(mergedStates)
   }
 }
 
-trait OverloadInvokeExt {
+private sealed trait OverloadInvokeExt {
   def fn: Var.Defined[Term, Overloaded]
   def args: Seq[Term]
 
@@ -475,7 +571,7 @@ trait OverloadInvokeExt {
 
     // If no candidate overload fits the argument types, throw an error
     if candidateOverloads.isEmpty then {
-      throw TypeError.overloadingNoMatch(this.fn.name, None)
+      throw TypeError.overloadInvokeNoMatch(this.fn.name, None)
     }
 
     // Otherwise, find the most suitable one

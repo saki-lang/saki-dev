@@ -31,11 +31,19 @@ object TypeError {
     throw TypeError("Type error", None)
   }
 
-  def overloadingNoMatch(name: String, span: Option[InfoSpan]): Nothing = {
+  def overloadInvokeNoMatch(name: String, span: Option[InfoSpan]): Nothing = {
     throw TypeError(s"No matched overloading: $name", span)
   }
 
-  def overloadingAmbiguous(name: String, span: Option[InfoSpan]): Nothing = {
+  def overloadInvokeAmbiguous(name: String, span: Option[InfoSpan]): Nothing = {
+    throw TypeError(s"Multiple matched overloading: $name", span)
+  }
+
+  def overloadDefinitionAmbiguous(name: String, span: Option[InfoSpan]): Nothing = {
+    throw TypeError(s"Multiple matched overloading: $name", span)
+  }
+
+  def overloadedTermAmbiguous(name: String, span: Option[InfoSpan]): Nothing = {
     throw TypeError(s"Multiple matched overloading: $name", span)
   }
 }

@@ -1,6 +1,6 @@
 package saki.core.syntax
 
-import saki.core.{Entity, EntityFactory, TypeError}
+import saki.core.{Entity, EntityFactory}
 import saki.util.LateInit
 
 import scala.collection.Seq
@@ -9,7 +9,7 @@ enum Var {
 
   case Defined[T <: Entity, Def[A <: Entity] <: Definition[A]](
     override val name: String,
-    val definition: LateInit[Def[T]] = LateInit[Def[T]](),
+    definition: LateInit[Def[T]] = LateInit[Def[T]](),
   )
 
   case Local(override val name: String)
@@ -181,37 +181,29 @@ case class Constructor[T <: Entity](
 }
 
 case class Declaration[T <: Entity, Def[E <: Entity] <: Definition[E]](
-  ident: Var.Defined[T, Def],
-  signature: Signature[T],
+  ident: Var.Defined[T, Def], signature: Signature[T],
 ) extends Decl[T] {
   override def toIdent[U <: Entity]: Var.Defined[U, Def] = Var.Defined(ident.name)
 }
 
-extension [Def[E <: Entity] <: Definition[E]](self: Var.Defined[Term, Def]) {
+extension [T <: Entity, Def[E <: Entity] <: NaiveDefinition[E]](self: Def[T]) {
 
-  def buildInvoke: Term = self.definition.toOption match {
+  def buildInvoke(implicit factory: EntityFactory[T, T]): T = self match {
 
-    case Some(definition: Function[Term]) => {
-      val signature: Signature[Term] = definition.signature
-      Term.FunctionInvoke(self.asInstanceOf[Var.Defined[Term, Function]], signature.paramToVars)
+    case definition: Function[T] => {
+      factory.functionInvoke(definition.ident, definition.signature.paramToVars)
     }
 
-    case Some(definition: Inductive[Term]) => {
-      val signature: Signature[Term] = definition.signature
-      Term.InductiveType(self.asInstanceOf[Var.Defined[Term, Inductive]], signature.paramToVars)
+    case definition: Inductive[T] => {
+      factory.inductiveType(definition.ident, definition.signature.paramToVars)
     }
 
-    case Some(definition: Constructor[Term]) => {
-      val cons = self.asInstanceOf[Var.Defined[Term, Constructor]]
-      Term.InductiveVariant(
-        cons = cons,
+    case definition: Constructor[T] => {
+      factory.inductiveVariant(
+        cons = definition.ident,
         consArgs = definition.signature.paramToVars,
-        inductiveArgs = cons.ownerSignature.paramToVars
+        inductiveArgs = definition.ident.ownerSignature.paramToVars
       )
     }
-
-    case Some(_: Overloaded[?]) => TypeError("Overloaded function cannot be invoked directly").raise
-
-    case None => TypeError(s"Unresolved reference: ${self.name}").raise
   }
 }
