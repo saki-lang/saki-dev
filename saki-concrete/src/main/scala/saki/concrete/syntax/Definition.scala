@@ -3,12 +3,16 @@ package saki.concrete.syntax
 import org.antlr.v4.runtime.ParserRuleContext
 import saki.concrete.span
 import saki.core.SourceSpan
-import saki.core.syntax.{Expr, Param, Term, Var, Definition as CoreDefinition}
-import saki.core.syntax.{Constructor as CoreConstructor, Function as CoreFunction, Inductive as CoreInductive}
-import saki.util.{LateInit, unreachable}
+import saki.core.syntax.{
+  DefinedFunction, Expr, Param, Var,
+  Constructor as CoreConstructor,
+  Definition as CoreDefinition,
+  Function as CoreFunction,
+  Inductive as CoreInductive
+}
+import saki.util.{unreachable, LateInit}
 
-import scala.collection.mutable
-import scala.collection.Seq
+import scala.collection.{mutable, Seq}
 
 enum Definition(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreDefinition[Expr]] {
 
@@ -34,7 +38,7 @@ enum Definition(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreDefiniti
     case Function(name, paramsExpr, resultType, body) => {
       val params = paramsExpr.map(param => param.map(_.emit))
       val ident: Var.Defined[Expr, CoreFunction] = Var.Defined(name)
-      CoreFunction(ident, params, resultType.emit, true, LateInit(body.emit))
+      DefinedFunction(ident, params, resultType.emit, true, LateInit(body.emit))
     }
 
     case Inductive(name, paramsExpr, constructorsExpr) => {

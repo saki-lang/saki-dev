@@ -3,7 +3,7 @@ package saki.core.elaborate
 import saki.core.context.{DefinitionContext, Environment}
 import saki.core.{SourceSpan, TypeError}
 import saki.core.syntax.*
-import saki.util.{Graph, LateInit}
+import saki.util.{unreachable, Graph, LateInit}
 
 import scala.annotation.targetName
 import scala.collection.Seq
@@ -211,7 +211,7 @@ object Resolve {
 
     val resolvedDefinition: Definition[Expr] = definition match {
 
-      case Function(ident, params, resultType, _, body) => {
+      case DefinedFunction(ident, params, resultType, _, body) => {
         val (resolvedParams, ctxWithParam) = params.resolve(global)
         // register the function name to global context
         global += ident
@@ -222,7 +222,7 @@ object Resolve {
           val isRecursive = funcCtx.dependencyGraph.isInCycle(ident)
           // update the global context with the dependency graph
           global = global.copy(dependencyGraph = funcCtx.dependencyGraph)
-          Function[Expr](ident, resolvedParams, resolvedResultType, isRecursive, LateInit(resolvedBody))
+          DefinedFunction[Expr](ident, resolvedParams, resolvedResultType, isRecursive, LateInit(resolvedBody))
         }
       }
 
@@ -261,6 +261,8 @@ object Resolve {
         }
         Overloaded(ident, resolvedBody)
       }
+
+      case _ => unreachable
     }
 
     (resolvedDefinition, global)

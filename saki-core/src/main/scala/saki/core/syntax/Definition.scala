@@ -1,6 +1,7 @@
 package saki.core.syntax
 
 import saki.core.{Entity, EntityFactory}
+import saki.core.domain.Value
 import saki.util.LateInit
 
 import scala.collection.Seq
@@ -122,16 +123,22 @@ sealed trait NaiveDefinition[T <: Entity] extends Definition[T] with FnLike[T] {
   def signature(implicit ev: EntityFactory[T, T]): Signature[T] = Signature(params, resultType)
 }
 
-case class Function[T <: Entity](
+trait Function[T <: Entity] extends NaiveDefinition[T] {
+  override def ident: Var.Defined[T, Function]
+  def isRecursive: Boolean
+  def resultType: T
+}
+
+case class DefinedFunction[T <: Entity](
   override val ident: Var.Defined[T, Function],
   override val params: ParamList[T],
-  resultType: T,
+  override val resultType: T,
   // Mark this function as a recursive or mutual recursive function
   // When a function is a recursive function, its invocation will not be evaluated instantly
   // unless all its arguments are pure values
-  isRecursive: Boolean,
+  override val isRecursive: Boolean,
   body: LateInit[T] = LateInit[T](),
-) extends NaiveDefinition[T] {
+) extends Function[T] {
 
   override def resultType(implicit ev: EntityFactory[T, T]): T = resultType
 
@@ -139,6 +146,21 @@ case class Function[T <: Entity](
 
   override def toString: String = {
     s"def ${ident.name}(${params.mkString(", ")}): $resultType = \n\t$body"
+  }
+}
+
+case class NativeFunction[T <: Entity](
+  override val ident: Var.Defined[T, Function],
+  override val params: ParamList[T],
+  override val resultType: T,
+  override val isRecursive: Boolean = false,
+  nativeImpl: ArgList[Value] => Value,
+) extends Function[T] {
+  override def toIdent[U <: Entity]: Var.Defined[U, Function] = Var.Defined(ident.name)
+  override def resultType(implicit ev: EntityFactory[T, T]): T = resultType
+  def invoke(args: ArgList[Value]): Value = {
+    assert(args.length == params.length)
+    nativeImpl(args)
   }
 }
 

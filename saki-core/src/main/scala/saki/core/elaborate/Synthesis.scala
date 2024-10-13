@@ -237,7 +237,7 @@ private[core] object Synthesis:
   def synthDefinition(definition: Definition[Expr])(
     implicit env: Environment.Typed[Value]
   ): Definition[Term] = definition match {
-    case Function(ident, paramExprs, resultTypeExpr, isRecursive, pristineBody) => {
+    case DefinedFunction(ident, paramExprs, resultTypeExpr, isRecursive, pristineBody) => {
       val (params, envParams) = synthParams(paramExprs)
       val (resultType, _) = resultTypeExpr.synth(envParams).unpack
       // Try to obtain the declaration of the function from the environment
@@ -245,7 +245,7 @@ private[core] object Synthesis:
         case Some(decl) => decl.ident.asInstanceOf[Var.Defined[Term, Function]]
         case _ => Var.Defined[Term, Function](ident.name)
       }
-      val function = Function[Term](defVar, params, resultType, isRecursive)
+      val function = DefinedFunction[Term](defVar, params, resultType, isRecursive)
       function.ident.definition := function
       function.body := envParams.withCurrentDefinition(function.ident) {
         implicit env => pristineBody.get.elaborate(resultType)(env)
@@ -281,13 +281,13 @@ private[core] object Synthesis:
         inductiveDefinition
       }
     }
-
-    case Constructor(_, _, _) => unreachable
     
     case Overloaded(ident, body) => {
       val overloads = body.map(_.synth.asInstanceOf[Function[Term]])
       Overloaded(ident.asInstanceOf[Var.Defined[Term, Overloaded]], overloads)
     }
+
+    case _ => unreachable
   }
 
   /**

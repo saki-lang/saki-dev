@@ -205,40 +205,44 @@ enum Term extends RuntimeEntity[Type] {
     case Variable(variable) => env.getValue(variable).get
 
     case FunctionInvoke(fnRef, argTerms) => {
-      val fn = env.definitions(fnRef).asInstanceOf[Function[Term]]
+      val function = env.definitions(fnRef).asInstanceOf[Function[Term]]
       env.currentDefinition match {
         case Some(current) if current.name == fnRef.name => {
           // Recursive call, keep it a neutral value
-          Value.functionInvoke(fn.ident, argTerms.map(_.eval))
+          Value.functionInvoke(function.ident, argTerms.map(_.eval))
         }
         case None | Some(_) => {
           val argsValue: Seq[Value] = argTerms.map(_.eval)
           // TODO: this need to be optimized
-          if !fn.isRecursive || argsValue.forall(_.readBack.isFinal(Set.empty)) then {
-            val argVarList: Seq[(Var.Local, Typed[Value])] = fn.arguments(argsValue).map {
+          val allArgumentsFinal = argsValue.forall(_.readBack.isFinal(Set.empty))
+          if !function.isRecursive || allArgumentsFinal then {
+            val argVarList: Seq[(Var.Local, Typed[Value])] = function.arguments(argsValue).map {
               (param, arg) => (param, Typed[Value](arg, arg.infer))
             }
-            val body: Term = fn.body.get
-            env.withLocals(argVarList.toMap) { implicit env => body.eval(env) }
+            function match {
+              case fn: DefinedFunction[Term] => {
+                env.withLocals(argVarList.toMap) { implicit env => fn.body.get.eval(env) }
+              }
+              case fn: NativeFunction[Term] => {
+                // Only evaluate the native function if all arguments are final
+                if allArgumentsFinal then {
+                  // TODO: arguments apply mode
+                  fn.invoke(argVarList.map { (_, typed) => Argument(typed.value) })
+                } else {
+                  Value.functionInvoke(fn.ident, argsValue)
+                }
+              }
+            }
           } else {
-            Value.functionInvoke(fn.ident, argsValue)
+            Value.functionInvoke(function.ident, argsValue)
           }
         }
       }
     }
 
     case invoke: OverloadInvoke => {
-      val (function, argValues) = invoke.getOverload
-      if !function.isRecursive || argValues.forall(_.readBack.isFinal(Set.empty)) then {
-        val argVarList: Seq[(Var.Local, Typed[Value])] = function.params.zip(argValues).map {
-          (param, arg) => (param.ident, Typed[Value](arg, arg.infer))
-        }
-        env.withLocals(argVarList.toMap) {
-          implicit env => function.body.get.eval(env)
-        }
-      } else {
-        Value.functionInvoke(function.ident, argValues)
-      }
+      val (function, _) = invoke.getOverload
+      Term.functionInvoke(function.ident, invoke.args).eval
     }
 
     case InductiveType(indRef, argTerms) => {
