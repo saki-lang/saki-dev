@@ -69,7 +69,7 @@ object PrimitiveString extends PreludeDefinitionSet {
     nativeImpl = (args: ArgList[Value]) => {
       val a: Value = args(0).value
       a match {
-        case Value.Primitive(StringValue(a)) => Value.Primitive(IntValue(a.toInt))
+        case Value.Primitive(StringValue(a)) => Value.Primitive(IntValue(a.toLong))
         case _ => throw new IllegalArgumentException(s"Invalid argument: $a")
       }
     }
@@ -82,7 +82,7 @@ object PrimitiveString extends PreludeDefinitionSet {
     nativeImpl = (args: ArgList[Value]) => {
       val a: Value = args(0).value
       a match {
-        case Value.Primitive(StringValue(a)) => Value.Primitive(FloatValue(a.toFloat))
+        case Value.Primitive(StringValue(a)) => Value.Primitive(FloatValue(a.toDouble))
         case _ => throw new IllegalArgumentException(s"Invalid argument: $a")
       }
     }

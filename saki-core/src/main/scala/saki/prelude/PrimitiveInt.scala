@@ -4,13 +4,15 @@ import saki.core.domain.Value
 import saki.core.syntax.*
 import saki.prelude.@:
 
+import scala.annotation.tailrec
+
 // noinspection ZeroIndexToHead
 object PrimitiveInt extends PreludeDefinitionSet {
 
   import saki.core.syntax.Literal.*
   import saki.core.syntax.LiteralType.*
 
-  private def binaryFunction(ident: String, fn: (Int, Int) => Int): NativeFunction[Term] = NativeFunction(
+  private def binaryFunction(ident: String, fn: (Long, Long) => Long): NativeFunction[Term] = NativeFunction(
     ident = Var.Defined(ident),
     params = Seq("a" @: IntType.toTerm, "b" @: IntType.toTerm),
     resultType = IntType.toTerm,
@@ -24,7 +26,7 @@ object PrimitiveInt extends PreludeDefinitionSet {
     }
   )
 
-  private def unaryFunction(ident: String, fn: Int => Int): NativeFunction[Term] = NativeFunction(
+  private def unaryFunction(ident: String, fn: Long => Long): NativeFunction[Term] = NativeFunction(
     ident = Var.Defined(ident),
     params = Seq("a" @: IntType.toTerm),
     resultType = IntType.toTerm,
@@ -37,7 +39,7 @@ object PrimitiveInt extends PreludeDefinitionSet {
     }
   )
 
-  private def binaryBoolFunction(ident: String, fn: (Int, Int) => Boolean): NativeFunction[Term] = NativeFunction(
+  private def binaryBoolFunction(ident: String, fn: (Long, Long) => Boolean): NativeFunction[Term] = NativeFunction(
     ident = Var.Defined(ident),
     params = Seq("a" @: IntType.toTerm, "b" @: IntType.toTerm),
     resultType = BoolType.toTerm,
@@ -50,6 +52,16 @@ object PrimitiveInt extends PreludeDefinitionSet {
       }
     }
   )
+
+  private def fastPow(base: Long, exp: Long): Long = {
+    @tailrec
+    def loop(base: Long, exponent: Long, acc: Long): Long = {
+      if (exponent == 0) acc
+      else if (exponent % 2 == 0) loop(base * base, exponent / 2, acc)
+      else loop(base, exponent - 1, acc * base)
+    }
+    loop(base, exp, 1)
+  }
   
   override lazy val definitions: Seq[NativeFunction[Term]] = Seq(
     binaryFunction("+", _ + _),
@@ -57,7 +69,8 @@ object PrimitiveInt extends PreludeDefinitionSet {
     binaryFunction("*", _ * _),
     binaryFunction("/", _ / _),
     binaryFunction("%", _ % _),
-    binaryFunction("**", Math.pow(_, _).toInt),
+
+    binaryFunction("**", fastPow),
 
     binaryFunction("xor", _ ^ _),
     binaryFunction("and", _ & _),
@@ -78,6 +91,20 @@ object PrimitiveInt extends PreludeDefinitionSet {
     unaryFunction("dec", _ - 1),
     unaryFunction("--", -_),
     unaryFunction("inv", ~_),
+
+    // toString
+    NativeFunction(
+      ident = Var.Defined("toString"),
+      params = Seq("a" @: IntType.toTerm),
+      resultType = StringType.toTerm,
+      nativeImpl = (args: ArgList[Value]) => {
+        val a: Value = args(0).value
+        a match {
+          case Value.Primitive(IntValue(a)) => Value.Primitive(StringValue(a.toString))
+          case _ => throw new IllegalArgumentException(s"Invalid argument: $a")
+        }
+      }
+    )
   )
 
 }

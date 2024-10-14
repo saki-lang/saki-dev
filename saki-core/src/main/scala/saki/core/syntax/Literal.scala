@@ -6,8 +6,8 @@ enum Literal {
 
   case UnitValue
   case BoolValue(value: Boolean)
-  case IntValue(value: Int)
-  case FloatValue(value: Float)
+  case IntValue(value: Long)
+  case FloatValue(value: Double)
   case CharValue(value: Char)
   case StringValue(value: String)
 

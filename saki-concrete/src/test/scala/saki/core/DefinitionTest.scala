@@ -63,6 +63,37 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     module.eval("fib(n6)") should be (module.eval("n8"))
   }
 
+  it should "peano to int" in {
+    val code = {
+      """
+        type Nat = inductive {
+            Zero
+            Succ(Nat)
+        }
+
+        def toInt(n: Nat): Int = match n {
+            case Nat::Zero => 0
+            case Nat::Succ(n') => toInt(n') + 1
+        }
+
+        def toPeano(n: Int): Nat = {
+            if n == 0 then Nat::Zero
+            else Nat::Succ(toPeano(n - 1))
+        }
+      """
+    }
+    val module = compileModule(code)
+    module.eval("Nat::Zero.toInt") should be (module.eval("0"))
+    module.eval("Nat::Succ(Nat::Zero).toInt") should be (module.eval("1"))
+    module.eval("Nat::Succ(Nat::Succ(Nat::Zero)).toInt") should be (module.eval("2"))
+    module.eval("Nat::Succ(Nat::Succ(Nat::Succ(Nat::Zero))).toInt") should be (module.eval("3"))
+
+    module.eval("0.toPeano") should be (module.eval("Nat::Zero"))
+    module.eval("1.toPeano") should be (module.eval("Nat::Succ(Nat::Zero)"))
+    module.eval("2.toPeano") should be (module.eval("Nat::Succ(Nat::Succ(Nat::Zero))"))
+    module.eval("3.toPeano") should be (module.eval("Nat::Succ(Nat::Succ(Nat::Succ(Nat::Zero)))"))
+  }
+
   it should "is prime" in {
     val code = {
       """
@@ -95,7 +126,7 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     module.eval("isPrime(27089)") should be (module.eval("false"))
     module.eval("isPrime(32749)") should be (module.eval("true"))
 
-    // TODO: tailrec optimization, the following numbers will cause stack overflow
+    // Need optimization, the following numbers will cause stack overflow in scalatest environment
     // module.eval("isPrime(131071)") should be (module.eval("true"))
     // module.eval("isPrime(180469)") should be (module.eval("false"))
   }

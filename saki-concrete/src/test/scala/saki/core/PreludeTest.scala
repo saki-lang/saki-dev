@@ -11,7 +11,7 @@ class PreludeTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
   import LiteralType.*
 
   extension (code: String) {
-    def synth(implicit env: Environment.Typed[Value]): Term = synthExpr(code)._1
+    def synth(implicit env: Environment.Typed[Value]): Term = synthExpr(code)._1.normalize
   }
 
   it should "primitive int" in {
@@ -67,5 +67,10 @@ class PreludeTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     "((1919 - 114) ** 2 > 1919810 || (626 / 47 < 15 && 114514 % 89 == 14)) && !(19260817 / 1919 < 10000)".synth should be (BoolValue(true).term)
     "((817 ** 2 < 114514 * 222 || 1919 + 114 == 2033) && !(1926 % 514 == 0 || 98 ** 2 >= 9605)) || 626 + 114514 < 19260817".synth should be (BoolValue(true).term)
     "((114514 / 98 < 1200 && 1919810 % 61 == 35) || !(222 + 514 >= 800)) && 19260817 % 626 == 9".synth should be (BoolValue(false).term)
+  }
+
+  it should "string ops" in {
+    "\"It's\" ++ \" \" ++ \"mygo\" ++ \"!!!!!\"".synth should be (StringValue("It's mygo!!!!!").term)
+    "19260817.toString".synth should be (StringValue("19260817").term)
   }
 }

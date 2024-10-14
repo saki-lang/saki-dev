@@ -17,9 +17,12 @@ moduleEntity
 expr
     // Value
     :   value=atom                                                          # exprAtom
-    |   lhs=expr rhs=expr                                                   # exprSpine
     |   func=expr '(' NL* argList NL* ')'                                   # exprCall
     |   func=expr '[' NL* argList NL* ']'                                   # exprImplicitCall
+    |   lhs=atom rhs=atom                                                   # exprSpine
+    |   lhs=expr op=OptSymbol rhs=expr                                      # exprSpineInfixOp
+    |   lhs=expr op=OptSymbol                                               # exprSpinePostfixOp
+    |   op=OptSymbol rhs=expr                                               # exprSpinePrefixOp
     |   '(' value=blockExpr ')'                                             # exprParen
     |   '\'(' elements+=expr ',' NL* elements+=expr ')'                     # exprTuple
     |   '^(' types+=expr ',' NL* types+=expr ')'                            # exprTupleType
@@ -42,7 +45,6 @@ expr
     |   'record' (':' super=expr)? '{' NL* fields+=identTypePair (NL+ fields+=identTypePair)* NL* '}' # exprRecordType
     |   recordType=expr '^' '{' NL* fields+=fieldAssignment (NL+ fields+=fieldAssignment)* NL* '}' # exprRecord
     ;
-
 
 blockExpr
     :   expr        # blockExprExpr
@@ -146,10 +148,10 @@ untypedParam
     ;
 
 atom
-    :   'self'              # atomSelf
-    |   literal             # atomLiteral
-    |   ident=Identifier    # atomIdentifier
-    |   op=OptSymbol         # atomOperator
+    :   'self'                  # atomSelf
+    |   literal                 # atomLiteral
+    |   ident=Identifier        # atomIdentifier
+    |   '(' op=OptSymbol ')'    # atomOperator
     ;
 
 identTypePair
@@ -193,7 +195,7 @@ SigmaSymbol: '∃' | 'Σ';
 Identifier: ValueIdent | TypeIdent | ContractIdent;
 
 // Whitespaces
-Whitespace: [ \t\r]+ -> skip;
+Whitespace: [ \t\r]+ -> channel(HIDDEN);
 
 Comment
     : '/*' (Comment | .)*? '*/' -> skip

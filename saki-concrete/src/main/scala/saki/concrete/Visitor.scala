@@ -185,6 +185,9 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       case ctx: ExprCallWithLambdaContext => visitExprCallWithLambda(ctx)
       case ctx: ExprEliminationContext => visitExprElimination(ctx)
       case ctx: ExprSpineContext => visitExprSpine(ctx)
+      case ctx: ExprSpineInfixOpContext => visitExprSpineInfixOp(ctx)
+      case ctx: ExprSpinePrefixOpContext => visitExprSpinePrefixOp(ctx)
+      case ctx: ExprSpinePostfixOpContext => visitExprSpinePostfixOp(ctx)
       case ctx: ExprIfContext => visitExprIf(ctx)
       case ctx: ExprMatchContext => visitExprMatch(ctx)
       case ctx: ExprArrowTypeContext => visitExprArrowType(ctx)
@@ -275,20 +278,35 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     ExprTree.Elimination(subject, member)
   }
 
-  override def visitExprSpine(ctx: ExprSpineContext): ExprTree = {
+  override def visitExprSpine(ctx: ExprSpineContext): ExprTree = visitSpine(ctx)
+  override def visitExprSpineInfixOp(ctx: ExprSpineInfixOpContext): ExprTree = visitSpine(ctx)
+  override def visitExprSpinePrefixOp(ctx: ExprSpinePrefixOpContext): ExprTree = visitSpine(ctx)
+  override def visitExprSpinePostfixOp(ctx: ExprSpinePostfixOpContext): ExprTree = visitSpine(ctx)
+
+  private type SpineContext = ExprSpineContext
+    | ExprSpineInfixOpContext
+    | ExprSpinePrefixOpContext
+    | ExprSpinePostfixOpContext
+
+  private def visitSpine(ctx: SpineContext): ExprTree = {
+    def operator(op: String)(implicit ctx: ExprContext): Operator = getOperator(op)(ctx)
+
     // In-order traversal of the expression spine
-    def traversal(ctx: ExprContext): Seq[ExprContext] = ctx match {
-      case spine: ExprSpineContext => traversal(spine.lhs) ++ traversal(spine.rhs)
-      case expr => Seq(expr)
+    def traversal(ctx: ExprContext): Seq[ExprContext | AtomContext | Operator] = {
+      given ExprContext = ctx
+      ctx match {
+        case spine: ExprSpineContext => Seq(spine.lhs) ++ Seq(spine.rhs)
+        case spine: ExprSpineInfixOpContext => traversal(spine.lhs) ++ Seq(operator(spine.op.getText)) ++ traversal(spine.rhs)
+        case spine: ExprSpinePrefixOpContext => Seq(operator(spine.op.getText)) ++ traversal(spine.rhs)
+        case spine: ExprSpinePostfixOpContext => traversal(spine.lhs) ++ Seq(operator(spine.op.getText))
+        case expr => Seq(expr)
+      }
     }
 
     // Construct the expression spine
     val tokens: Seq[Token] = traversal(ctx).map {
-      case atom: ExprAtomContext => atom.value match {
-        case operator: AtomOperatorContext => Token.Op(this.getOperator(operator.op.getText)(operator))
-        case _ => Token.Atom[ExprTree](visitExprAtom(atom))
-      }
-      case other => Token.Atom[ExprTree](other.visit)
+      case op: Operator => Token.Op(op)
+      case expr: ExprContext => Token.Atom[ExprTree](expr.visit)
     }
 
     val spineExprs = SpineParser.parseExpressions(tokens, this.binaryOperators)
