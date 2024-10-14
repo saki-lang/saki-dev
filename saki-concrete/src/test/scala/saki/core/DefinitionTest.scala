@@ -63,6 +63,43 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     module.eval("fib(n6)") should be (module.eval("n8"))
   }
 
+  it should "is prime" in {
+    val code = {
+      """
+        def checkDivisors(value: Int, divisor: Int): Bool = {
+            if divisor * divisor > value then true
+            else if value % divisor == 0 then false
+            else checkDivisors(value, divisor + 1)
+        }
+
+        def isPrime(n: Int): Bool = {
+            if n <= 1 then false      // 0 and 1 are not prime numbers
+            else if n == 2 then true  // 2 is a prime number
+            else checkDivisors(n, 2)  // Start checking from 2
+        }
+      """
+    }
+    val module = compileModule(code)
+
+    module.eval("isPrime(0)") should be (module.eval("false"))
+    module.eval("isPrime(1)") should be (module.eval("false"))
+    module.eval("isPrime(2)") should be (module.eval("true"))
+    module.eval("isPrime(3)") should be (module.eval("true"))
+    module.eval("isPrime(4)") should be (module.eval("false"))
+
+    module.eval("isPrime(97)") should be (module.eval("true"))
+    module.eval("isPrime(98)") should be (module.eval("false"))
+    module.eval("isPrime(101)") should be (module.eval("true"))
+
+    module.eval("isPrime(6221)") should be (module.eval("true"))
+    module.eval("isPrime(27089)") should be (module.eval("false"))
+    module.eval("isPrime(32749)") should be (module.eval("true"))
+
+    // TODO: tailrec optimization, the following numbers will cause stack overflow
+    // module.eval("isPrime(131071)") should be (module.eval("true"))
+    // module.eval("isPrime(180469)") should be (module.eval("false"))
+  }
+
   it should "mutual recursive" in {
     val code = {
       """
