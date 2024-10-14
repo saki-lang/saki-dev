@@ -36,6 +36,20 @@ object PrimitiveInt extends PreludeDefinitionSet {
       }
     }
   )
+
+  private def binaryBoolFunction(ident: String, fn: (Int, Int) => Boolean): NativeFunction[Term] = NativeFunction(
+    ident = Var.Defined(ident),
+    params = Seq("a" @: IntType.toTerm, "b" @: IntType.toTerm),
+    resultType = BoolType.toTerm,
+    nativeImpl = (args: ArgList[Value]) => {
+      val a: Value = args(0).value
+      val b: Value = args(1).value
+      (a, b) match {
+        case (Value.Primitive(IntValue(a)), Value.Primitive(IntValue(b))) => Value.Primitive(BoolValue(fn(a, b)))
+        case _ => throw new IllegalArgumentException(s"Invalid arguments: $a, $b")
+      }
+    }
+  )
   
   override lazy val definitions: Seq[NativeFunction[Term]] = Seq(
     binaryFunction("+", _ + _),
@@ -44,12 +58,21 @@ object PrimitiveInt extends PreludeDefinitionSet {
     binaryFunction("/", _ / _),
     binaryFunction("%", _ % _),
     binaryFunction("**", Math.pow(_, _).toInt),
+
     binaryFunction("xor", _ ^ _),
     binaryFunction("and", _ & _),
     binaryFunction("or", _ | _),
     binaryFunction("shl", _ << _),
     binaryFunction("shr", _ >> _),
     binaryFunction("ushr", _ >>> _),
+
+    binaryBoolFunction("==", _ == _),
+    binaryBoolFunction("!=", _ != _),
+    binaryBoolFunction("<", _ < _),
+    binaryBoolFunction(">", _ > _),
+    binaryBoolFunction("<=", _ <= _),
+    binaryBoolFunction(">=", _ >= _),
+
     unaryFunction("abs", Math.abs),
     unaryFunction("inc", _ + 1),
     unaryFunction("dec", _ - 1),

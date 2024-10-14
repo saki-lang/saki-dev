@@ -127,7 +127,7 @@ enum Expr(val span: SourceSpan) extends Entity {
     case Hole(_) => "_"
     case Pi(param, result) => s"Π(${param.ident} : ${param.`type`}) -> $result"
     case Sigma(param, result) => s"Σ(${param.ident} : ${param.`type`}) -> $result"
-    case Apply(fn, arg) => s"$fn $arg"
+    case Apply(fn, arg) => s"$fn($arg)"
     case Elimination(obj, member) => s"$obj.$member"
     case Lambda(param, body, _) => s"λ(${param.ident} : ${param.`type`}) => $body"
     case Record(fields) => s"^{ ${fields.map { case (k, v) => s"$k = $v" }.mkString(", ")} }"

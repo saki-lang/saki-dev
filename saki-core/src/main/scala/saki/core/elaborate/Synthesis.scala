@@ -130,7 +130,7 @@ private[core] object Synthesis:
             Synth(fn.apply(arg), codomain(arg.eval))
           }
         }
-        case _ => TypeError.mismatch("Π (x : A) -> B", fnType.toString, fnExpr.span)
+        case _ => TypeError.mismatch("a function", fnType.toString, fnExpr.span)
       }
     }
 

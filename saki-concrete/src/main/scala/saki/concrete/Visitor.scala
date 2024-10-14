@@ -286,7 +286,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     val tokens: Seq[Token] = traversal(ctx).map {
       case atom: ExprAtomContext => atom.value match {
         case operator: AtomOperatorContext => Token.Op(this.getOperator(operator.op.getText)(operator))
-        case other => Token.Atom[ExprTree](visitExprAtom(atom))
+        case _ => Token.Atom[ExprTree](visitExprAtom(atom))
       }
       case other => Token.Atom[ExprTree](other.visit)
     }

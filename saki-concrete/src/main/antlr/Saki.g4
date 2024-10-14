@@ -17,6 +17,7 @@ moduleEntity
 expr
     // Value
     :   value=atom                                                          # exprAtom
+    |   lhs=expr rhs=expr                                                   # exprSpine
     |   func=expr '(' NL* argList NL* ')'                                   # exprCall
     |   func=expr '[' NL* argList NL* ']'                                   # exprImplicitCall
     |   '(' value=blockExpr ')'                                             # exprParen
@@ -29,7 +30,6 @@ expr
     |   '(' lambdaParamList=paramList ')' (':' returnType=expr)? '=>' body=blockExpr                   # exprLambda
     |   func=expr ('|' lambdaParamList=untypedParamList '|' (':' returnType=expr)?)? body=block  # exprCallWithLambda
     |   subject=expr '.' member=Identifier ('[' implicitArgList=argList ']')?     # exprElimination
-    |   lhs=expr rhs=expr                                                 # exprSpine
     // Control
     |   'if' NL* cond=blockExpr NL* 'then' NL* then=blockExpr NL* 'else' NL* else=blockExpr                    # exprIf
     |   'match' value=expr '{' NL* cases+=matchCase (NL+ cases+=matchCase)* NL* '}'                      # exprMatch
@@ -185,7 +185,7 @@ RightArrow: '->';
 RightDoubleArrow: '=>';
 Colon: ':';
 
-OptSymbol: [+\-/*<>=&!^%#:]+;
+OptSymbol: [+\-/*<>=&!^%#:]+ | '||';
 
 PiSymbol: '∀' | 'Π';
 SigmaSymbol: '∃' | 'Σ';
