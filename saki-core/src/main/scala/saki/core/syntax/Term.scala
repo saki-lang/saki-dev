@@ -18,7 +18,7 @@ enum Term extends RuntimeEntity[Type] {
     fn: Var.Defined[Term, Overloaded], args: Seq[Term]
   ) extends Term with OverloadInvokeExt
   case InductiveType(inductive: Var.Defined[Term, Inductive], args: Seq[Term])
-  case InductiveVariant(cons: Var.Defined[Term, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term])
+  case InductiveVariant(inductive: Term, constructor: Var.Defined[Term, Constructor], args: Seq[Term])
   case Match(scrutinees: Seq[Term], clauses: Seq[Clause[Term]])
   case Pi(param: Param[Term], codomain: Term) extends Term with PiLikeTerm
   case OverloadedPi(states: Map[Param[Term], Term]) extends Term with OverloadedTermExt[OverloadedPi]
@@ -53,10 +53,9 @@ enum Term extends RuntimeEntity[Type] {
       val argsStr = if args.nonEmpty then s"(${args.mkString(", ")})" else ""
       s"${inductive.name}$argsStr"
     }
-    case InductiveVariant(cons, args, inductiveArgs) => {
-      val inductiveArgsStr = if inductiveArgs.nonEmpty then s"(${inductiveArgs.mkString(", ")})" else ""
+    case InductiveVariant(constructor, inductive, args) => {
       val argsStr = if args.nonEmpty then s"(${args.mkString(", ")})" else ""
-      s"${cons.name}$inductiveArgsStr$argsStr"
+      s"$inductive::$constructor$argsStr"
     }
     case Match(scrutinees, clauses) => {
       val scrutineesStr = if scrutinees.size > 1 then {
@@ -110,9 +109,7 @@ enum Term extends RuntimeEntity[Type] {
       env.definitions(indRef).asInstanceOf[Inductive[Term]].resultType.eval
     }
 
-    case InductiveVariant(consRef, _, _) => {
-      env.definitions(consRef).asInstanceOf[Constructor[Term]].resultType.eval
-    }
+    case InductiveVariant(inductive, _, _) => inductive.eval
 
     case Match(_, clauses) => {
       val clausesType: Seq[Value] = clauses.map(_.body.infer)
@@ -250,10 +247,11 @@ enum Term extends RuntimeEntity[Type] {
       Value.inductiveType(indRef, argsValue)
     }
 
-    case InductiveVariant(consRef, consArgs, inductiveArgs) => {
-      val consArgsValue: Seq[Value] = consArgs.map(_.eval)
-      val inductiveArgsValue: Seq[Value] = inductiveArgs.map(_.eval)
-      Value.inductiveVariant(consRef, consArgsValue, inductiveArgsValue)
+    case InductiveVariant(inductive, constructor, args) => inductive.eval match {
+      case inductive: Value.InductiveType => {
+        Value.inductiveVariant(inductive, constructor, args.map(_.eval))
+      }
+      case _ => TypeError.error("Not a inductive type")
     }
 
     case Match(scrutinees, clauses) => {
@@ -342,7 +340,7 @@ enum Term extends RuntimeEntity[Type] {
     case FunctionInvoke(_, args) => args.forall(_.isFinal)
     case OverloadInvoke(_, args) => args.forall(_.isFinal)
     case InductiveType(_, args) => args.forall(_.isFinal)
-    case InductiveVariant(_, consArgs, inductiveArgs) => consArgs.forall(_.isFinal) && inductiveArgs.forall(_.isFinal)
+    case InductiveVariant(inductive, constructor, args) => inductive.isFinal && args.forall(_.isFinal)
     case Match(scrutinees, clauses) => scrutinees.forall(_.isFinal) && clauses.forall(_.forall(_.isFinal))
     case Pi(param, codomain) => param.`type`.isFinal && codomain.isFinal
     case OverloadedPi(states) => states.forall {
@@ -391,8 +389,8 @@ object Term extends RuntimeEntityFactory[Term] {
   ): Term = FunctionInvoke(function, args)
 
   override def inductiveVariant(
-    cons: Var.Defined[Term, Constructor], consArgs: Seq[Term], inductiveArgs: Seq[Term]
-  ): Term = InductiveVariant(cons, consArgs, inductiveArgs)
+    inductive: Term, constructor: Var.Defined[Term, Constructor], args: Seq[Term]
+  ): Term = InductiveVariant(inductive, constructor, args)
 
   def overloaded[T <: Term & OverloadedTermExt[T]](
     constructor: Map[Param[Term], Term] => T,

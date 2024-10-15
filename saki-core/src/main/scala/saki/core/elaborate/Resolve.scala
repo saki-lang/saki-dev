@@ -268,14 +268,14 @@ object Resolve {
 
       case Pattern.Bind(binding) => (Pattern.Bind(binding), ctx + binding)
 
-      case Pattern.Cons(cons, patterns) => {
+      case Pattern.Variant(cons, patterns) => {
         val (resolvedPatterns, updatedContext) = patterns.foldLeft((List.empty[Pattern[Expr]], ctx)) {
           case ((resolvedPatterns, context), pattern) => {
             val (resolved, newCtx) = pattern.resolve(context)
             (resolvedPatterns :+ resolved, newCtx)
           }
         }
-        (Pattern.Cons(cons, resolvedPatterns), updatedContext.ref(cons))
+        (Pattern.Variant(cons, resolvedPatterns), updatedContext.ref(cons))
       }
 
       case Pattern.Primitive(value) => (Pattern.Primitive(value), ctx)

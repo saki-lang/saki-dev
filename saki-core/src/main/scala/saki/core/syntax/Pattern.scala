@@ -17,8 +17,9 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
     binding: Var.Local,
   )(implicit span: SourceSpan) extends Pattern[T](span)
 
-  case Cons(
-    cons: Var.Defined[T, Constructor],
+  case Variant(
+    inductive: T,
+    constructor: Var.Defined[T, Constructor],
     patterns: Seq[Pattern[T]],
   )(implicit span: SourceSpan) extends Pattern[T](span)
 
@@ -37,9 +38,9 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
     this match {
       case Primitive(value) => value.toString
       case Bind(binding) => binding.name
-      case Cons(cons, patterns) => {
+      case Variant(inductive, constructor, patterns) => {
         val patternsStr = if patterns.isEmpty then "" else s"(${patterns.mkString(", ")})"
-        s"${cons.name}$patternsStr"
+        s"$inductive::${constructor.name}$patternsStr"
       }
       case Typed(pattern, ty) => s"$pattern : $ty"
       case Record(fields) => s"{${
@@ -52,7 +53,7 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
     case Primitive(value) => Pattern.Primitive(value)
     case Bind(binding) => Pattern.Bind(binding)
     // TODO: Fix here, don't force convert
-    case Cons(cons, patterns) => Pattern.Cons(cons.asInstanceOf, patterns.map(_.map(f)))
+    case Variant(cons, patterns) => Pattern.Variant(cons.asInstanceOf, patterns.map(_.map(f)))
     case Typed(pattern, ty) => Pattern.Typed(pattern.map(f), f(ty))
     case Record(fields) => Pattern.Record(fields.map((name, pattern) => (name, pattern.map(f))))
   }
@@ -60,7 +61,7 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
   def forall(f: T => Boolean): Boolean = this match {
     case Primitive(_) => true
     case Bind(_) => true
-    case Cons(_, patterns) => patterns.forall(_.forall(f))
+    case Variant(_, patterns) => patterns.forall(_.forall(f))
     case Typed(pattern, ty) => pattern.forall(f) && f(ty)
     case Record(fields) => fields.forall((_, pattern) => pattern.forall(f))
   }
@@ -68,7 +69,7 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
   def getBindings: Seq[Var.Local] = this match {
     case Primitive(_) => Seq.empty
     case Bind(binding) => Seq(binding)
-    case Cons(_, patterns) => patterns.flatMap(_.getBindings)
+    case Variant(_, patterns) => patterns.flatMap(_.getBindings)
     case Typed(pattern, _) => pattern.getBindings
     case Record(fields) => fields.flatMap((_, pattern) => pattern.getBindings)
   }
@@ -92,7 +93,7 @@ extension (self: Pattern[Term]) {
     //    Some : A -> this
     //  }
     // ```
-    case Pattern.Cons(cons, patterns) if `type`.isInstanceOf[Term.InductiveType] => {
+    case Pattern.Variant(cons, patterns) if `type`.isInstanceOf[Term.InductiveType] => {
       val inductiveType = `type`.asInstanceOf[Term.InductiveType]
       val consDef: Constructor[Term] = cons.definition.toOption match {
         case Some(definition) => definition
@@ -112,7 +113,7 @@ extension (self: Pattern[Term]) {
       }
     }
 
-    case Pattern.Cons(_, _) => {
+    case Pattern.Variant(_, _) => {
       PatternError.mismatch("Inductive", `type`.toString, self.span)
     }
 
@@ -141,9 +142,9 @@ extension (self: Pattern[Term]) {
       if literal == primitive.value then Some(Map.empty) else None
     }
     case Pattern.Bind(binding) => Some(Map(binding -> value))
-    case Pattern.Cons(cons, patterns) if value.isInstanceOf[Value.InductiveVariant] => {
+    case Pattern.Variant(cons, patterns) if value.isInstanceOf[Value.InductiveVariant] => {
       val variant = value.asInstanceOf[Value.InductiveVariant]
-      if cons != variant.cons then {
+      if cons != variant.constructor then {
         None
       } else {
         assert(patterns.size == variant.consArgs.size)

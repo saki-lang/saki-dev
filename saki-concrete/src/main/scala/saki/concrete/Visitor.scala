@@ -494,7 +494,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       UnsupportedError.unsupported("Pattern constructor with arguments", ctx.span)
     }
     val patterns = Option(ctx.consPatternList).map(_.patterns.asScala.map(_.visit.get)).getOrElse(Seq.empty)
-    Spanned(Pattern.Cons(Var.Defined(constructorIdent), patterns.toSeq))
+    Spanned(Pattern.Variant(Var.Defined(constructorIdent), patterns.toSeq))
   }
 
   override def visitPatternRecord(ctx: PatternRecordContext): Spanned[Pattern[ExprTree]] = {

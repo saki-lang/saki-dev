@@ -54,6 +54,12 @@ enum Expr(val span: SourceSpan) extends Entity {
     member: String
   )(implicit span: SourceSpan) extends Expr(span)
 
+  case Constructor(
+    inductive: Expr,
+    constructor: String,
+    args: Seq[Argument[Expr]],
+  )(implicit span: SourceSpan) extends Expr(span)
+
   case Match(
     scrutinees: Seq[Expr],
     clauses: Seq[Clause[Expr]]
@@ -130,6 +136,7 @@ enum Expr(val span: SourceSpan) extends Entity {
     case Sigma(param, result) => s"Σ(${param.ident} : ${param.`type`}) -> $result"
     case Apply(fn, arg) => s"$fn($arg)"
     case Elimination(obj, member) => s"$obj.$member"
+    case Constructor(inductive, constructor, args) => s"$inductive::$constructor(${args.mkString(", ")})"
     case Lambda(param, body, _) => s"λ(${param.ident} : ${param.`type`}) => $body"
     case Record(fields, _) => s"^{ ${fields.map { case (k, v) => s"$k = $v" }.mkString(", ")} }"
     case RecordType(fields) => s"record { ${fields.map { case (k, v) => s"$k: $v" }.mkString(", ")} }"

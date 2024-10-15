@@ -43,9 +43,9 @@ enum Value extends RuntimeEntity[Type] {
   )
 
   case InductiveVariant(
-    cons: Var.Defined[Term, Constructor],
-    consArgs: Seq[Value],
-    inductiveArgs: Seq[Value],
+    inductive: InductiveType,
+    constructor: Var.Defined[Term, Constructor],
+    args: Seq[Value],
   )
 
   override def infer(implicit env: Environment.Typed[Value]): Type = this.readBack.infer
@@ -87,8 +87,8 @@ enum Value extends RuntimeEntity[Type] {
       Term.inductiveType(inductive, args.map(_.readBack))
     }
 
-    case InductiveVariant(cons, consArgs, inductiveArgs) => {
-      Term.inductiveVariant(cons, consArgs.map(_.readBack), inductiveArgs.map(_.readBack))
+    case InductiveVariant(inductive, constructor, args) => {
+      Term.inductiveVariant(inductive.readBack, constructor, args.map(_.readBack))
     }
   }
   
@@ -111,28 +111,18 @@ enum Value extends RuntimeEntity[Type] {
     }
     case (Record(fields1), Record(fields2)) => {
       fields1.size == fields2.size &&
-      fields1.forall { (name, value1) =>
-        fields2.get(name) match {
-          case Some(value2) => value1 unify value2
-          case None => false
-        }
-      }
+      fields1.forall { case (name, value1) => fields2.get(name).exists(value1.unify) }
     }
     case (RecordType(fields1), RecordType(fields2)) => {
       fields1.size == fields2.size &&
-      fields1.forall { (name, ty1) =>
-        fields2.get(name) match {
-          case Some(ty2) => ty1 unify ty2
-          case None => false
-        }
-      }
+      fields1.forall { case (name, ty1) => fields2.get(name).exists(ty1.unify) }
     }
     case (InductiveType(inductive1, args1), InductiveType(inductive2, args2)) => {
       inductive1 == inductive2 && args1.zip(args2).forall((arg1, arg2) => arg1 unify arg2)
     }
-    case (InductiveVariant(cons1, consArgs1, inductiveArgs1), InductiveVariant(cons2, consArgs2, inductiveArgs2)) => {
-      cons1 == cons2 && consArgs1.zip(consArgs2).forall((arg1, arg2) => arg1 unify arg2) &&
-      inductiveArgs1.zip(inductiveArgs2).forall((arg1, arg2) => arg1 unify arg2)
+    case (InductiveVariant(inductive1, constructor1, args1), InductiveVariant(inductive2, constructor2, args2)) => {
+      (inductive1 unify inductive2) && constructor1 == constructor2 &&
+      (args1.zip(args2).forall((arg1, arg2) => arg1 unify arg2))
     }
     case _ => false
   }
@@ -178,22 +168,12 @@ enum Value extends RuntimeEntity[Type] {
 
     // Record subtyping: all fields in `that` must be present in `this` and be subtypes
     case (Record(fields1), Record(fields2)) => {
-      fields2.forall { (name, value2) =>
-        fields1.get(name) match {
-          case Some(value1) => value1 <:< value2
-          case None => false
-        }
-      }
+      fields2.forall { case (name, value2) => fields1.get(name).exists(_ <:< value2) }
     }
 
     // RecordType subtyping: all fields in `that` must be present in `this` and be subtypes
     case (RecordType(fields1), RecordType(fields2)) => {
-      fields2.forall { (name, ty2) =>
-        fields1.get(name) match {
-          case Some(ty1) => ty1 <:< ty2
-          case None => false
-        }
-      }
+      fields2.forall { case (name, ty2) => fields1.get(name).exists(_ <:< ty2) }
     }
 
     // Inductive type subtyping: inductive types must match and arguments must be subtypes
@@ -202,10 +182,9 @@ enum Value extends RuntimeEntity[Type] {
     }
 
     // Inductive variant subtyping: constructors must match, and arguments must be subtypes
-    case (InductiveVariant(cons1, consArgs1, inductiveArgs1), InductiveVariant(cons2, consArgs2, inductiveArgs2)) => {
-      cons1 == cons2 &&
-      consArgs1.zip(consArgs2).forall { case (arg1, arg2) => arg1 <:< arg2 } &&
-      inductiveArgs1.zip(inductiveArgs2).forall { case (arg1, arg2) => arg1 <:< arg2 }
+    case (InductiveVariant(inductive1, cons1, args1), InductiveVariant(inductive2, cons2, args2)) => {
+      (inductive1 <:< inductive2) && cons1 == cons2 &&
+      args1.zip(args2).forall { case (arg1, arg2) => arg1 <:< arg2 }
     }
 
     // Default case: no subtyping relationship
@@ -233,9 +212,11 @@ object Value extends RuntimeEntityFactory[Value] {
   }
 
   override def inductiveVariant(
-    cons: Var.Defined[Term, Constructor], consArgs: Seq[Type], inductiveArgs: Seq[Type]
+    inductive: InductiveType,
+    constructor: Var.Defined[Term, Constructor],
+    args: Seq[Value],
   ): Type = {
-    Value.InductiveVariant(cons, consArgs, inductiveArgs)
+    Value.InductiveVariant(inductive, constructor, args)
   }
 
   /**
