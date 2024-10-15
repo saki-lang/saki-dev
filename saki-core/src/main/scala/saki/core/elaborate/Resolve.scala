@@ -123,6 +123,17 @@ object Resolve {
         (resolved, ctx)
       }
 
+      case Expr.Constructor(inductive, constructor, args) => {
+        val (resolvedInductive, inductiveCtx) = inductive.resolve
+        val (resolvedArgs, argsCtx) = args.foldLeft((Seq.empty[Argument[Expr]], inductiveCtx)) {
+          case ((resolvedArgs, ctx), arg) => {
+            val (resolved, newCtx) = arg.value.resolve(ctx)
+            (resolvedArgs :+ Argument(resolved, arg.applyMode), newCtx)
+          }
+        }
+        (Expr.Constructor(resolvedInductive, constructor, resolvedArgs), argsCtx)
+      }
+
       case Expr.Lambda(param, body, returnType) => {
         val (resolvedParamType, ctxParam) = param.`type`.resolve
         val (resolvedBody, ctxBody) = ctxParam.withVariable(param.ident) { body.resolve }
@@ -268,14 +279,15 @@ object Resolve {
 
       case Pattern.Bind(binding) => (Pattern.Bind(binding), ctx + binding)
 
-      case Pattern.Variant(cons, patterns) => {
-        val (resolvedPatterns, updatedContext) = patterns.foldLeft((List.empty[Pattern[Expr]], ctx)) {
+      case Pattern.Variant(inductive, constructor, patterns) => {
+        val (resolvedInductive, inductiveContext) = inductive.resolve
+        val (resolvedPatterns, updatedContext) = patterns.foldLeft((List.empty[Pattern[Expr]], inductiveContext)) {
           case ((resolvedPatterns, context), pattern) => {
             val (resolved, newCtx) = pattern.resolve(context)
             (resolvedPatterns :+ resolved, newCtx)
           }
         }
-        (Pattern.Variant(cons, resolvedPatterns), updatedContext.ref(cons))
+        (Pattern.Variant(resolvedInductive, constructor, resolvedPatterns), updatedContext.ref(constructor))
       }
 
       case Pattern.Primitive(value) => (Pattern.Primitive(value), ctx)

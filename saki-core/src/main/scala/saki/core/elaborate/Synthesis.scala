@@ -140,6 +140,32 @@ private[core] object Synthesis:
       }
     }
 
+    case Expr.Constructor(inductive, constructor, args) => {
+      // TODO: support constructor curring
+      val inductiveType = inductive.synth(env).term.eval match {
+        case inductiveType: Value.InductiveType => inductiveType
+        case _ => TypeError.error("Expected inductive type", inductive.span)
+      }
+      val consDef: Constructor[Term] = env.getDefinitionByName(constructor) match {
+        case Some(definition: Constructor[Term]) => definition
+        case _ => TypeError.error(s"Constructor not found: $constructor", expr.span)
+      }
+      if inductiveType.inductive != consDef.owner then {
+        TypeError.error("Mismatch in inductive type", expr.span)
+      }
+      if consDef.params.size != args.size then {
+        TypeError.error("Mismatch in number of arguments", expr.span)
+      }
+      val argsSynth = args.zip(consDef.params).map { (arg, param) =>
+        val (argTerm, argType) = arg.value.synth(env).unpack
+        if !(param.`type`.eval <:< argType) then {
+          TypeError.mismatch(param.`type`.toString, argType.toString, arg.value.span)
+        }
+        argTerm
+      }
+      Synth(Term.InductiveVariant(inductiveType.readBack, consDef.ident, argsSynth), inductiveType)
+    }
+
     case Expr.Match(scrutinees, clauses) => {
       val scrutineesSynth: Seq[Synth] = scrutinees.map(_.synth)
       val clausesSynth: Seq[(Clause[Term], Term)] = clauses.map { clause =>

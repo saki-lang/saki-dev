@@ -16,23 +16,24 @@ moduleEntity
 
 expr
     // Value
-    :   value=atom                                                          # exprAtom
-    |   func=expr '(' NL* argList NL* ')'                                   # exprCall
-    |   func=expr '[' NL* argList NL* ']'                                   # exprImplicitCall
+    :   value=atom                                                              # exprAtom
+    |   func=expr '(' NL* argList NL* ')'                                       # exprCall
+    |   func=expr '[' NL* argList NL* ']'                                       # exprImplicitCall
+    |   subject=expr '.' member=Identifier ('[' implicitArgList=argList ']')?   # exprElimination
+    |   inductive=expr '::' constructor=Identifier                              # exprConstructor
+    |   '(' value=blockExpr ')'                                                 # exprParen
+    |   '\'(' elements+=expr ',' NL* elements+=expr ')'                         # exprTuple
+    |   '^(' types+=expr ',' NL* types+=expr ')'                                # exprTupleType
+//    |   inductive=Identifier
+//        ('[' NL* implicitArgList=argList NL* ']')?
+//        ('(' NL* explicitArgList=argList NL* ')')?
+//        '::' constructor=Identifier                         # exprConstructor
+    |   '(' lambdaParamList=paramList ')' (':' returnType=expr)? '=>' body=blockExpr                   # exprLambda
+    |   func=expr ('|' lambdaParamList=untypedParamList '|' (':' returnType=expr)?)? body=block  # exprCallWithLambda
     |   lhs=atom rhs=atom                                                   # exprSpine
     |   lhs=expr op=OptSymbol rhs=expr                                      # exprSpineInfixOp
     |   lhs=expr op=OptSymbol                                               # exprSpinePostfixOp
     |   op=OptSymbol rhs=expr                                               # exprSpinePrefixOp
-    |   '(' value=blockExpr ')'                                             # exprParen
-    |   '\'(' elements+=expr ',' NL* elements+=expr ')'                     # exprTuple
-    |   '^(' types+=expr ',' NL* types+=expr ')'                            # exprTupleType
-    |   inductive=Identifier
-        ('[' NL* implicitArgList=argList NL* ']')?
-        ('(' NL* explicitArgList=argList NL* ')')?
-        '::' constructor=Identifier                         # exprConstructor
-    |   '(' lambdaParamList=paramList ')' (':' returnType=expr)? '=>' body=blockExpr                   # exprLambda
-    |   func=expr ('|' lambdaParamList=untypedParamList '|' (':' returnType=expr)?)? body=block  # exprCallWithLambda
-    |   subject=expr '.' member=Identifier ('[' implicitArgList=argList ']')?     # exprElimination
     // Control
     |   'if' NL* cond=blockExpr NL* 'then' NL* then=blockExpr NL* 'else' NL* else=blockExpr                    # exprIf
     |   'match' value=expr '{' NL* cases+=matchCase (NL+ cases+=matchCase)* NL* '}'                      # exprMatch

@@ -2,7 +2,7 @@ package saki.core.domain
 
 import saki.core.context.Environment
 import saki.core.syntax.*
-import saki.core.{RuntimeEntity, RuntimeEntityFactory}
+import saki.core.{RuntimeEntity, RuntimeEntityFactory, TypeError}
 
 import scala.annotation.targetName
 import scala.collection.Seq
@@ -212,11 +212,12 @@ object Value extends RuntimeEntityFactory[Value] {
   }
 
   override def inductiveVariant(
-    inductive: InductiveType,
+    inductive: Value,
     constructor: Var.Defined[Term, Constructor],
     args: Seq[Value],
-  ): Type = {
-    Value.InductiveVariant(inductive, constructor, args)
+  ): Type = inductive match {
+    case inductive: InductiveType => Value.InductiveVariant(inductive, constructor, args)
+    case _ => TypeError.error("Expected inductive type")
   }
 
   /**

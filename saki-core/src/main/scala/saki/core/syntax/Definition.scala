@@ -220,12 +220,6 @@ extension [T <: Entity, Def[E <: Entity] <: NaiveDefinition[E]](self: Def[T]) {
       factory.inductiveType(definition.ident, definition.signature.paramToVars)
     }
 
-    case definition: Constructor[T] => {
-      factory.inductiveVariant(
-        cons = definition.ident,
-        consArgs = definition.signature.paramToVars,
-        inductiveArgs = definition.ident.ownerSignature.paramToVars
-      )
-    }
+    case definition: Constructor[T] => ???
   }
 }
