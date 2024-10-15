@@ -131,53 +131,38 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     // module.eval("isPrime(180469)") should be (module.eval("false"))
   }
 
-  it should "mutual recursive" in {
+  it should "different style fn call" in {
     val code = {
       """
-        type Nat = inductive {
-            Zero
-            Succ(Nat)
-        }
+        def square(n: Int): Int = n * n
 
-        def isEven(n: Nat): Bool = match n {
-            case Nat::Zero => true
-            case Nat::Succ(n') => isOdd(n')
-        }
+        def add(a b: Int): Int = a + b
 
-        def isOdd(n: Nat): Bool = match n {
-            case Nat::Zero => false
-            case Nat::Succ(n') => isEven(n')
+        def powerMod(base exponent mod: Int): Int = {
+            if exponent == 0 then 1
+            else if exponent % 2 == 0 then {
+                let half = powerMod(base, exponent / 2, mod)
+                (half * half) % mod
+            } else {
+                (base * powerMod(base, exponent - 1, mod)) % mod
+            }
         }
-
-        def n0: Nat = Nat::Zero
-        def n1: Nat = Nat::Succ(n0)
-        def n2: Nat = Nat::Succ(n1)
-        def n3: Nat = Nat::Succ(n2)
-        def n4: Nat = Nat::Succ(n3)
-        def n5: Nat = Nat::Succ(n4)
-        def n6: Nat = Nat::Succ(n5)
-        def n7: Nat = Nat::Succ(n6)
-        def n8: Nat = Nat::Succ(n7)
-        def n9: Nat = Nat::Succ(n8)
       """
     }
     val module = compileModule(code)
 
-    module.eval("isEven(n3)") should be (module.eval("false"))
-    module.eval("isEven(n4)") should be (module.eval("true"))
-    module.eval("isEven(n5)") should be (module.eval("false"))
-    module.eval("isEven(n6)") should be (module.eval("true"))
-    module.eval("isEven(n7)") should be (module.eval("false"))
-    module.eval("isEven(n8)") should be (module.eval("true"))
-    module.eval("isEven(n9)") should be (module.eval("false"))
+    // 12996: 12 months a year, work from 9:00 am to 9:00 pm, 6 days per week
+    module.eval("square(114)") should be (module.eval("12996"))
+    module.eval("114.square") should be (module.eval("12996"))
+    module.eval("square 114") should be (module.eval("12996"))
 
-    module.eval("isOdd(n3)") should be (module.eval("true"))
-    module.eval("isOdd(n4)") should be (module.eval("false"))
-    module.eval("isOdd(n5)") should be (module.eval("true"))
-    module.eval("isOdd(n6)") should be (module.eval("false"))
-    module.eval("isOdd(n7)") should be (module.eval("true"))
-    module.eval("isOdd(n8)") should be (module.eval("false"))
-    module.eval("isOdd(n9)") should be (module.eval("true"))
+    module.eval("add(98)(527)") should be (module.eval("625"))
+    module.eval("98.add(527)") should be (module.eval("625"))
+    module.eval("add 98 527") should be (module.eval("625"))
+
+    module.eval("powerMod(1926, 8, 17)") should be (module.eval("16"))
+    module.eval("1926.powerMod(8, 17)") should be (module.eval("16"))
+    module.eval("powerMod 1926 8 17") should be (module.eval("16"))
   }
 
   it should "eq refl" in {
@@ -214,6 +199,55 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
       """
     }
     val module = compileModule(code)
+  }
+
+  it should "mutual recursive" in {
+    val code = {
+      """
+          type Nat = inductive {
+              Zero
+              Succ(Nat)
+          }
+
+          def isEven(n: Nat): Bool = match n {
+              case Nat::Zero => true
+              case Nat::Succ(n') => isOdd(n')
+          }
+
+          def isOdd(n: Nat): Bool = match n {
+              case Nat::Zero => false
+              case Nat::Succ(n') => isEven(n')
+          }
+
+          def n0: Nat = Nat::Zero
+          def n1: Nat = Nat::Succ(n0)
+          def n2: Nat = Nat::Succ(n1)
+          def n3: Nat = Nat::Succ(n2)
+          def n4: Nat = Nat::Succ(n3)
+          def n5: Nat = Nat::Succ(n4)
+          def n6: Nat = Nat::Succ(n5)
+          def n7: Nat = Nat::Succ(n6)
+          def n8: Nat = Nat::Succ(n7)
+          def n9: Nat = Nat::Succ(n8)
+        """
+    }
+    val module = compileModule(code)
+
+    module.eval("isEven(n3)") should be(module.eval("false"))
+    module.eval("isEven(n4)") should be(module.eval("true"))
+    module.eval("isEven(n5)") should be(module.eval("false"))
+    module.eval("isEven(n6)") should be(module.eval("true"))
+    module.eval("isEven(n7)") should be(module.eval("false"))
+    module.eval("isEven(n8)") should be(module.eval("true"))
+    module.eval("isEven(n9)") should be(module.eval("false"))
+
+    module.eval("isOdd(n3)") should be(module.eval("true"))
+    module.eval("isOdd(n4)") should be(module.eval("false"))
+    module.eval("isOdd(n5)") should be(module.eval("true"))
+    module.eval("isOdd(n6)") should be(module.eval("false"))
+    module.eval("isOdd(n7)") should be(module.eval("true"))
+    module.eval("isOdd(n8)") should be(module.eval("false"))
+    module.eval("isOdd(n9)") should be(module.eval("true"))
   }
 
 }

@@ -200,12 +200,16 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     }
   }
 
-  override def visitExprAtom(ctx: ExprAtomContext): ExprTree = ctx.atom match {
-    case context: AtomOperatorContext => visitAtomOperator(context)
-    case context: AtomIdentifierContext => visitAtomIdentifier(context)
-    case context: AtomLiteralContext => visitAtomLiteral(context)
-    case context: AtomSelfContext => UnsupportedError.unsupported("`self` is not supported yet", context.span)
+  extension (self: AtomContext) {
+    private def visit: ExprTree = self match {
+      case ctx: AtomOperatorContext => visitAtomOperator(ctx)
+      case ctx: AtomIdentifierContext => visitAtomIdentifier(ctx)
+      case ctx: AtomLiteralContext => visitAtomLiteral(ctx)
+      case ctx: AtomSelfContext => UnsupportedError.unsupported("`self` is not supported yet", ctx.span)
+    }
   }
+
+  override def visitExprAtom(ctx: ExprAtomContext): ExprTree = ctx.atom.visit
 
   override def visitExprCall(ctx: ExprCallContext): ExprTree.FunctionCall = {
     given ParserRuleContext = ctx
@@ -307,6 +311,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     val tokens: Seq[Token] = traversal(ctx).map {
       case op: Operator => Token.Op(op)
       case expr: ExprContext => Token.Atom[ExprTree](expr.visit)
+      case atom: AtomContext => Token.Atom[ExprTree](atom.visit)
     }
 
     val spineExprs = SpineParser.parseExpressions(tokens, this.binaryOperators)

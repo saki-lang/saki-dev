@@ -1,6 +1,6 @@
 package saki.core.elaborate
 
-import saki.core.{Entity, Param, TypeError}
+import saki.core.{Entity, Param, SourceSpan, TypeError}
 import saki.core.context.{Environment, Typed}
 import saki.core.domain.{NeutralValue, Type, Value}
 import saki.core.syntax.{*, given}
@@ -45,6 +45,9 @@ private[core] object Synthesis:
 
   case class Synth(term: Term, `type`: Type) {
     def unpack: (Term, Type) = (term, `type`)
+    def normalize(implicit env: Environment.Typed[Value]): Synth = {
+      Synth(term.normalize, `type`)
+    }
   }
 
   def synth(expr: Expr)(implicit env: Environment.Typed[Value]): Synth = expr match {
@@ -94,10 +97,9 @@ private[core] object Synthesis:
       }
     }
 
-    case Expr.Elimination(obj, member) => obj.synth(env).unpack match {
+    case Expr.Elimination(obj, member) => obj.synth(env).normalize.unpack match {
       // This is a project operation
       // `obj.field`
-      // TODO: maybe we don't need to normalize here?
       case (term, recordType: Value.RecordType) => term match {
         case Term.Record(fields) => fields.get(member) match {
           case Some(value) => Synth(value, recordType.fields(member))
@@ -107,12 +109,13 @@ private[core] object Synthesis:
       }
       // This is a method call
       // `obj.method`
-      case (term, _) => {
+      case _ => {
+        given SourceSpan = expr.span
         val method: Function[Term] = env.getDefinitionByName(member) match {
           case Some(definition: Function[Term]) => definition
           case _ => TypeError.error(s"Method not found: $member", expr.span)
         }
-        Synth(Term.FunctionInvoke(method.ident, Seq(term)), method.resultType.eval)
+        Expr.Apply(Expr.Variable(method.ident), Argument(obj)).synth(env)
       }
     }
 
