@@ -2,7 +2,7 @@ package saki.core.elaborate
 
 import saki.core.{Entity, Param, SourceSpan, TypeError}
 import saki.core.context.{Environment, Typed}
-import saki.core.domain.{NeutralValue, Type, Value}
+import saki.core.domain.{Type, Value}
 import saki.core.syntax.{*, given}
 import saki.util.unreachable
 
@@ -54,12 +54,13 @@ private[core] object Synthesis:
 
     case Expr.Unresolved(name) => {
       try {
-        env.getTyped(name) match {
-          case Some(Typed(value, ty)) => Synth(value.readBack, ty)
-          // If the variable is not found in the environment,
-          // indicating that it is a primitive variable or an unknown variable,
-          // try to synthesize it as a primitive type
-          case None => synthPrimitiveType(name)
+        given SourceSpan = expr.span
+        env.getDefinitionByName(name) match {
+          case Some(definition) => Expr.Variable(definition.ident).synth(env)
+          case None => env.getTyped(name) match {
+            case Some(Typed(value, ty)) => Synth(value.readBack, ty)
+            case None => TypeError.error(s"Unresolved reference: $name", expr.span)
+          }
         }
       } catch { // TODO: refactor error handling
         case TypeError(message, _) => TypeError.error(message, expr.span)
@@ -196,17 +197,6 @@ private[core] object Synthesis:
 
     case _ => TypeError.error("Failed to synthesis expression", expr.span)
     
-  }
-
-  def synthPrimitiveType(name: String): Synth = name match {
-    case "'Type" => Synth(Term.Universe, Value.Universe)
-    case "Nothing" => Synth(Term.PrimitiveType(LiteralType.NothingType), Value.Universe)
-    case "Int" | "ℤ" => Synth(Term.PrimitiveType(LiteralType.IntType), Value.Universe)
-    case "Float" | "ℝ" => Synth(Term.PrimitiveType(LiteralType.FloatType), Value.Universe)
-    case "Bool" | "\uD835\uDD39" => Synth(Term.PrimitiveType(LiteralType.BoolType), Value.Universe)
-    case "Char" => Synth(Term.PrimitiveType(LiteralType.CharType), Value.Universe)
-    case "String" => Synth(Term.PrimitiveType(LiteralType.StringType), Value.Universe)
-    case _ => TypeError.error(s"Unknown primitive type: $name")
   }
 
   private def synthDependentType(param: Param[Expr], result: Expr, constructor: (Param[Term], Term) => Term)(

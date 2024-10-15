@@ -8,7 +8,7 @@ enum Literal {
   case BoolValue(value: Boolean)
   case IntValue(value: Long)
   case FloatValue(value: Double)
-  case CharValue(value: Char)
+  case RuneValue(value: Char)
   case StringValue(value: String)
 
   override def toString: String = this match {
@@ -16,7 +16,7 @@ enum Literal {
     case BoolValue(value) => value.toString
     case IntValue(value) => value.toString + 'i'
     case FloatValue(value) => value.toString + 'f'
-    case CharValue(value) => s"'${value.toString}'"
+    case RuneValue(value) => s"'${value.toString}'"
     case StringValue(value) => s""""$value""""
   }
 
@@ -25,7 +25,7 @@ enum Literal {
     case BoolValue(_) => LiteralType.BoolType
     case IntValue(_) => LiteralType.IntType
     case FloatValue(_) => LiteralType.FloatType
-    case CharValue(_) => LiteralType.CharType
+    case RuneValue(_) => LiteralType.RuneType
     case StringValue(_) => LiteralType.StringType
   }
 
@@ -46,7 +46,7 @@ enum LiteralType {
   case BoolType
   case IntType
   case FloatType
-  case CharType
+  case RuneType
   case StringType
 
   override def toString: String = this match {
@@ -55,7 +55,7 @@ enum LiteralType {
     case BoolType => "Bool"
     case IntType => "Int"
     case FloatType => "Float"
-    case CharType => "Char"
+    case RuneType => "Char"
     case StringType => "String"
   }
 

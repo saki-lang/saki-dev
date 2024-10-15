@@ -85,20 +85,7 @@ object Resolve {
 
       case Expr.Unresolved(name) => ctx.get(name) match {
         case Some(variable) => Expr.Variable(variable).resolve(ctx)
-        case None => {
-          val resolved: Expr = name match {
-            case "'Type" => Expr.Universe()
-            case "Nothing" => Expr.PrimitiveType(LiteralType.NothingType)
-            case "Unit" => Expr.PrimitiveType(LiteralType.UnitType)
-            case "Bool" | "\uD835\uDD39" => Expr.PrimitiveType(LiteralType.BoolType)
-            case "Int" | "ℤ" => Expr.PrimitiveType(LiteralType.IntType)
-            case "Float" | "ℝ" => Expr.PrimitiveType(LiteralType.FloatType)
-            case "Char" => Expr.PrimitiveType(LiteralType.CharType)
-            case "String" => Expr.PrimitiveType(LiteralType.StringType)
-            case _ => TypeError.error(s"Unresolved variable: $name", span)
-          }
-          (resolved, ctx)
-        }
+        case None => TypeError.error(s"Unresolved variable: $name", span)
       }
 
       case Expr.Hole(_) => {

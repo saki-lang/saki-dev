@@ -468,7 +468,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     val valueString = ctx.literal.getText
     val value = ctx.literal match {
       case _: LiteralBoolContext => LiteralValue.BoolValue(valueString.toBoolean)
-      case _: LiteralCharContext => LiteralValue.CharValue(valueString.charAt(1))
+      case _: LiteralCharContext => LiteralValue.RuneValue(valueString.charAt(1))
       case _: LiteralFloatContext => LiteralValue.FloatValue(valueString.toFloat)
       case _: LiteralIntContext => LiteralValue.IntValue(valueString.toInt)
       case _: LiteralRegularStringContext => LiteralValue.StringValue(valueString.substring(1, valueString.length - 1))
@@ -610,7 +610,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
 
   override def visitLiteralBool(ctx: LiteralBoolContext): ExprTree = ExprTree.PrimitiveValue(BoolValue(ctx.value.getText.toBoolean))(ctx)
 
-  override def visitLiteralChar(ctx: LiteralCharContext): ExprTree = ExprTree.PrimitiveValue(CharValue(ctx.value.getText.charAt(1)))(ctx)
+  override def visitLiteralChar(ctx: LiteralCharContext): ExprTree = ExprTree.PrimitiveValue(RuneValue(ctx.value.getText.charAt(1)))(ctx)
 
   override def visitLiteralRawString(ctx: LiteralRawStringContext): ExprTree = {
     given ParserRuleContext = ctx

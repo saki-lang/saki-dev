@@ -19,6 +19,7 @@ trait PreludeDefinitionSet {
 
 object Prelude {
   lazy val definitions: Seq[NativeFunction[Term]] = Seq(
+    PrimitiveType.definitions,
     PrimitiveBool.definitions,
     PrimitiveInt.definitions,
     PrimitiveString.definitions,
