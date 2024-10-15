@@ -169,7 +169,8 @@ enum ExprTree(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] with
     )
 
     case RecordValue(fields, ty) => CoreExpr.Record(
-      fields.map { (name, value) => (name, value.emit) }.toMap
+      fields.map { (name, value) => (name, value.emit) }.toMap,
+      Some(ty.emit),
     )
   }
 

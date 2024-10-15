@@ -96,7 +96,8 @@ enum Expr(val span: SourceSpan) extends Entity {
    * `^{ field1 = expr1, field2 = expr2, ... }`
    */
   case Record( // TODO: record type
-    fields: Map[String, Expr]
+    fields: Map[String, Expr],
+    expectedType: Option[Expr] = None,
   )(implicit span: SourceSpan) extends Expr(span)
 
   /**
@@ -130,7 +131,7 @@ enum Expr(val span: SourceSpan) extends Entity {
     case Apply(fn, arg) => s"$fn($arg)"
     case Elimination(obj, member) => s"$obj.$member"
     case Lambda(param, body, _) => s"λ(${param.ident} : ${param.`type`}) => $body"
-    case Record(fields) => s"^{ ${fields.map { case (k, v) => s"$k = $v" }.mkString(", ")} }"
+    case Record(fields, _) => s"^{ ${fields.map { case (k, v) => s"$k = $v" }.mkString(", ")} }"
     case RecordType(fields) => s"record { ${fields.map { case (k, v) => s"$k: $v" }.mkString(", ")} }"
     case Match(scrutinees, clauses) => s"match $scrutinees { ${clauses.map(_.toString).mkString(" | ")} }"
   }

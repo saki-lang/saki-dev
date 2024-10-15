@@ -1,7 +1,7 @@
 package saki.core.elaborate
 
-import saki.core.context.{DefinitionContext, Environment}
 import saki.core.{SourceSpan, TypeError}
+import saki.core.context.DefinitionContext
 import saki.core.syntax.*
 import saki.util.{unreachable, Graph, LateInit}
 
@@ -150,14 +150,14 @@ object Resolve {
         (Expr.Match(resolvedScrutinees, resolvedClauses), clausesCtx)
       }
 
-      case Expr.Record(fields) => {
+      case Expr.Record(fields, expectedType) => {
         val (resolvedFields, fieldsCtx) = fields.foldLeft((Map.empty[String, Expr], ctx)) {
           case ((resolvedFields, ctx), (label, expr)) => {
             val (resolved, newCtx) = expr.resolve(ctx)
             (resolvedFields + (label -> resolved), newCtx)
           }
         }
-        (Expr.Record(resolvedFields), fieldsCtx)
+        (Expr.Record(resolvedFields, expectedType), fieldsCtx)
       }
 
       case Expr.RecordType(fields) => {

@@ -269,19 +269,9 @@ enum Term extends RuntimeEntity[Type] {
 
     case sigmaType: Sigma => sigmaType.eval(Value.Sigma.apply)
 
-    case Record(fields) => {
-      val fieldsValue: Map[String, Value] = fields.map {
-        (name, term) => (name, term.eval)
-      }
-      Value.Record(fieldsValue)
-    }
+    case Record(fields) => Value.Record(fields.map((name, term) => (name, term.eval)))
 
-    case RecordType(fields) => {
-      val fieldsType: Map[String, Type] = fields.map {
-        (name, term) => (name, term.infer)
-      }
-      Value.RecordType(fieldsType)
-    }
+    case RecordType(fields) => Value.RecordType(fields.map((name, ty) => (name, ty.eval)))
 
     case Apply(fn, arg) => fn.eval match {
       

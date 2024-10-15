@@ -52,6 +52,8 @@ private[core] object Synthesis:
 
   def synth(expr: Expr)(implicit env: Environment.Typed[Value]): Synth = expr match {
 
+    case Expr.Hole(_) => ??? // TODO: Implement hole synthesis
+
     case Expr.Unresolved(name) => {
       try {
         given SourceSpan = expr.span
@@ -195,7 +197,23 @@ private[core] object Synthesis:
       }
     }
 
-    case _ => TypeError.error("Failed to synthesis expression", expr.span)
+    case Expr.Record(fields, expectedType) => {
+      val fieldSynths: Map[String, Synth] = fields.map((name, expr) => (name -> expr.synth))
+      val recordType = Value.RecordType(fieldSynths.map((name, synth) => (name, synth.`type`)))
+      val recordFields = fieldSynths.map((name, synth) => (name, synth.term))
+      expectedType.foreach { expectedTypeExpr =>
+        val (expectedType, _) = expectedTypeExpr.synth.unpack
+        if !(recordType <:< expectedType.eval) then {
+          TypeError.mismatch(expectedType.toString, recordType.toString, expectedTypeExpr.span)
+        }
+      }
+      Synth(Term.Record(recordFields), recordType)
+    }
+
+    case Expr.RecordType(fields) => {
+      val fieldTypes: Map[String, Term] = fields.map((name, ty) => (name -> ty.synth.term))
+      Synth(Term.RecordType(fieldTypes), Value.Universe)
+    }
     
   }
 
