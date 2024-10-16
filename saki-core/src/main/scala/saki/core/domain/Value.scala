@@ -44,7 +44,7 @@ enum Value extends RuntimeEntity[Type] {
 
   case InductiveVariant(
     inductive: InductiveType,
-    constructor: Var.Defined[Term, Constructor],
+    constructor: Constructor[Term],
     args: Seq[Value],
   )
 
@@ -213,7 +213,7 @@ object Value extends RuntimeEntityFactory[Value] {
 
   override def inductiveVariant(
     inductive: Value,
-    constructor: Var.Defined[Term, Constructor],
+    constructor: Constructor[Term],
     args: Seq[Value],
   ): Type = inductive match {
     case inductive: InductiveType => Value.InductiveVariant(inductive, constructor, args)

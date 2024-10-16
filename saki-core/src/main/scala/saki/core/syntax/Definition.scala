@@ -21,7 +21,7 @@ enum Var {
   }
 
   override def equals(that: Any): Boolean = that match {
-    case that: Var.Defined[Term, ?] => this.name == that.name
+    case that: Var.Defined[Term@unchecked, ?] => this.name == that.name
     case that: Var.Local => this.name == that.name
     case _ => false
   }
@@ -34,11 +34,6 @@ enum Var {
       case Local(name) => Local(name).asInstanceOf[Var.Defined[U, Def]]
     }
   }
-}
-
-extension [T <: Entity](variable: Var.Defined[T, Constructor]) {
-  def owner: Var.Defined[T, Inductive] = variable.definition.get.owner
-  def ownerSignature(implicit factory: EntityFactory[T, T]): Signature[T] = owner.definition.get.signature
 }
 
 case class Param[T <: Entity | Option[Entity]](
@@ -110,17 +105,24 @@ trait FnLike[T <: Entity] {
   def arguments[T1 <: Entity](argValues: Seq[T1]): Seq[(Param[T], T1)] = params.zip(argValues)
 }
 
-trait Decl[T <: Entity] {
+trait Declaration[T <: Entity] {
   def ident: Var.Defined[T, ?]
   def toIdent[U <: Entity]: Var.Defined[U, ?]
 }
 
-sealed trait Definition[T <: Entity] extends Decl[T]
+sealed trait Definition[T <: Entity] extends Declaration[T]
 
 // Too young, too simple, sometimes naive
 sealed trait NaiveDefinition[T <: Entity] extends Definition[T] with FnLike[T] {
+
   def resultType(implicit ev: EntityFactory[T, T]): T
+
   def signature(implicit ev: EntityFactory[T, T]): Signature[T] = Signature(params, resultType)
+
+  def buildInvoke(implicit factory: EntityFactory[T, T]): T = this match {
+    case definition: Function[T] => factory.functionInvoke(definition.ident, definition.signature.paramToVars)
+    case definition: Inductive[T] => factory.inductiveType(definition.ident, definition.signature.paramToVars)
+  }
 }
 
 trait Function[T <: Entity] extends NaiveDefinition[T] {
@@ -182,44 +184,26 @@ case class Inductive[T <: Entity](
   override def toString: String = {
     s"inductive ${ident.name}(${params.mkString(", ")})"
   }
+
   override def toIdent[U <: Entity]: Var.Defined[U, Inductive] = Var.Defined(ident.name)
+
+  def getConstructor(name: String): Option[Constructor[T]] = {
+    constructors.find(_.ident == name)
+  }
 }
 
 case class Constructor[T <: Entity](
-  override val ident: Var.Defined[T, Constructor],
+  ident: String,
   owner: Var.Defined[T, Inductive],
   override val params: ParamList[T],
-) extends NaiveDefinition[T] {
-  
-  def resultType(implicit factory: EntityFactory[T, T]): T = {
-    factory.inductiveType(owner, owner.definition.get.paramToVars)
-  }
-
+) extends FnLike[T] {
   override def toString: String = {
-    s"cons(${owner.name}) ${ident.name}(${params.mkString(", ")})"
+    s"constructor ${owner.name}::$ident(${params.mkString(", ")})"
   }
-
-  override def toIdent[U <: Entity]: Var.Defined[U, Constructor] = Var.Defined(ident.name)
 }
 
-case class Declaration[T <: Entity, Def[E <: Entity] <: Definition[E]](
+case class PreDeclaration[T <: Entity, Def[E <: Entity] <: Definition[E]](
   ident: Var.Defined[T, Def], signature: Signature[T],
-) extends Decl[T] {
+) extends Declaration[T] {
   override def toIdent[U <: Entity]: Var.Defined[U, Def] = Var.Defined(ident.name)
-}
-
-extension [T <: Entity, Def[E <: Entity] <: NaiveDefinition[E]](self: Def[T]) {
-
-  def buildInvoke(implicit factory: EntityFactory[T, T]): T = self match {
-
-    case definition: Function[T] => {
-      factory.functionInvoke(definition.ident, definition.signature.paramToVars)
-    }
-
-    case definition: Inductive[T] => {
-      factory.inductiveType(definition.ident, definition.signature.paramToVars)
-    }
-
-    case definition: Constructor[T] => ???
-  }
 }

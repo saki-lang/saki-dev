@@ -19,7 +19,7 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
 
   case Variant(
     inductive: T,
-    constructor: Var.Defined[T, Constructor],
+    constructor: String,
     patterns: Seq[Pattern[T]],
   )(implicit span: SourceSpan) extends Pattern[T](span)
 
@@ -40,7 +40,7 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
       case Bind(binding) => binding.name
       case Variant(inductive, constructor, patterns) => {
         val patternsStr = if patterns.isEmpty then "" else s"(${patterns.mkString(", ")})"
-        s"$inductive::${constructor.name}$patternsStr"
+        s"$inductive::$constructor$patternsStr"
       }
       case Typed(pattern, ty) => s"$pattern : $ty"
       case Record(fields) => s"{${
@@ -94,24 +94,23 @@ extension (self: Pattern[Term]) {
     //  }
     // ```
     case Pattern.Variant(
-      patternInductive, patternConstructor, patterns
+      patternInductiveTerm, constructorIdent, patterns
     ) if `type`.isInstanceOf[Term.InductiveType] => {
-      val inductiveType = `type`.asInstanceOf[Term.InductiveType]
-      val consDef: Constructor[Term] = patternConstructor.definition.toOption match {
-        case Some(definition) => definition
-        case None => env.definitions.getOrElse(patternConstructor, {
-          SymbolError.undefined(patternConstructor.name, self.span)
-        }) match {
-          case consDef: Constructor[Term] => consDef
-          case _ => SymbolError.notConstructor(patternConstructor.name, self.span)
-        }
+      val patternInductiveType = patternInductiveTerm.eval match {
+        case inductiveType: Value.InductiveType => inductiveType
+        case _ => TypeError.error("Expected inductive type")
       }
-      if consDef.params.size != patterns.size then {
-        SizeError.mismatch(consDef.params.size, patterns.size, self.span)
-      } else if !(patternInductive.eval <:< inductiveType.eval) then {
-        ValueError.mismatch(consDef.owner.name, inductiveType.inductive.name, self.span)
+      val inductiveTerm = `type`.asInstanceOf[Term.InductiveType]
+      val constructor = patternInductiveType.inductive.definition.get.getConstructor(constructorIdent) match {
+        case Some(constructor) => constructor
+        case None => TypeError.error(s"Constructor $constructorIdent not found")
+      }
+      if constructor.params.size != patterns.size then {
+        SizeError.mismatch(constructor.params.size, patterns.size, self.span)
+      } else if !(patternInductiveType <:< inductiveTerm.eval) then {
+        ValueError.mismatch(constructor.owner.name, inductiveTerm.inductive.name, self.span)
       } else {
-        patterns.zip(consDef.params).foldLeft(Map.empty: Map[Var.Local, Term]) {
+        patterns.zip(constructor.params).foldLeft(Map.empty: Map[Var.Local, Term]) {
           case (subst, (pattern, param)) => subst ++ pattern.buildMatch(param.`type`)
         }
       }
@@ -140,19 +139,24 @@ extension (self: Pattern[Term]) {
     }
   }
 
-  def buildSubstMap(value: Value): Option[Map[Var.Local, Value]] = self match {
+  def buildSubstMap(value: Value)(
+    implicit env: Environment.Typed[Value]
+  ): Option[Map[Var.Local, Value]] = self match {
     case Pattern.Primitive(literal) if value.isInstanceOf[Value.Primitive] => {
       val primitive = value.asInstanceOf[Value.Primitive]
       if literal == primitive.value then Some(Map.empty) else None
     }
     case Pattern.Bind(binding) => Some(Map(binding -> value))
     case Pattern.Variant(
-      inductive, constructor, patterns
+      inductiveTerm, constructorIdent, patterns
     ) if value.isInstanceOf[Value.InductiveVariant] => {
+      val inductiveType = inductiveTerm.eval match {
+        case inductive: Value.InductiveType => inductive
+        case _ => TypeError.error("Expected inductive type")
+      }
+      val constructor = inductiveType.inductive.definition.get.getConstructor(constructorIdent)
       val variant = value.asInstanceOf[Value.InductiveVariant]
-      if constructor != variant.constructor then {
-        None
-      } else {
+      if constructor != variant.constructor then None else {
         assert(patterns.size == variant.args.size)
         patterns.zip(variant.args).foldLeft(Some(Map.empty): Option[Map[Var.Local, Value]]) {
           case (Some(subst), (pattern, value)) => pattern.buildSubstMap(value).map(subst ++ _)

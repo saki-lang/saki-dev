@@ -17,7 +17,7 @@ object Environment {
 case class TypedEnvironment[T <: Entity](
   override val definitions: Map[Var.Defined[Term, ?], Definition[Term]] = Map.empty,
   override val currentDefinition: Option[Var.Defined[Term, ?]] = None,
-  val declarations: Map[Var.Defined[Term, ?], Declaration[Term, ?]] = Map.empty,
+  val declarations: Map[Var.Defined[Term, ?], PreDeclaration[Term, ?]] = Map.empty,
   val locals: Map[Var.Local, Typed[T]] = Map.empty[Var.Local, Typed[T]],
 ) extends Environment[T] with TypedLocalMutableContext[T] {
 
@@ -89,12 +89,8 @@ object TypedEnvironment {
   def empty[T <: Entity]: TypedEnvironment[T] = TypedEnvironment[T]()
 
   def global[T <: Entity](definitions: Seq[Definition[Term]]): TypedEnvironment[T] = {
-    val flattenDefinitions: Seq[Definition[Term]] = definitions.flatMap {
-      case inductive: Inductive[Term] => inductive +: inductive.constructors
-      case definition => Seq(definition)
-    }
     TypedEnvironment[T](
-      definitions = flattenDefinitions.map(definition => definition.ident -> definition).toMap,
+      definitions = definitions.map(definition => definition.ident -> definition).toMap,
       currentDefinition = None,
       declarations = Map.empty,
       locals = Map.empty[Var.Local, Typed[T]],

@@ -24,27 +24,23 @@ expr
     |   '(' value=blockExpr ')'                                                 # exprParen
     |   '\'(' elements+=expr ',' NL* elements+=expr ')'                         # exprTuple
     |   '^(' types+=expr ',' NL* types+=expr ')'                                # exprTupleType
-//    |   inductive=Identifier
-//        ('[' NL* implicitArgList=argList NL* ']')?
-//        ('(' NL* explicitArgList=argList NL* ')')?
-//        '::' constructor=Identifier                         # exprConstructor
-    |   '(' lambdaParamList=paramList ')' (':' returnType=expr)? '=>' body=blockExpr                   # exprLambda
-    |   func=expr ('|' lambdaParamList=untypedParamList '|' (':' returnType=expr)?)? body=block  # exprCallWithLambda
-    |   lhs=atom rhs=atom                                                   # exprSpine
-    |   lhs=expr op=OptSymbol rhs=expr                                      # exprSpineInfixOp
-    |   lhs=expr op=OptSymbol                                               # exprSpinePostfixOp
-    |   op=OptSymbol rhs=expr                                               # exprSpinePrefixOp
+    |   '(' lambdaParamList=paramList ')' (':' returnType=expr)? '=>' body=blockExpr                # exprLambda
+    |   func=expr ('|' lambdaParamList=untypedParamList '|' (':' returnType=expr)?)? body=block     # exprCallWithLambda
+    |   lhs=atom rhs=atom                                                       # exprSpine
+    |   lhs=expr op=OptSymbol rhs=expr                                          # exprSpineInfixOp
+    |   lhs=expr op=OptSymbol                                                   # exprSpinePostfixOp
+    |   op=OptSymbol rhs=expr                                                   # exprSpinePrefixOp
     // Control
-    |   'if' NL* cond=blockExpr NL* 'then' NL* then=blockExpr NL* 'else' NL* else=blockExpr                    # exprIf
-    |   'match' value=expr '{' NL* cases+=matchCase (NL+ cases+=matchCase)* NL* '}'                      # exprMatch
+    |   'if' NL* cond=blockExpr NL* 'then' NL* then=blockExpr NL* 'else' NL* else=blockExpr         # exprIf
+    |   'match' value=expr '{' NL* cases+=matchCase (NL+ cases+=matchCase)* NL* '}'                 # exprMatch
     // Types
-    |   <assoc=right> domain=expr '->' codomain=expr                                    # exprArrowType
-    |   <assoc=right> '[' domain=expr ']' '->' codomain=expr                            # exprImplicitArrowType
-    |   <assoc=right> '∀' '(' param=Identifier ':' domain=expr ')' '->' codomain=expr          # exprPiType
-    |   <assoc=right> '∀' '[' param=Identifier ':' domain=expr ']' '->' codomain=expr          # exprImplicitPiType
-    |   <assoc=right> '∃' '(' param=Identifier ':' domain=expr ')' '->' codomain=expr          # exprSigmaType
+    |   <assoc=right> domain=expr '->' codomain=expr                                                # exprArrowType
+    |   <assoc=right> '[' domain=expr ']' '->' codomain=expr                                        # exprImplicitArrowType
+    |   <assoc=right> '∀' '(' param=Identifier ':' domain=expr ')' '->' codomain=expr               # exprPiType
+    |   <assoc=right> '∀' '[' param=Identifier ':' domain=expr ']' '->' codomain=expr               # exprImplicitPiType
+    |   <assoc=right> '∃' '(' param=Identifier ':' domain=expr ')' '->' codomain=expr               # exprSigmaType
     |   'record' (':' super=expr)? '{' NL* fields+=identTypePair (NL+ fields+=identTypePair)* NL* '}' # exprRecordType
-    |   recordType=expr '^' '{' NL* fields+=fieldAssignment (NL+ fields+=fieldAssignment)* NL* '}' # exprRecord
+    |   recordType=expr '^' '{' NL* fields+=fieldAssignment (NL+ fields+=fieldAssignment)* NL* '}'  # exprRecord
     ;
 
 blockExpr
@@ -69,11 +65,8 @@ pattern
     :   literal             # patternLiteral
     |   '`' value=expr '`'  # patternValue
     |   ident=Identifier    # patternVariable
-    |   (inductive=Identifier
-         ('(' NL* indExplicitArgList=argList NL* ')')?
-         ('[' NL* indImplicitArgList=argList NL* ']')? '::')?
-            constructor=Identifier ('(' NL* consPatternList=patternList NL* ')')?   # patternConstructor
-    |   '(' NL* patternList NL* ')' # patternTuple
+    |   inductive=expr '::' constructor=Identifier ('(' NL* consPatternList=patternList NL* ')')?   # patternConstructor
+    |   '(' NL* patternList NL* ')'                                                                 # patternTuple
     |   record=expr '@' '{' NL* (fields+=patternRecordField (',' NL* fields+=patternRecordField)* ','?)? NL* '}' # patternRecord
     ;
 

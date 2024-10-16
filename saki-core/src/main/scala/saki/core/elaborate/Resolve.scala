@@ -123,15 +123,9 @@ object Resolve {
         (resolved, ctx)
       }
 
-      case Expr.Constructor(inductive, constructor, args) => {
+      case Expr.Constructor(inductive, constructor) => {
         val (resolvedInductive, inductiveCtx) = inductive.resolve
-        val (resolvedArgs, argsCtx) = args.foldLeft((Seq.empty[Argument[Expr]], inductiveCtx)) {
-          case ((resolvedArgs, ctx), arg) => {
-            val (resolved, newCtx) = arg.value.resolve(ctx)
-            (resolvedArgs :+ Argument(resolved, arg.applyMode), newCtx)
-          }
-        }
-        (Expr.Constructor(resolvedInductive, constructor, resolvedArgs), argsCtx)
+        (Expr.Constructor(resolvedInductive, constructor), inductiveCtx)
       }
 
       case Expr.Lambda(param, body, returnType) => {
@@ -231,20 +225,11 @@ object Resolve {
         }
       }
 
-      // TODO: constructors should be resolved only in the context of inductive types
-      // TODO: Remove this match arm (?)
-      case Constructor(ident, owner, params) => {
-        val (resolvedParams, _) = params.resolve(global)
-        global += ident
-        Constructor(ident, owner, resolvedParams)
-      }
-
       case Inductive(ident, params, constructors) => {
         val (resolvedParams, ctx) = params.resolve(global)
         global += ident
         val resolvedConstructors: Seq[Constructor[Expr]] = constructors.map { constructor =>
           val (resolvedConsParams, _) = constructor.params.resolve(ctx + ident)
-          global += constructor.ident
           Constructor[Expr](constructor.ident, constructor.owner, resolvedConsParams)
         }
         Inductive[Expr](ident, resolvedParams, resolvedConstructors)
@@ -287,7 +272,7 @@ object Resolve {
             (resolvedPatterns :+ resolved, newCtx)
           }
         }
-        (Pattern.Variant(resolvedInductive, constructor, resolvedPatterns), updatedContext.ref(constructor))
+        (Pattern.Variant(resolvedInductive, constructor, resolvedPatterns), updatedContext)
       }
 
       case Pattern.Primitive(value) => (Pattern.Primitive(value), ctx)

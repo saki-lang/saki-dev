@@ -18,7 +18,7 @@ enum Term extends RuntimeEntity[Type] {
     fn: Var.Defined[Term, Overloaded], args: Seq[Term]
   ) extends Term with OverloadInvokeExt
   case InductiveType(inductive: Var.Defined[Term, Inductive], args: Seq[Term])
-  case InductiveVariant(inductive: Term, constructor: Var.Defined[Term, Constructor], args: Seq[Term])
+  case InductiveVariant(inductive: Term, constructor: Constructor[Term], args: Seq[Term])
   case Match(scrutinees: Seq[Term], clauses: Seq[Clause[Term]])
   case Pi(param: Param[Term], codomain: Term) extends Term with PiLikeTerm
   case OverloadedPi(states: Map[Param[Term], Term]) extends Term with OverloadedTermExt[OverloadedPi]
@@ -340,7 +340,7 @@ enum Term extends RuntimeEntity[Type] {
     case FunctionInvoke(_, args) => args.forall(_.isFinal)
     case OverloadInvoke(_, args) => args.forall(_.isFinal)
     case InductiveType(_, args) => args.forall(_.isFinal)
-    case InductiveVariant(inductive, constructor, args) => inductive.isFinal && args.forall(_.isFinal)
+    case InductiveVariant(inductive, _, args) => inductive.isFinal && args.forall(_.isFinal)
     case Match(scrutinees, clauses) => scrutinees.forall(_.isFinal) && clauses.forall(_.forall(_.isFinal))
     case Pi(param, codomain) => param.`type`.isFinal && codomain.isFinal
     case OverloadedPi(states) => states.forall {
@@ -389,7 +389,7 @@ object Term extends RuntimeEntityFactory[Term] {
   ): Term = FunctionInvoke(function, args)
 
   override def inductiveVariant(
-    inductive: Term, constructor: Var.Defined[Term, Constructor], args: Seq[Term]
+    inductive: Term, constructor: Constructor[Term], args: Seq[Term]
   ): Term = InductiveVariant(inductive, constructor, args)
 
   def overloaded[T <: Term & OverloadedTermExt[T]](

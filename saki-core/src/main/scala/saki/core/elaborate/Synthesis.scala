@@ -81,18 +81,18 @@ private[core] object Synthesis:
 
     case Expr.Variable(ref) => ref match {
       // Converting a definition reference to a lambda, enabling curry-style function application
-      case definitionVar: Var.Defined[Term, ?] => definitionVar.definition.toOption match {
+      case definitionVar: Var.Defined[Term@unchecked, ?] => definitionVar.definition.toOption match {
         case None => env.getDefinition(definitionVar) match {
           case Some(definition) => {
             definition.ident.definition :=! definition
-            synthDecl(definition)
+            synthDeclaration(definition)
           }
           case None => env.declarations.get(definitionVar) match {
-            case Some(declaration) => synthDecl(declaration)
+            case Some(declaration) => synthDeclaration(declaration)
             case None => TypeError.error(s"Unresolved reference: ${definitionVar.name}", expr.span)
           }
         }
-        case Some(definition: Definition[Term]) => synthDecl(definition)
+        case Some(definition: Definition[Term]) => synthDeclaration(definition)
       }
       case variable: Var.Local => env.locals.get(variable) match {
         case Some(ty) => Synth(ty.value.readBack, ty.`type`)
@@ -140,30 +140,25 @@ private[core] object Synthesis:
       }
     }
 
-    case Expr.Constructor(inductive, constructor, args) => {
-      // TODO: support constructor curring
-      val inductiveType = inductive.synth(env).term.eval match {
+    case Expr.Constructor(inductiveExpr, consIdent) => {
+      val inductiveType: Value.InductiveType = inductiveExpr.synth(env).term.eval match {
         case inductiveType: Value.InductiveType => inductiveType
-        case _ => TypeError.error("Expected inductive type", inductive.span)
+        case _ => TypeError.error("Expected inductive type", inductiveExpr.span)
       }
-      val consDef: Constructor[Term] = env.getDefinitionByName(constructor) match {
-        case Some(definition: Constructor[Term]) => definition
-        case _ => TypeError.error(s"Constructor not found: $constructor", expr.span)
+      val inductive: Var.Defined[Term, Inductive] = inductiveType.inductive
+      val constructor: Constructor[Term] = inductive.definition.get.getConstructor(consIdent) match {
+        case Some(definition) => definition
+        case _ => TypeError.error(s"Constructor not found: $consIdent", expr.span)
       }
-      if inductiveType.inductive != consDef.owner then {
+      if inductive != constructor.owner then {
         TypeError.error("Mismatch in inductive type", expr.span)
       }
-      if consDef.params.size != args.size then {
-        TypeError.error("Mismatch in number of arguments", expr.span)
-      }
-      val argsSynth = args.zip(consDef.params).map { (arg, param) =>
-        val (argTerm, argType) = arg.value.synth(env).unpack
-        if !(param.`type`.eval <:< argType) then {
-          TypeError.mismatch(param.`type`.toString, argType.toString, arg.value.span)
-        }
-        argTerm
-      }
-      Synth(Term.InductiveVariant(inductiveType.readBack, consDef.ident, argsSynth), inductiveType)
+      // Build lambda
+      val variant = Term.InductiveVariant(inductiveType.readBack, constructor, constructor.paramToVars)
+      Synth(
+        term = constructor.params.buildLambda(variant).normalize,
+        `type` = constructor.params.buildPiType(inductiveType.readBack).eval,
+      )
     }
 
     case Expr.Match(scrutinees, clauses) => {
@@ -304,14 +299,10 @@ private[core] object Synthesis:
       // before synthesizing the constructors
       envParams.withCurrentDefinition[Inductive[Term]](inductiveDefinition.ident) { implicit env =>
         constructors ++= inductiveExpr.constructors.map { constructor =>
-          // TODO: Check whether `Var.Local(inductiveDefinition.ident.name)` works as expected
           val constructorParams: ArrayBuffer[Param[Term]] = ArrayBuffer.empty
           val constructorDefinition: Constructor[Term] = {
-            val consIdent: Var.Defined[Term, Constructor] = Var.Defined(constructor.ident.name)
-            val indIdent: Var.Defined[Term, Inductive] = inductiveDefinition.ident
-            Constructor(consIdent, indIdent, constructorParams)
+            Constructor(constructor.ident, inductiveDefinition.ident, constructorParams)
           }
-          constructorDefinition.ident.definition := constructorDefinition
           constructorParams ++= synthParams(constructor.params)._1
           constructorDefinition
         }
@@ -345,15 +336,16 @@ private[core] object Synthesis:
     }
   }
 
-  def synthDecl(decl: Decl[Term])(
+  def synthDeclaration(decl: Declaration[Term])(
     implicit env: Environment.Typed[Value]
   ): Synth = decl match {
+
     case definition: NaiveDefinition[Term] => Synth(
       term = definition.params.buildLambda(definition.buildInvoke(Term)).normalize,
       `type` = definition.params.buildPiType(definition.resultType).eval,
     )
     
-    case declaration: Declaration[Term, ?] => ???
+    case declaration: PreDeclaration[Term, ?] => ???
 
     case overloaded: Overloaded[Term] => {
       val paths = overloaded.overloads.map(overloaded => (overloaded.params, overloaded.resultType))

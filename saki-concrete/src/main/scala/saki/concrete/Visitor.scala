@@ -237,12 +237,9 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
 
   override def visitExprConstructor(ctx: ExprConstructorContext): ExprTree.Constructor = {
     given ParserRuleContext = ctx
-    val inductive = ctx.inductive.getText
-    val explicitArgs = Option(ctx.explicitArgList).map(_.args.asScala.map(_.visit)).getOrElse(Seq.empty)
-    val implicitArgs = Option(ctx.implicitArgList).map(_.args.asScala.map(_.visit)).getOrElse(Seq.empty)
+    val inductive = ctx.inductive.visit
     val constructor = ctx.constructor.getText
-    val args = explicitArgs.map(Argument(_)) ++ implicitArgs.map(Argument(_, ApplyMode.Implicit))
-    ExprTree.Constructor(inductive, args, constructor)
+    ExprTree.Constructor(inductive, constructor)
   }
 
   override def visitExprLambda(ctx: ExprLambdaContext): ExprTree = {

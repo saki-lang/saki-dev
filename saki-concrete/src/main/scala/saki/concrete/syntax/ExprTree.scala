@@ -40,8 +40,7 @@ enum ExprTree(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] with
   )(implicit ctx: ParserRuleContext)
 
   case Constructor(
-    inductive: String,
-    inductiveArguments: Seq[Argument[ExprTree]],
+    inductive: ExprTree,
     constructor: String,
   )(implicit ctx: ParserRuleContext)
 
@@ -157,11 +156,8 @@ enum ExprTree(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] with
       args.foldLeft(function.emit) { case (fn, arg) => CoreExpr.Apply(fn, arg) }
     }
 
-    case Constructor(inductive, inductiveArguments, constructor) => {
-      val inductiveArgs = inductiveArguments.map(arg => arg.map(_.emit))
-      inductiveArgs.foldLeft[CoreExpr](CoreExpr.Unresolved(s"$inductive::$constructor")) {
-        case (fn, arg) => CoreExpr.Apply(fn, arg)
-      }
+    case Constructor(inductive, constructor) => {
+      CoreExpr.Constructor(inductive.emit, constructor)
     }
 
     case RecordType(fields) => CoreExpr.RecordType(

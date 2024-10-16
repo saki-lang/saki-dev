@@ -43,13 +43,7 @@ object Module {
       case ((resolvingContext, env), definition) => {
         val (resolved, newCtx) = definition.resolve(resolvingContext)
         val definitionSynth = resolved.synth(env)
-        val updatedEnv = definitionSynth match {
-          case inductive: Inductive[Term] =>
-            val constructors = inductive.constructors.map(cons => cons.ident -> cons).toMap
-            env.copy(definitions = env.definitions ++ constructors)
-          case _ => env
-        }
-        (newCtx, updatedEnv.copy(definitions = updatedEnv.definitions.updated(definitionSynth.ident, definitionSynth)))
+        (newCtx, env.copy(definitions = env.definitions.updated(definitionSynth.ident, definitionSynth)))
       }
     }
     Module(finalEnv.definitions.values.toSet)

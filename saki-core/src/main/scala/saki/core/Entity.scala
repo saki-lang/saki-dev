@@ -28,7 +28,7 @@ trait EntityFactory[T <: Entity, D <: Entity] {
 
   def functionInvoke(function: Var.Defined[D, Function], args: Seq[T]): T
 
-  def inductiveVariant(inductive: T, constructor: Var.Defined[D, Constructor], args: Seq[T]): T
+  def inductiveVariant(inductive: T, constructor: Constructor[D], args: Seq[T]): T
   
 }
 
