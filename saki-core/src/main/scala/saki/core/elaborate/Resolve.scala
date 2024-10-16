@@ -266,7 +266,7 @@ object Resolve {
 
       case Pattern.Variant(inductive, constructor, patterns) => {
         val (resolvedInductive, inductiveContext) = inductive.resolve
-        val (resolvedPatterns, updatedContext) = patterns.foldLeft((List.empty[Pattern[Expr]], inductiveContext)) {
+        val (resolvedPatterns, updatedContext) = patterns.foldLeft((Seq.empty[Pattern[Expr]], inductiveContext)) {
           case ((resolvedPatterns, context), pattern) => {
             val (resolved, newCtx) = pattern.resolve(context)
             (resolvedPatterns :+ resolved, newCtx)

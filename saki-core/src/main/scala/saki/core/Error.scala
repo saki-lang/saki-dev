@@ -28,7 +28,7 @@ object TypeError {
   }
 
   def error(info: String): Nothing = {
-    throw TypeError("Type error", None)
+    throw TypeError(s"Type error: $info", None)
   }
 
   def overloadInvokeNoMatch(name: String, span: Option[InfoSpan]): Nothing = {

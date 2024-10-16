@@ -81,18 +81,15 @@ private[core] object Synthesis:
 
     case Expr.Variable(ref) => ref match {
       // Converting a definition reference to a lambda, enabling curry-style function application
-      case definitionVar: Var.Defined[Term@unchecked, ?] => definitionVar.definition.toOption match {
-        case None => env.getDefinition(definitionVar) match {
-          case Some(definition) => {
-            definition.ident.definition :=! definition
-            synthDeclaration(definition)
-          }
-          case None => env.declarations.get(definitionVar) match {
-            case Some(declaration) => synthDeclaration(declaration)
-            case None => TypeError.error(s"Unresolved reference: ${definitionVar.name}", expr.span)
-          }
+      case definitionVar: Var.Defined[Term@unchecked, ?] => env.getDefinition(definitionVar) match {
+        case Some(definition) => {
+          definition.ident.definition :=! definition
+          synthDeclarationRef(definition)
         }
-        case Some(definition: Definition[Term]) => synthDeclaration(definition)
+        case None => env.declarations.get(definitionVar) match {
+          case Some(declaration) => synthDeclarationRef(declaration)
+          case None => TypeError.error(s"Unresolved reference: ${definitionVar.name}", expr.span)
+        }
       }
       case variable: Var.Local => env.locals.get(variable) match {
         case Some(ty) => Synth(ty.value.readBack, ty.`type`)
@@ -256,7 +253,9 @@ private[core] object Synthesis:
   ): (Clause[Term], Term) = {
     val patterns = clause.patterns.map(pattern => pattern.map(_.synth.term))
     val map = patterns.zip(scrutinees).foldLeft(Map.empty: Map[Var.Local, Term]) {
-      case (subst, (pattern, param)) => subst ++ pattern.buildMatch(param.`type`.readBack)
+      case (subst, (pattern, param)) => {
+        subst ++ pattern.buildMatchBindings(param.`type`).map((variable, ty) => variable -> ty.readBack)
+      }
     }.map { case (k, v) => k -> Typed[Value](Value.variable(k), v.eval) }
     val (body, ty) = env.withLocals[Synth](map) { clause.body.synth }.unpack
     (Clause(patterns, body), ty.readBack)
@@ -336,7 +335,7 @@ private[core] object Synthesis:
     }
   }
 
-  def synthDeclaration(decl: Declaration[Term])(
+  def synthDeclarationRef(decl: Declaration[Term])(
     implicit env: Environment.Typed[Value]
   ): Synth = decl match {
 

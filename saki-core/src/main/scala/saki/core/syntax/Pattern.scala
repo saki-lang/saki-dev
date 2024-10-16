@@ -1,7 +1,7 @@
 package saki.core.syntax
 
 import saki.core.context.Environment
-import saki.core.domain.Value
+import saki.core.domain.{Type, Value}
 import saki.core.elaborate.Resolve
 import saki.core.*
 
@@ -49,21 +49,23 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
     }
   }
 
-  def map[U <: Entity](f: T => U): Pattern[U] = this match {
+  def map[U <: Entity](transform: T => U): Pattern[U] = this match {
     case Primitive(value) => Pattern.Primitive(value)
     case Bind(binding) => Pattern.Bind(binding)
-    // TODO: Fix here, don't force convert
-    case Variant(inductive, cons, patterns) => Pattern.Variant(f(inductive), cons.asInstanceOf, patterns.map(_.map(f)))
-    case Typed(pattern, ty) => Pattern.Typed(pattern.map(f), f(ty))
-    case Record(fields) => Pattern.Record(fields.map((name, pattern) => (name, pattern.map(f))))
+    case Variant(inductive, constructor, patterns) => {
+      // FIXME: some bugs here
+      Pattern.Variant(transform(inductive), constructor, patterns.map(_.map(transform)))
+    }
+    case Typed(pattern, ty) => Pattern.Typed(pattern.map(transform), transform(ty))
+    case Record(fields) => Pattern.Record(fields.map((name, pattern) => (name, pattern.map(transform))))
   }
 
-  def forall(f: T => Boolean): Boolean = this match {
+  def forall(predicate: T => Boolean): Boolean = this match {
     case Primitive(_) => true
     case Bind(_) => true
-    case Variant(inductive, _, patterns) => f(inductive) && patterns.forall(_.forall(f))
-    case Typed(pattern, ty) => pattern.forall(f) && f(ty)
-    case Record(fields) => fields.forall((_, pattern) => pattern.forall(f))
+    case Variant(inductive, _, patterns) => predicate(inductive) && patterns.forall(_.forall(predicate))
+    case Typed(pattern, ty) => pattern.forall(predicate) && predicate(ty)
+    case Record(fields) => fields.forall((_, pattern) => pattern.forall(predicate))
   }
 
   def getBindings: Seq[Var.Local] = this match {
@@ -78,9 +80,9 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
 
 extension (self: Pattern[Term]) {
   
-  def buildMatch(`type`: Term)(
+  def buildMatchBindings(`type`: Type)(
     implicit env: Environment.Typed[Value]
-  ): Map[Var.Local, Term] = self match {
+  ): Map[Var.Local, Value] = self match {
 
     case Pattern.Primitive(_) => Map.empty
     case Pattern.Bind(binding) => Map(binding -> `type`)
@@ -95,23 +97,23 @@ extension (self: Pattern[Term]) {
     // ```
     case Pattern.Variant(
       patternInductiveTerm, constructorIdent, patterns
-    ) if `type`.isInstanceOf[Term.InductiveType] => {
+    ) if `type`.isInstanceOf[Value.InductiveType] => {
       val patternInductiveType = patternInductiveTerm.eval match {
         case inductiveType: Value.InductiveType => inductiveType
         case _ => TypeError.error("Expected inductive type")
       }
-      val inductiveTerm = `type`.asInstanceOf[Term.InductiveType]
+      val inductiveType = `type`.asInstanceOf[Value.InductiveType]
       val constructor = patternInductiveType.inductive.definition.get.getConstructor(constructorIdent) match {
         case Some(constructor) => constructor
         case None => TypeError.error(s"Constructor $constructorIdent not found")
       }
       if constructor.params.size != patterns.size then {
         SizeError.mismatch(constructor.params.size, patterns.size, self.span)
-      } else if !(patternInductiveType <:< inductiveTerm.eval) then {
-        ValueError.mismatch(constructor.owner.name, inductiveTerm.inductive.name, self.span)
+      } else if !(patternInductiveType <:< inductiveType) then {
+        ValueError.mismatch(constructor.owner.name, inductiveType.inductive.name, self.span)
       } else {
-        patterns.zip(constructor.params).foldLeft(Map.empty: Map[Var.Local, Term]) {
-          case (subst, (pattern, param)) => subst ++ pattern.buildMatch(param.`type`)
+        patterns.zip(constructor.params).foldLeft(Map.empty: Map[Var.Local, Value]) {
+          case (subst, (pattern, param)) => subst ++ pattern.buildMatchBindings(param.`type`.eval)
         }
       }
     }
@@ -120,16 +122,16 @@ extension (self: Pattern[Term]) {
       PatternError.mismatch(inductive.toString, `type`.toString, self.span)
     }
 
-    case Pattern.Typed(pattern, ty) => pattern.buildMatch(ty)
+    case Pattern.Typed(pattern, ty) => pattern.buildMatchBindings(ty.eval)
 
-    case Pattern.Record(fields) if `type`.isInstanceOf[Term.RecordType] => {
-      val recordType = `type`.asInstanceOf[Term.RecordType]
-      fields.foldLeft(Map.empty: Map[Var.Local, Term]) {
+    case Pattern.Record(fields) if `type`.isInstanceOf[Value.RecordType] => {
+      val recordType = `type`.asInstanceOf[Value.RecordType]
+      fields.foldLeft(Map.empty: Map[Var.Local, Value]) {
         case (subst, (name, pattern)) => {
-          val field = recordType.fields.getOrElse(name, {
-            ValueError.missingField(name, recordType, pattern.span)
+          val fieldType = recordType.fields.getOrElse(name, {
+            ValueError.missingField(name, recordType.readBack.asInstanceOf, pattern.span)
           })
-          subst ++ pattern.buildMatch(field)
+          subst ++ pattern.buildMatchBindings(fieldType)
         }
       }
     }
@@ -154,7 +156,10 @@ extension (self: Pattern[Term]) {
         case inductive: Value.InductiveType => inductive
         case _ => TypeError.error("Expected inductive type")
       }
-      val constructor = inductiveType.inductive.definition.get.getConstructor(constructorIdent)
+      val constructor = inductiveType.inductive.definition.get.getConstructor(constructorIdent) match {
+        case Some(constructor) => constructor
+        case None => TypeError.error(s"Constructor $constructorIdent not found")
+      }
       val variant = value.asInstanceOf[Value.InductiveVariant]
       if constructor != variant.constructor then None else {
         assert(patterns.size == variant.args.size)

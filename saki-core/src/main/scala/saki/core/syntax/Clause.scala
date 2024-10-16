@@ -2,7 +2,7 @@ package saki.core.syntax
 
 import saki.core.Entity
 import saki.core.context.{Environment, Typed}
-import saki.core.domain.Value
+import saki.core.domain.{Type, Value}
 
 import scala.collection.Seq
 
@@ -20,9 +20,7 @@ extension (clauses: Seq[Clause[Term]]) {
    * Try to match the given arguments with the clause set.
    * Return the body of the first matching clause.
    */
-  def tryMatch(args: Seq[Value])(
-    implicit env: Environment.Typed[Value]
-  ): Option[Value] = {
+  def tryMatch(args: Seq[Value])(implicit env: Environment.Typed[Value]): Option[Value] = {
     clauses.map { clause =>
       val optionalSubstMap: Option[Map[Var.Local, Value]] = {
         clause.patterns.zip(args).foldLeft(Some(Map.empty): Option[Map[Var.Local, Value]]) {

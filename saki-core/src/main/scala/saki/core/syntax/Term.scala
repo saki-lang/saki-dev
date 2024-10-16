@@ -255,9 +255,21 @@ enum Term extends RuntimeEntity[Type] {
     }
 
     case Match(scrutinees, clauses) => {
-      val scrutineesNorm = scrutinees.map(_.eval)
-      clauses.tryMatch(scrutineesNorm).getOrElse {
-        Value.Neutral(NeutralValue.Match(scrutineesNorm, clauses.map(_.map(_.eval))))
+      val scrutineesValue = scrutinees.map(_.eval)
+      clauses.tryMatch(scrutineesValue).getOrElse {
+        if scrutineesValue.forall(_.readBack.isFinal(Set.empty)) then {
+          TypeError.error("No match")
+        }
+        val valueClauses = clauses.map { clause =>
+          val bindings: Seq[(Var.Local, Typed[Value])] = scrutineesValue.zip(clause.patterns).flatMap {
+            (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee.infer)
+          }.map {
+            case (param, ty) => (param, Typed[Value](Value.variable(param), ty))
+          }
+          val body = env.withLocals(bindings.toMap) { implicit env => clause.body.eval }
+          Clause(clause.patterns.map(_.map(_.eval)), body)
+        }
+        Value.Neutral(NeutralValue.Match(scrutineesValue, valueClauses))
       }
     }
 

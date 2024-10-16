@@ -145,7 +145,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
             Param(Var.Local(ident), `type`)
           }
           // TODO: flat
-          Definition.Constructor(s"$ident::${cons.ident.getText}", params)(cons)
+          Definition.Constructor(s"${cons.ident.getText}", params)(cons)
         }
       }
       Seq(Definition.Inductive(ident, params, constructors)(body))
@@ -296,7 +296,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     def traversal(ctx: ExprContext): Seq[ExprContext | AtomContext | Operator] = {
       given ExprContext = ctx
       ctx match {
-        case spine: ExprSpineContext => Seq(spine.lhs) ++ Seq(spine.rhs)
+        case spine: ExprSpineContext => traversal(spine.lhs) ++ Seq(spine.rhs)
         case spine: ExprSpineInfixOpContext => traversal(spine.lhs) ++ Seq(operator(spine.op.getText)) ++ traversal(spine.rhs)
         case spine: ExprSpinePrefixOpContext => Seq(operator(spine.op.getText)) ++ traversal(spine.rhs)
         case spine: ExprSpinePostfixOpContext => traversal(spine.lhs) ++ Seq(operator(spine.op.getText))
@@ -484,14 +484,9 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   override def visitPatternConstructor(ctx: PatternConstructorContext): Spanned[Pattern[ExprTree]] = {
     given ParserRuleContext = ctx
     given SourceSpan = ctx.span
-    val inductiveIdent = ctx.inductive.getText
-    val constructorIdent = s"${inductiveIdent}::${ctx.constructor.getText}"
-    if ctx.indExplicitArgList != null || ctx.indImplicitArgList != null then {
-      // TODO: support constructor with arguments
-      UnsupportedError.unsupported("Pattern constructor with arguments", ctx.span)
-    }
+    val inductive = ctx.inductive.visit
     val patterns = Option(ctx.consPatternList).map(_.patterns.asScala.map(_.visit.get)).getOrElse(Seq.empty)
-    Spanned(Pattern.Variant(Var.Defined(constructorIdent), patterns.toSeq))
+    Spanned(Pattern.Variant(inductive, ctx.constructor.getText, patterns.toSeq))
   }
 
   override def visitPatternRecord(ctx: PatternRecordContext): Spanned[Pattern[ExprTree]] = {

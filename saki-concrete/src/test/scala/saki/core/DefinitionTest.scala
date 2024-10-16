@@ -182,6 +182,25 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     compileModule(code)
   }
 
+  it should "GADT explicit type param" in {
+    val code = {
+      """
+        type Option(T: 'Type) = inductive {
+            None
+            Some(T)
+        }
+
+        def map(A: 'Type, B: 'Type, option: Option(A), transform: A -> B): Option(B) = {
+            match option {
+                case Option(A)::None => Option(B)::None
+                case Option(A)::Some(value) => Option(B)::Some(transform(value))
+            }
+        }
+      """
+    }
+    val module = compileModule(code)
+  }
+
   it should "option" in {
     val code = {
       """

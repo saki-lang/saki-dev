@@ -49,9 +49,8 @@ enum Definition(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreDefiniti
       ident.definition := inductive
       constructors ++= constructorsExpr.map {
         case Definition.Constructor(name, params) => {
-          val ident: Var.Defined[Expr, CoreConstructor] = Var.Defined(name)
           val resolvedParams = params.map(param => param.map(_.emit))
-          CoreConstructor(ident, inductive.ident, resolvedParams)
+          CoreConstructor(name, inductive.ident, resolvedParams)
         }
       }
       return inductive
