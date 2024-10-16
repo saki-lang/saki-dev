@@ -121,10 +121,16 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     module.eval("isPrime(97)") should be (module.eval("true"))
     module.eval("isPrime(98)") should be (module.eval("false"))
     module.eval("isPrime(101)") should be (module.eval("true"))
+    module.eval("isPrime(143)") should be (module.eval("false"))
+    module.eval("isPrime(163)") should be (module.eval("true"))
+    module.eval("isPrime(211)") should be (module.eval("true"))
+    module.eval("isPrime(221)") should be (module.eval("false"))
+    module.eval("isPrime(233)") should be (module.eval("true"))
+    module.eval("isPrime(263)") should be (module.eval("true"))
 
-//    module.eval("isPrime(6221)") should be (module.eval("true"))
-//    module.eval("isPrime(27089)") should be (module.eval("false"))
-//    module.eval("isPrime(32749)") should be (module.eval("true"))
+    module.eval("isPrime(5389)") should be (module.eval("false"))
+    module.eval("isPrime(6221)") should be (module.eval("true"))
+    module.eval("isPrime(8633)") should be (module.eval("false"))
 
     // Need optimization, the following numbers will cause stack overflow in scalatest environment
     // module.eval("isPrime(131071)") should be (module.eval("true"))
@@ -182,8 +188,10 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
       """
     }
     val module = compileModule(code)
-    module.eval("map(Int, Bool, Option(Int)::Some(42), (n: Int) => n > 0)") should be (module.eval("Option(Bool)::Some(true)"))
+    module.eval("map(Int, Bool, Option(Int)::Some(514 - 114), (n: Int) => n > 0)") should be (module.eval("Option(Bool)::Some(true)"))
     module.eval("map(Int, Bool, Option(Int)::None, (n: Int) => n > 0)") should be (module.eval("Option(Bool)::None"))
+    module.eval("map(Int, Bool, Option(Int)::Some(114 - 514), (n: Int) => n > 0)") should be (module.eval("Option(Bool)::Some(false)"))
+    module.eval("map(Int, String, Option(Int)::Some(114514), (n: Int) => n.toString)") should be (module.eval("Option(String)::Some(\"114514\")"))
   }
 
   it should "option" in {
@@ -203,6 +211,10 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
       """
     }
     val module = compileModule(code)
+    module.eval("""{
+      let option = Option[Int]::Some(19260817)
+      option.map[Int, String]((n: Int) => n.toString)
+    }""") should be (module.eval("Option(String)::Some(\"19260817\")"))
   }
 
   it should "mutual recursive" in {

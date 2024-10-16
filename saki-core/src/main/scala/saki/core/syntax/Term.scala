@@ -91,7 +91,19 @@ enum Term extends RuntimeEntity[Type] {
 
     case PrimitiveType(_) => Value.Universe
 
-    case Variable(variable) => env.getTyped(variable).get.`type`
+    case Variable(variable) => env.getTyped(variable) match {
+      case Some(typed) => typed.`type`
+      case None => {
+        import Value.Neutral
+        // If the variable binding is not found in the environment, it might be a neutral value.
+        // Try iterating the locals to find the typed neutral value and return its type.
+        env.locals.collectFirst {
+          case (ident, Typed(Neutral(NeutralValue.Variable(neutral)), ty)) if neutral == variable => ty
+        }.getOrElse {
+          throw TypeError(s"Variable not found: $variable", None)
+        }
+      }
+    }
 
     case FunctionInvoke(fnRef, _) => {
       env.definitions(fnRef).asInstanceOf[Function[Term]].resultType.eval
@@ -258,11 +270,15 @@ enum Term extends RuntimeEntity[Type] {
 
     case Match(scrutinees, clauses) => {
       val scrutineesValue = scrutinees.map(_.eval)
+      // Try to match the scrutinees with the clauses
       clauses.tryMatch(scrutineesValue).getOrElse {
+        // If all scrutinees are final and no match is found, raise an error
         if scrutineesValue.forall(_.readBack.isFinal(Set.empty)) then {
           TypeError.error("No match")
         }
+        // Otherwise (at least one scrutinee contains neutral value), keep the match as a neutral value
         val valueClauses = clauses.map { clause =>
+          // Bind the pattern variables to the scrutinee values
           val bindings: Seq[(Var.Local, Typed[Value])] = scrutineesValue.zip(clause.patterns).flatMap {
             (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee.infer)
           }.map {

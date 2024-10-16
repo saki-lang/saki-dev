@@ -198,7 +198,7 @@ case class Constructor[T <: Entity](
   override val params: ParamList[T],
 ) extends FnLike[T] {
   override def toString: String = {
-    s"constructor ${owner.name}::$ident(${params.mkString(", ")})"
+    s"$ident(${params.mkString(", ")})"
   }
 }
 

@@ -191,6 +191,8 @@ enum Value extends RuntimeEntity[Type] {
     case _ => false
   }
 
+  @deprecatedOverriding("For debugging purposes only, don't call it in production code")
+  override def toString: String = this.readBack(Environment.Typed.empty).toString
 }
 
 object Value extends RuntimeEntityFactory[Value] {
@@ -236,7 +238,7 @@ object Value extends RuntimeEntityFactory[Value] {
     val paramIdent = env.uniqueVariable
     val param = Value.variable(paramIdent)
     val term = env.withLocal(paramIdent, param, paramType) {
-      closure(Value.variable(paramIdent)).readBack
+      implicit env => closure(Value.variable(paramIdent)).readBack
     }
     (Param(paramIdent, paramType.readBack), term)
   }
