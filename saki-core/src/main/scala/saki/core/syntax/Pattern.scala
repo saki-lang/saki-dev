@@ -1,6 +1,6 @@
 package saki.core.syntax
 
-import saki.core.context.Environment
+import saki.core.context.{Environment, Typed}
 import saki.core.domain.{Type, Value}
 import saki.core.elaborate.Resolve
 import saki.core.*
@@ -103,7 +103,8 @@ extension (self: Pattern[Term]) {
         case _ => TypeError.error("Expected inductive type")
       }
       val inductiveType = `type`.asInstanceOf[Value.InductiveType]
-      val constructor = patternInductiveType.inductive.definition.get.getConstructor(constructorIdent) match {
+      val patternInductive = patternInductiveType.inductive.definition.get
+      val constructor = patternInductive.getConstructor(constructorIdent) match {
         case Some(constructor) => constructor
         case None => TypeError.error(s"Constructor $constructorIdent not found")
       }
@@ -113,7 +114,9 @@ extension (self: Pattern[Term]) {
         ValueError.mismatch(constructor.owner.name, inductiveType.inductive.name, self.span)
       } else {
         patterns.zip(constructor.params).foldLeft(Map.empty: Map[Var.Local, Value]) {
-          case (subst, (pattern, param)) => subst ++ pattern.buildMatchBindings(param.`type`.eval)
+          case (subst, (pattern, param)) => subst ++ env.withLocals(patternInductiveType.argsMap) {
+            implicit env => pattern.buildMatchBindings(param.`type`.eval)
+          }
         }
       }
     }

@@ -1,6 +1,6 @@
 package saki.core.domain
 
-import saki.core.context.Environment
+import saki.core.context.{Environment, Typed}
 import saki.core.syntax.*
 import saki.core.{RuntimeEntity, RuntimeEntityFactory, TypeError}
 
@@ -239,6 +239,14 @@ object Value extends RuntimeEntityFactory[Value] {
       closure(Value.variable(paramIdent)).readBack
     }
     (Param(paramIdent, paramType.readBack), term)
+  }
+
+  extension (self: InductiveType) {
+    def argsMap(implicit env: Environment.Typed[Value]): Map[Var.Local, Typed[Type]] = {
+      self.args.zip(self.inductive.definition.get.params).map { (arg, param) =>
+        param.ident -> Typed(arg, param.`type`.eval)
+      }.toMap
+    }
   }
 
 }

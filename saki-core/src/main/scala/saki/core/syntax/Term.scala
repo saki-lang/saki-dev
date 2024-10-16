@@ -247,9 +247,11 @@ enum Term extends RuntimeEntity[Type] {
       Value.inductiveType(indRef, argsValue)
     }
 
-    case InductiveVariant(inductive, constructor, args) => inductive.eval match {
-      case inductive: Value.InductiveType => {
-        Value.inductiveVariant(inductive, constructor, args.map(_.eval))
+    case InductiveVariant(inductiveTerm, constructor, args) => inductiveTerm.eval match {
+      case inductiveType: Value.InductiveType => {
+        val inductive: Inductive[Term] = inductiveType.inductive.definition.get
+        val argValues = env.withLocals(inductiveType.argsMap) { implicit env => args.map(_.eval) }
+        Value.inductiveVariant(inductiveType, constructor, argValues)
       }
       case _ => TypeError.error("Not a inductive type")
     }

@@ -152,10 +152,12 @@ private[core] object Synthesis:
       }
       // Build lambda
       val variant = Term.InductiveVariant(inductiveType.readBack, constructor, constructor.paramToVars)
-      Synth(
-        term = constructor.params.buildLambda(variant).normalize,
-        `type` = constructor.params.buildPiType(inductiveType.readBack).eval,
-      )
+      env.withLocals(inductiveType.argsMap) { implicit env =>
+        Synth(
+          term = constructor.params.buildLambda(variant).normalize,
+          `type` = constructor.params.buildPiType(inductiveType.readBack).eval,
+        )
+      }
     }
 
     case Expr.Match(scrutinees, clauses) => {
