@@ -4,6 +4,8 @@ import saki.core.context.{Environment, Typed}
 import saki.core.domain.{Type, Value}
 import saki.core.elaborate.Resolve
 import saki.core.*
+import saki.error.CoreErrorKind.*
+import saki.util.SourceSpan
 
 import scala.collection.Seq
 
@@ -100,18 +102,27 @@ extension (self: Pattern[Term]) {
     ) if `type`.isInstanceOf[Value.InductiveType] => {
       val patternInductiveType = patternInductiveTerm.eval match {
         case inductiveType: Value.InductiveType => inductiveType
-        case _ => TypeError.error("Expected inductive type")
+        case ty => TypeNotMatch.raise {
+          s"Expected inductive type, but got: ${ty.readBack}"
+        }
       }
       val inductiveType = `type`.asInstanceOf[Value.InductiveType]
       val patternInductive = patternInductiveType.inductive.definition.get
       val constructor = patternInductive.getConstructor(constructorIdent) match {
         case Some(constructor) => constructor
-        case None => TypeError.error(s"Constructor $constructorIdent not found")
+        case None => ConstructorNotFound.raise {
+          s"Constructor $constructorIdent not found in ${patternInductive.ident}"
+        }
       }
       if constructor.params.size != patterns.size then {
-        SizeError.mismatch(constructor.params.size, patterns.size, self.span)
+        SizeNotMatch.raise {
+          s"Constructor ${constructor.ident} of ${patternInductive.ident}" +
+          s"expected ${constructor.params.size} arguments, but got ${patterns.size}"
+        }
       } else if !(patternInductiveType <:< inductiveType) then {
-        ValueError.mismatch(constructor.owner.name, inductiveType.inductive.name, self.span)
+        TypeNotMatch.raise {
+          s"Expected inductive type ${inductiveType.readBack}, but got ${patternInductiveType.readBack}"
+        }
       } else {
         patterns.zip(constructor.params).foldLeft(Map.empty: Map[Var.Local, Value]) {
           case (subst, (pattern, param)) => subst ++ env.withLocals(patternInductiveType.argsMap) {
@@ -122,7 +133,9 @@ extension (self: Pattern[Term]) {
     }
 
     case Pattern.Variant(inductive, _, _) => {
-      PatternError.mismatch(inductive.toString, `type`.toString, self.span)
+      TypeNotMatch.raise {
+        s"Expected inductive type ${inductive}, but got: ${`type`.readBack}"
+      }
     }
 
     case Pattern.Typed(pattern, ty) => pattern.buildMatchBindings(ty.eval)
@@ -132,15 +145,15 @@ extension (self: Pattern[Term]) {
       fields.foldLeft(Map.empty: Map[Var.Local, Value]) {
         case (subst, (name, pattern)) => {
           val fieldType = recordType.fields.getOrElse(name, {
-            ValueError.missingField(name, recordType.readBack.asInstanceOf, pattern.span)
+            RecordMissingField.raise(s"Field $name not found in record")
           })
           subst ++ pattern.buildMatchBindings(fieldType)
         }
       }
     }
 
-    case Pattern.Record(_) => {
-      PatternError.mismatch("Record", `type`.toString, self.span)
+    case Pattern.Record(_) => TypeNotMatch.raise {
+      s"Expected record type, but got: ${`type`.readBack}"
     }
   }
 
@@ -157,11 +170,13 @@ extension (self: Pattern[Term]) {
     ) if value.isInstanceOf[Value.InductiveVariant] => {
       val inductiveType = inductiveTerm.eval match {
         case inductive: Value.InductiveType => inductive
-        case _ => TypeError.error("Expected inductive type")
+        case ty => TypeNotMatch.raise(s"Expected inductive type, but got: ${ty.readBack}")
       }
       val constructor = inductiveType.inductive.definition.get.getConstructor(constructorIdent) match {
         case Some(constructor) => constructor
-        case None => TypeError.error(s"Constructor $constructorIdent not found")
+        case None => ConstructorNotFound.raise {
+          s"Constructor $constructorIdent not found in ${inductiveType.inductive.name}"
+        }
       }
       val variant = value.asInstanceOf[Value.InductiveVariant]
       if constructor != variant.constructor then None else {

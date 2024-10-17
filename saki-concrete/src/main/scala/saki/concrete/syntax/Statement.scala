@@ -2,8 +2,7 @@ package saki.concrete.syntax
 
 import org.antlr.v4.runtime.ParserRuleContext
 import saki.concrete.span
-import saki.core.SourceSpan
-import saki.util.unreachable
+import saki.util.{unreachable, SourceSpan}
 
 enum Statement(implicit ctx: ParserRuleContext) extends SyntaxTree[Nothing] {
 

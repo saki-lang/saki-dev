@@ -2,7 +2,7 @@ package saki.concrete.syntax
 
 import org.antlr.v4.runtime.ParserRuleContext
 import saki.concrete.span
-import saki.core.SourceSpan
+import saki.util.SourceSpan
 
 trait SyntaxTree[+T] {
   def span: SourceSpan

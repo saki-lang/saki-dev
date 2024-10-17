@@ -2,8 +2,9 @@ package saki.concrete.syntax
 
 import org.antlr.v4.runtime.ParserRuleContext
 import saki.concrete.span
-import saki.core.{ApplyMode, Entity, LiteralType, Param, SourceSpan, Expr as CoreExpr}
+import saki.core.{Entity, LiteralType, Param, Expr as CoreExpr}
 import saki.core.syntax.*
+import saki.util.SourceSpan
 
 import scala.collection.Seq
 

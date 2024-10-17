@@ -1,10 +1,11 @@
 package saki.core.elaborate
 
-import saki.core.{Entity, Param, SourceSpan, TypeError}
+import saki.core.Param
 import saki.core.context.{Environment, Typed}
 import saki.core.domain.{Type, Value}
 import saki.core.syntax.{*, given}
-import saki.util.unreachable
+import saki.util.{unreachable, SourceSpan}
+import saki.error.CoreErrorKind.*
 
 import scala.collection.Seq
 import scala.collection.mutable.ArrayBuffer
@@ -22,22 +23,25 @@ private[core] object Synthesis:
           body = env.withLocal(lambdaParam.ident, piParam.`type`.eval, piParam.`type`.infer) {
             // Check that the body type is the same as the codomain of the Pi type
             returnType.map(_.synth.term.eval unify codomain.eval) match {
-              case Some(false) => TypeError.mismatch(codomain.toString, returnType.get.toString, expr.span)
+              case Some(false) => TypeNotMatch.raise(returnType.get.span) {
+                s"Expected type: $codomain, found: ${returnType.get.synth.term}"
+              }
               case _ => body.elaborate(codomain)
             }
           }
         )
-        case ty => {
-          // TODO: Rewrite this error message
-          TypeError.mismatch("Π (x : A) -> B", ty.toString, expr.span)
+        case ty => TypeNotMatch.raise(expr.span) {
+          s"Expected a function type or a Pi type, found: $ty"
         }
       }
     }
-    case Expr.Hole(_) =>  TypeError.error("Holes are not allowed in this context", expr.span)
+    case Expr.Hole(_) => UnexpectedValue.raise(expr.span) {
+      "Holes are not allowed in this context"
+    }
     case _ => {
       val synthResult = expr.synth
-      if !(synthResult.`type` unify expectedType.eval) then {
-        TypeError.mismatch(expectedType.toString, synthResult.`type`.toString, expr.span)
+      if !(synthResult.`type` unify expectedType.eval) then TypeNotMatch.raise(expr.span) {
+        s"Expected type: $expectedType, found: ${synthResult.`type`}"
       }
       synthResult.term
     }
@@ -55,17 +59,15 @@ private[core] object Synthesis:
     case Expr.Hole(_) => ??? // TODO: Implement hole synthesis
 
     case Expr.Unresolved(name) => {
-      try {
-        given SourceSpan = expr.span
-        env.getDefinitionByName(name) match {
-          case Some(definition) => Expr.Variable(definition.ident).synth(env)
-          case None => env.getTyped(name) match {
-            case Some(Typed(value, ty)) => Synth(value.readBack, ty)
-            case None => TypeError.error(s"Unresolved reference: $name", expr.span)
+      given SourceSpan = expr.span
+      env.getDefinitionByName(name) match {
+        case Some(definition) => Expr.Variable(definition.ident).synth(env)
+        case None => env.getTyped(name) match {
+          case Some(Typed(value, ty)) => Synth(value.readBack, ty)
+          case None => UnresolvedReference.raise(expr.span) {
+            s"Unresolved reference: $name"
           }
         }
-      } catch { // TODO: refactor error handling
-        case TypeError(message, _) => TypeError.error(message, expr.span)
       }
     }
 
@@ -88,12 +90,16 @@ private[core] object Synthesis:
         }
         case None => env.declarations.get(definitionVar) match {
           case Some(declaration) => synthDeclarationRef(declaration)
-          case None => TypeError.error(s"Unresolved reference: ${definitionVar.name}", expr.span)
+          case None => UnresolvedReference.raise(expr.span) {
+            s"Unresolved reference: ${definitionVar.name}"
+          }
         }
       }
       case variable: Var.Local => env.locals.get(variable) match {
         case Some(ty) => Synth(ty.value.readBack, ty.`type`)
-        case None => TypeError.error(s"Unbound variable: ${variable.name}", expr.span)
+        case None => UnboundVariable.raise(expr.span) {
+          s"Unbound variable: ${variable.name}"
+        }
       }
     }
 
@@ -103,7 +109,9 @@ private[core] object Synthesis:
       case (term, recordType: Value.RecordType) => term match {
         case Term.Record(fields) => fields.get(member) match {
           case Some(value) => Synth(value, recordType.fields(member))
-          case None => TypeError.error(s"Field not found: $member", expr.span)
+          case None => RecordMissingField.raise(expr.span) {
+            s"Field not found: $member"
+          }
         }
         case _ => Synth(Term.Projection(term, member), recordType.fields(member))
       }
@@ -113,7 +121,9 @@ private[core] object Synthesis:
         given SourceSpan = expr.span
         val method: Function[Term] = env.getDefinitionByName(member) match {
           case Some(definition: Function[Term]) => definition
-          case _ => TypeError.error(s"Method not found: $member", expr.span)
+          case _ => MethodNotFound.raise(expr.span) {
+            s"Method not found: $member"
+          }
         }
         Expr.Apply(Expr.Variable(method.ident), Argument(obj)).synth(env)
       }
@@ -128,27 +138,35 @@ private[core] object Synthesis:
           env.withLocal(paramIdent, param, paramType) { implicit env =>
             val (arg, argType) = argExpr.value.synth(env).unpack
             if !(argType unify paramType) then {
-              TypeError.mismatch(paramType.toString, argType.toString, argExpr.value.span)
+              TypeNotMatch.raise(argExpr.value.span) {
+                s"Expected type: $paramType, found: $argType"
+              }
             }
             Synth(fn.apply(arg), codomain(arg.eval))
           }
         }
-        case _ => TypeError.mismatch("a function", fnType.toString, fnExpr.span)
+        case _ => TypeNotMatch.raise(fnExpr.span) {
+          s"Expected a function type, found: $fnType"
+        }
       }
     }
 
     case Expr.Constructor(inductiveExpr, consIdent) => {
       val inductiveType: Value.InductiveType = inductiveExpr.synth(env).term.eval match {
         case inductiveType: Value.InductiveType => inductiveType
-        case _ => TypeError.error("Expected inductive type", inductiveExpr.span)
+        case _ => TypeNotMatch.raise(inductiveExpr.span) {
+          s"Expected inductive type, found: ${inductiveExpr.synth.term}"
+        }
       }
       val inductive: Var.Defined[Term, Inductive] = inductiveType.inductive
       val constructor: Constructor[Term] = inductive.definition.get.getConstructor(consIdent) match {
         case Some(definition) => definition
-        case _ => TypeError.error(s"Constructor not found: $consIdent", expr.span)
+        case _ => ConstructorNotFound.raise(expr.span) {
+          s"Constructor not found $consIdent in ${inductive.name}"
+        }
       }
-      if inductive != constructor.owner then {
-        TypeError.error("Mismatch in inductive type", expr.span)
+      if inductive != constructor.owner then TypeNotMatch.raise(expr.span) {
+        s"Expected inductive type ${inductive.name}, found: ${constructor.owner.name}"
       }
       // Build lambda
       val variant = Term.InductiveVariant(inductiveType.readBack, constructor, constructor.paramToVars)
@@ -167,7 +185,9 @@ private[core] object Synthesis:
       }
       val clauseBodyTypes: Seq[Term] = clausesSynth.map(_._2)
       if !clauseBodyTypes.tail.forall(_.eval unify clauseBodyTypes.head.eval) then {
-        TypeError.error("Clauses have different types", expr.span)
+        TypeNotMatch.raise(expr.span) {
+          s"Expected all clause bodies to have the same type, found: ${clauseBodyTypes.map(_.eval)}"
+        }
       }
       Synth(
         term = Term.Match(scrutineesSynth.map(_.term), clausesSynth.map(_._1)),
@@ -194,7 +214,9 @@ private[core] object Synthesis:
             val (returnType, _) = returnTypeExpr.synth.unpack
             val returnTypeValue = returnType.eval
             if !(returnTypeValue <:< bodyType) then {
-              TypeError.mismatch(returnType.toString, bodyType.readBack.toString, returnTypeExpr.span)
+              TypeNotMatch.raise(returnTypeExpr.span) {
+                s"Expected type: $returnType, found: $bodyType"
+              }
             }
             returnTypeValue
           }
@@ -224,7 +246,9 @@ private[core] object Synthesis:
       expectedType.foreach { expectedTypeExpr =>
         val (expectedType, _) = expectedTypeExpr.synth.unpack
         if !(recordType <:< expectedType.eval) then {
-          TypeError.mismatch(expectedType.toString, recordType.toString, expectedTypeExpr.span)
+          TypeNotMatch.raise(expectedTypeExpr.span) {
+            s"Expected type: $expectedType, found: $recordType"
+          }
         }
       }
       Synth(Term.Record(recordFields), recordType)

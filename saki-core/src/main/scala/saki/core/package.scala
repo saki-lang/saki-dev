@@ -8,8 +8,6 @@ export core.{
   ApplyMode,
   Pattern,
   Clause,
-  Error,
-  InfoSpan,
 }
 
 package object core

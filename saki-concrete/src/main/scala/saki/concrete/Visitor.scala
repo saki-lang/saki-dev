@@ -3,12 +3,14 @@ package saki.concrete
 import org.antlr.v4.runtime.ParserRuleContext
 import saki.concrete.SpineParser.{Associativity, Operator, Token, UnaryType}
 import saki.concrete.syntax.{Definition, Evaluation, ExprTree, Spanned, Statement, SyntaxTree}
+import saki.concrete.SyntaxError.*
 import saki.core.Literal.*
-import saki.core.{Pattern, SourceSpan, UnsupportedError, Literal as LiteralValue}
+import saki.core.{Pattern, Literal as LiteralValue}
 import saki.core.syntax.{ApplyMode, Argument, Clause, Param, Var}
 import saki.grammar.SakiBaseVisitor
 import saki.grammar.SakiParser.*
 import saki.util.*
+import saki.error.CoreErrorKind.*
 
 import scala.collection.Seq
 import scala.jdk.CollectionConverters.*
@@ -26,17 +28,27 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   private def getBinaryOperator(symbol: String)(implicit ctx: ParserRuleContext): Operator.Binary = {
     this.symbols.get(symbol) match {
       case Some(operator: Operator.Binary) => operator
-      case Some(_: Operator.Unary) => ctx.raiseError("Invalid operator", s"Expected binary operator, found unary operator: ${symbol}")
-      case Some(symbol) => ctx.raiseError("Invalid operator", s"Expected binary operator, found non-operator: ${symbol}")
-      case None => ctx.raiseError("Invalid operator", s"Undeclared operator: ${symbol}")
+      case Some(_: Operator.Unary) => ctx.raiseError(InvalidOperator.apply) {
+        s"Expected binary operator, found unary operator: ${symbol}"
+      }
+      case Some(symbol) => ctx.raiseError(InvalidOperator.apply) {
+        s"Expected binary operator, found non-operator: ${symbol}"
+      }
+      case None => ctx.raiseError(InvalidOperator.apply) {
+        s"Undeclared operator: ${symbol}"
+      }
     }
   }
 
   private def getOperator(symbol: String)(implicit ctx: ParserRuleContext): Operator = {
     this.symbols.get(symbol) match {
       case Some(operator: Operator) => operator
-      case Some(symbol) => ctx.raiseError("Invalid symbol", s"Expected operator, found non-operator: ${symbol}")
-      case None => ctx.raiseError("Invalid operator", s"Undeclared operator: ${symbol}")
+      case Some(symbol) => ctx.raiseError(InvalidSymbol.apply) {
+        s"Expected operator, found non-operator: ${symbol}"
+      }
+      case None => ctx.raiseError(InvalidOperator.apply) {
+        s"Undeclared operator: ${symbol}"
+      }
     }
   }
 
@@ -45,7 +57,9 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   ): Unit = subject match {
     case operator: Operator => { // Operator can only be declared once
       if this.symbols.contains(symbol) then {
-        ctx.raiseError("Invalid operator declaration", s"Operator redeclaration: ${symbol}")
+        ctx.raiseError(InvalidDeclaration.apply) {
+          s"Operator redeclaration: ${symbol}"
+        }
       }
       this.symbols + (symbol -> operator)
     }
@@ -75,7 +89,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   }
 
   override def visitModuleEntityImpl(ctx: ModuleEntityImplContext): Seq[Definition] = {
-    UnsupportedError.unsupported("Module entity implementation is not supported yet", ctx.span)
+    UnsupportedFeature.raise(ctx.span) { "Module entity implementation is not supported yet" }
   }
 
   override def visitModuleEntityOpDecl(ctx: ModuleEntityOpDeclContext): Seq[Definition] = {
@@ -135,8 +149,8 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     case inductive: DefBodyInductiveContext => {
       val params: Seq[Param[ExprTree]] = implicitParams ++ explicitParams
       val constructors = inductive.constructors.asScala.map {
-        case _: InductiveConsTypeContext => {
-          UnsupportedError.unsupported("Inductive constructor with type is not supported yet", inductive.span)
+        case _: InductiveConsTypeContext => UnsupportedFeature.raise(inductive.span) {
+          "Inductive constructor with type is not supported yet"
         }
         case cons: InductiveConsTupleContext => {
           val params = cons.elements.asScala.zipWithIndex.map { (element, index) =>
@@ -144,7 +158,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
             val `type` = element.`type`.visit
             Param(Var.Local(ident), `type`)
           }
-          // TODO: flat
+          // TODO: flat constructor: add a global definition with the constructor name
           Definition.Constructor(s"${cons.ident.getText}", params)(cons)
         }
       }
@@ -196,7 +210,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       case ctx: ExprSigmaTypeContext => visitExprSigmaType(ctx)
       case ctx: ExprRecordTypeContext => visitExprRecordType(ctx)
       case ctx: ExprRecordContext => visitExprRecord(ctx)
-      case _ => UnsupportedError.unsupported("Unsupported expression", self.span)
+      case _ => UnsupportedFeature.raise(self.span) { "Unsupported expression" }
     }
   }
 
@@ -205,7 +219,9 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       case ctx: AtomOperatorContext => visitAtomOperator(ctx)
       case ctx: AtomIdentifierContext => visitAtomIdentifier(ctx)
       case ctx: AtomLiteralContext => visitAtomLiteral(ctx)
-      case ctx: AtomSelfContext => UnsupportedError.unsupported("`self` is not supported yet", ctx.span)
+      case ctx: AtomSelfContext => UnsupportedFeature.raise(ctx.span) {
+        "`self` is not supported yet"
+      }
     }
   }
 
@@ -228,11 +244,11 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   override def visitExprParen(ctx: ExprParenContext): ExprTree = ctx.value.visit
 
   override def visitExprTuple(ctx: ExprTupleContext): ExprTree = {
-    UnsupportedError.unsupported("Tuple is not supported yet", ctx.span)
+    UnsupportedFeature.raise(ctx.span) { "Tuple is not supported yet" }
   }
 
   override def visitExprTupleType(ctx: ExprTupleTypeContext): ExprTree = {
-    UnsupportedError.unsupported("Tuple type is not supported yet", ctx.span)
+    UnsupportedFeature.raise(ctx.span) { "Tuple type is not supported yet" }
   }
 
   override def visitExprConstructor(ctx: ExprConstructorContext): ExprTree.Constructor = {
@@ -274,7 +290,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     val subject = ctx.subject.visit
     val member = ctx.member.getText
     if ctx.implicitArgList != null then {
-      UnsupportedError.unsupported("Implicit arguments in elimination is not supported yet", ctx.span)
+      UnsupportedFeature.raise(ctx.span) { "Implicit arguments in elimination is not supported yet" }
     }
     ExprTree.Elimination(subject, member)
   }
@@ -345,15 +361,15 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       caseCtx.clauses.asScala.map {
         case clause: MatchClauseSingleContext => {
           val pattern = clause.pattern.visit.get
-          if clause.`type` != null then {
-            UnsupportedError.unsupported("Type annotation in match clause is not supported yet", clause.span)
+          if clause.`type` != null then UnsupportedFeature.raise(clause.span) {
+            "Type annotation in match clause is not supported yet"
           }
           Clause(Seq(pattern), body)
         }
         case clause: MatchClauseTupleContext => {
           val patterns = clause.patternList.patterns.asScala.map(_.visit.get)
-          if clause.`type` != null then {
-            UnsupportedError.unsupported("Type annotation in match clause is not supported yet", clause.span)
+          if clause.`type` != null then UnsupportedFeature.raise(clause.span) {
+            "Type annotation in match clause is not supported yet"
           }
           Clause(patterns, body)
         }
@@ -444,7 +460,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   }
 
   override def visitStatementInstance(ctx: StatementInstanceContext): Statement = {
-    UnsupportedError.unsupported("Instance statement is not supported yet", ctx.span)
+    UnsupportedFeature.raise(ctx.span) { "Instance statement is not supported yet" }
   }
 
   // Pattern
@@ -501,7 +517,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   }
 
   override def visitPatternTuple(ctx: PatternTupleContext): Spanned[Pattern[ExprTree]] = {
-    UnsupportedError.unsupported("Tuple is not supported yet", ctx.span)
+    UnsupportedFeature.raise(ctx.span) { "Tuple pattern is not supported yet" }
   }
 
   // Operator

@@ -1,5 +1,5 @@
 package saki.concrete.syntax
-import saki.core.SourceSpan
+import saki.util.SourceSpan
 
 case class Evaluation(expr: ExprTree) extends SyntaxTree[Unit] {
   override def emit: Unit = ()

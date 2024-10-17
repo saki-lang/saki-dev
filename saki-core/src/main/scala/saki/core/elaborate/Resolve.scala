@@ -1,9 +1,9 @@
 package saki.core.elaborate
 
-import saki.core.{SourceSpan, TypeError}
 import saki.core.context.DefinitionContext
 import saki.core.syntax.*
-import saki.util.{unreachable, Graph, LateInit}
+import saki.util.{unreachable, Graph, LateInit, SourceSpan}
+import saki.error.CoreErrorKind.*
 
 import scala.annotation.targetName
 import scala.collection.Seq
@@ -85,7 +85,7 @@ object Resolve {
 
       case Expr.Unresolved(name) => ctx.get(name) match {
         case Some(variable) => Expr.Variable(variable).resolve(ctx)
-        case None => TypeError.error(s"Unresolved variable: $name", span)
+        case None => UnresolvedReference.raise(s"Unresolved variable: $name")
       }
 
       case Expr.Hole(_) => {

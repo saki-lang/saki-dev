@@ -2,7 +2,6 @@ package saki.concrete.syntax
 
 import org.antlr.v4.runtime.ParserRuleContext
 import saki.concrete.span
-import saki.core.SourceSpan
 import saki.core.syntax.{
   DefinedFunction, Expr, Param, Var,
   Constructor as CoreConstructor,
@@ -10,7 +9,7 @@ import saki.core.syntax.{
   Function as CoreFunction,
   Inductive as CoreInductive
 }
-import saki.util.{unreachable, LateInit}
+import saki.util.{unreachable, LateInit, SourceSpan}
 
 import scala.collection.{mutable, Seq}
 

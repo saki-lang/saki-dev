@@ -2,8 +2,9 @@ package saki.core.syntax
 
 import saki.core.context.{Environment, Typed}
 import saki.core.domain.{NeutralValue, Type, Value}
-import saki.core.{RuntimeEntity, RuntimeEntityFactory, TypeError}
+import saki.core.{RuntimeEntity, RuntimeEntityFactory}
 import saki.util.unreachable
+import saki.error.CoreErrorKind.*
 
 import scala.collection.Seq
 
@@ -98,9 +99,9 @@ enum Term extends RuntimeEntity[Type] {
         // If the variable binding is not found in the environment, it might be a neutral value.
         // Try iterating the locals to find the typed neutral value and return its type.
         env.locals.collectFirst {
-          case (ident, Typed(Neutral(NeutralValue.Variable(neutral)), ty)) if neutral == variable => ty
+          case (_, Typed(Neutral(NeutralValue.Variable(neutral)), ty)) if neutral == variable => ty
         }.getOrElse {
-          throw TypeError(s"Variable not found: $variable", None)
+          VariableNotFound.raise(s"Variable not found: ${variable.name}")
         }
       }
     }
@@ -126,7 +127,7 @@ enum Term extends RuntimeEntity[Type] {
     case Match(_, clauses) => {
       val clausesType: Seq[Value] = clauses.map(_.body.infer)
       if clausesType.tail.forall(_ unify clausesType.head) then clausesType.head
-      else throw TypeError("Clauses have different types", None)
+      else TypeNotMatch.raise("Clauses have different types")
       clausesType.head
     }
 
@@ -146,8 +147,8 @@ enum Term extends RuntimeEntity[Type] {
 
       case Value.Pi(paramType, codomain) => {
         val argType = arg.infer
-        if !(argType unify paramType) then {
-          throw TypeError(s"Type mismatch: $paramType != $argType", None)
+        if !(argType unify paramType) then TypeNotMatch.raise {
+          s"Expected argument type: ${paramType.readBack}, but got: ${argType.readBack}"
         }
         // To obtain the concrete return type, feed the concrete argument to the codomain closure
         codomain(arg.eval)
@@ -159,20 +160,23 @@ enum Term extends RuntimeEntity[Type] {
         val candidateStates = states.filter {
           (paramType, _) => paramType <:< argType
         }
-        if candidateStates.isEmpty then {
-          throw TypeError("No matching state in superposition", None)
+        if candidateStates.isEmpty then OverloadingNotMatch.raise {
+          s"No matched overloading in overloaded Pi type of argument with type: ${argType.readBack}"
         }
         // Find the states that there is no other state that is closer to the argument type
         val validStates = candidateStates.filter {
           (paramType, _) => !candidateStates.exists(_._1 <:< paramType)
         }
-        if validStates.size > 1 then {
-          throw TypeError("Multiple valid states in superposition", None)
+        if validStates.size > 1 then OverloadingAmbiguous.raise {
+          s"Ambiguous overloading in overloaded Pi type of argument with type: ${argType.readBack}"
         }
         val (_, codomain) = validStates.head
         codomain(arg.eval)
       }
-      case _ => throw TypeError("Cannot apply non-function", None)
+
+      case _ => TypeNotMatch.raise {
+        s"Cannot apply an argument to a non-function value: $fn"
+      }
     }
 
     // Lambda returns a dependent function type
@@ -196,9 +200,9 @@ enum Term extends RuntimeEntity[Type] {
 
     case Projection(record, field) => record.infer match {
       case Value.RecordType(fields) => fields.getOrElse(field, {
-        throw TypeError(s"Missing field: $field", None)
+        RecordMissingField.raise(s"Field $field not found in record $record")
       })
-      case _ => throw TypeError("Cannot project from non-record", None)
+      case _ => TypeNotMatch.raise(s"Cannot project from non-record value: $record")
     }
 
   }
@@ -261,11 +265,10 @@ enum Term extends RuntimeEntity[Type] {
 
     case InductiveVariant(inductiveTerm, constructor, args) => inductiveTerm.eval match {
       case inductiveType: Value.InductiveType => {
-        val inductive: Inductive[Term] = inductiveType.inductive.definition.get
         val argValues = env.withLocals(inductiveType.argsMap) { implicit env => args.map(_.eval) }
         Value.inductiveVariant(inductiveType, constructor, argValues)
       }
-      case _ => TypeError.error("Not a inductive type")
+      case ty => TypeNotMatch.raise(s"Expected inductive type, but got: ${ty.readBack}")
     }
 
     case Match(scrutinees, clauses) => {
@@ -274,7 +277,7 @@ enum Term extends RuntimeEntity[Type] {
       clauses.tryMatch(scrutineesValue).getOrElse {
         // If all scrutinees are final and no match is found, raise an error
         if scrutineesValue.forall(_.readBack.isFinal(Set.empty)) then {
-          TypeError.error("No match")
+          MatchNotExhaustive.raise("Match is not exhaustive")
         }
         // Otherwise (at least one scrutinee contains neutral value), keep the match as a neutral value
         val valueClauses = clauses.map { clause =>
@@ -305,8 +308,8 @@ enum Term extends RuntimeEntity[Type] {
       
       case Value.Lambda(paramType, bodyClosure) => {
         val argType = arg.infer
-        if !(paramType <:< argType) then {
-          throw TypeError(s"Type mismatch: $paramType != $argType", None)
+        if !(paramType <:< argType) then TypeNotMatch.raise {
+          s"Expected argument type: ${paramType.readBack}, but got: ${argType.readBack}"
         }
         bodyClosure(arg.eval)
       }
@@ -318,8 +321,8 @@ enum Term extends RuntimeEntity[Type] {
           case (paramType, _) => paramType <:< argType
         }
         
-        if candidateStates.isEmpty then {
-          throw TypeError("No matching state in superposition", None)
+        if candidateStates.isEmpty then NoSuchOverloading.raise {
+          s"No overloading found for argument with type: ${argType.readBack}"
         }
         
         if candidateStates.size == 1 then {
@@ -335,7 +338,9 @@ enum Term extends RuntimeEntity[Type] {
             // we don't need to check the type of the argument value again
             closure(argValue) match {
               case Value.OverloadedLambda(states) => states
-              case _ => throw TypeError("Invalid state in superposition", None)
+              case value => TypeNotMatch.raise {
+                s"Expected an overloaded lambda, but got: ${value.readBack}"
+              }
             }
           }
           // Merge the new states
@@ -348,7 +353,7 @@ enum Term extends RuntimeEntity[Type] {
       // because it is tried to be evaluated before but failed
       case Value.Neutral(neutral) => Value.Neutral(NeutralValue.Apply(neutral, arg.eval))
 
-      case _ => throw TypeError(s"Cannot apply non-function: $fn", None)
+      case _ => TypeNotMatch.raise(s"Cannot apply an argument to a non-function value: $fn")
     }
 
     case lambda: Lambda => lambda.eval(Value.Lambda.apply)
@@ -357,10 +362,10 @@ enum Term extends RuntimeEntity[Type] {
 
     case Projection(record, field) => record.eval match {
       case Value.Record(fields) => fields.getOrElse(field, {
-        throw TypeError(s"Missing field: $field", None)
+        RecordMissingField.raise(s"Field $field not found in record")
       })
       case neutral: Value.Neutral => Value.Neutral(NeutralValue.Projection(neutral, field))
-      case _ => throw TypeError(s"Cannot project from non-record: $record", None)
+      case _ => TypeNotMatch.raise(s"Cannot project from non-record value: $record")
     }
   }
 
@@ -436,7 +441,7 @@ object Term extends RuntimeEntityFactory[Term] {
     case head +: tail => {
       val updatedState: Term = overloaded.states.get(head) match {
         case Some(term: Term.OverloadedLambda) => addOverloadedPath(term, tail, body)
-        case Some(_) => TypeError.overloadDefinitionAmbiguous(head.ident.name, None)
+        case Some(_) => OverloadingAmbiguous.raise(s"Ambiguous overloading for function: ${head.name}")
         case None => if tail.isEmpty then body else addOverloadedPath(overloaded.copy(Map.empty), tail, body)
       }
       overloaded.copy(overloaded.states + (head -> updatedState))
@@ -526,7 +531,9 @@ private sealed trait OverloadedTermExt[S <: Term & OverloadedTermExt[S]] {
           // case 2: The term is an overloaded lambda, keep it as is
           case overloaded: OverloadedTermExt[?] => overloaded
           // case 3: The term is not a lambda-like term, indicating an ambiguous overload
-          case _ => TypeError.overloadedTermAmbiguous(param.ident.name, None)
+          case _ => OverloadingAmbiguous.raise {
+            s"Ambiguous overloading for function: ${param.ident.name}"
+          }
         }.reduce { (merged, overloaded) => merged.merge(overloaded) }
         param -> merged
       }
@@ -550,11 +557,13 @@ private sealed trait OverloadedTermExt[S <: Term & OverloadedTermExt[S]] {
             // Recursively merge the states
             try overloaded1.asInstanceOf[S].merge(overloaded2.asInstanceOf[S]) catch {
               // If the merge fails, the states are not compatible (e.g. trying to merge a Pi and a Lambda)
-              case _: ClassCastException => TypeError.overloadDefinitionAmbiguous(param.ident.name, None)
+              case _: ClassCastException => TypeNotMatch.raise {
+                s"Cannot merge states of different types: ${term1}, ${term2}"
+              }
             }
           }
-          // States are not overloaded lambdas, indicating an ambiguous overload
-          case _ => TypeError.overloadDefinitionAmbiguous(param.ident.name, None)
+          // States are not overloaded lambdas, indicating a mismatch
+          case _ => TypeNotMatch.raise(s"Cannot merge states of different types: ${term1}, ${term2}")
         }
         case (Some(term: Term), _) => term
         case (_, Some(term: Term)) => term
@@ -593,7 +602,10 @@ private sealed trait OverloadInvokeExt {
 
     // If no candidate overload fits the argument types, throw an error
     if candidateOverloads.isEmpty then {
-      throw TypeError.overloadInvokeNoMatch(this.fn.name, None)
+      NoSuchOverloading.raise {
+        s"No overloading of function ${fn.ident.name} found for arguments: " +
+        argsValue.map(_.readBack).mkString(", ")
+      }
     }
 
     // Otherwise, find the most suitable one
@@ -619,7 +631,10 @@ private sealed trait OverloadInvokeExt {
     }
 
     if (remainingOverloads.size != 1) {
-      throw TypeError(s"Failed to determine the most specific overload for function ${fn.ident.name}", None)
+      OverloadingAmbiguous.raise {
+        s"Ambiguous overloading for function ${fn.ident.name} with arguments: " +
+        argsValue.map(_.readBack).mkString(", ")
+      }
     }
 
     (remainingOverloads.head, argsValue)

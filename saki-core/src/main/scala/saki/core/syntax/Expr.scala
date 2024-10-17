@@ -3,7 +3,9 @@ package saki.core.syntax
 import saki.core.context.Environment
 import saki.core.domain.Value
 import saki.core.elaborate.{Resolve, Synthesis}
-import saki.core.{Entity, InfoSpan, SourceSpan, TypeError}
+import saki.core.Entity
+import saki.util.SourceSpan
+import saki.error.{CoreError, Error, UnknownError}
 
 import scala.collection.Seq
 
@@ -117,10 +119,9 @@ enum Expr(val span: SourceSpan) extends Entity {
     implicit env: Environment.Typed[Value]
   ): Synthesis.Synth = {
     try Synthesis.synth(this) catch {
-      case TypeError(message, span) => span match {
-        case Some(span) => throw TypeError(message, Some(span))
-        case None => throw TypeError(message, Some(InfoSpan(this.span, "here")))
-      }
+      case error: Error => throw error
+      case error: CoreError => throw error.spanned(span)
+      case error: Throwable => throw UnknownError(error, span)
     }
   }
 
