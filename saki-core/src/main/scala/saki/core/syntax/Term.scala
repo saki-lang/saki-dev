@@ -54,9 +54,9 @@ enum Term extends RuntimeEntity[Type] {
       val argsStr = if args.nonEmpty then s"(${args.mkString(", ")})" else ""
       s"${inductive.name}$argsStr"
     }
-    case InductiveVariant(constructor, inductive, args) => {
+    case InductiveVariant(inductive, constructor, args) => {
       val argsStr = if args.nonEmpty then s"(${args.mkString(", ")})" else ""
-      s"$inductive::$constructor$argsStr"
+      s"$inductive::${constructor.ident}$argsStr"
     }
     case Match(scrutinees, clauses) => {
       val scrutineesStr = if scrutinees.size > 1 then {
@@ -273,12 +273,14 @@ enum Term extends RuntimeEntity[Type] {
 
     case Match(scrutinees, clauses) => {
       val scrutineesValue = scrutinees.map(_.eval)
-      // Try to match the scrutinees with the clauses
-      clauses.tryMatch(scrutineesValue).getOrElse {
-        // If all scrutinees are final and no match is found, raise an error
-        if scrutineesValue.forall(_.readBack.isFinal(Set.empty)) then {
+      // If all scrutinees are final, try to match the clauses
+      if scrutineesValue.forall(_.readBack.isFinal(Set.empty)) then {
+        // Try to match the scrutinees with the clauses
+        clauses.tryMatch(scrutineesValue).getOrElse {
+          // If all scrutinees are final and no match is found, raise an error
           MatchNotExhaustive.raise("Match is not exhaustive")
         }
+      } else {
         // Otherwise (at least one scrutinee contains neutral value), keep the match as a neutral value
         val valueClauses = clauses.map { clause =>
           // Bind the pattern variables to the scrutinee values

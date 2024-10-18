@@ -118,9 +118,15 @@ object Resolve {
       }
 
       case Expr.Elimination(obj, member) => {
-        val (resolvedObj, ctx) = obj.resolve
+        val (resolvedObj, context) = obj.resolve
+        // If the member is a definition, indicating that this is a method call.
+        // Thus, we need to update the dependency graph.
+        val updatedContext = context.variableMap.get(member) match {
+          case Some(definition: Var.Defined[Term, ?]) => context.ref(definition)
+          case _ => context
+        }
         val resolved = Expr.Elimination(resolvedObj, member)
-        (resolved, ctx)
+        (resolved, updatedContext)
       }
 
       case Expr.Constructor(inductive, constructor) => {

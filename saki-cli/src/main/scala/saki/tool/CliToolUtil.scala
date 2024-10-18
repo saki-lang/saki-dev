@@ -71,6 +71,7 @@ def compileModule(source: String, doEvaluation: Boolean = true): Module = {
     if doEvaluation then evaluations.foreach { evaluation =>
       println(s"${module.evaluate(evaluation.expr.emit)}")
     }
+
     module
   }
 }

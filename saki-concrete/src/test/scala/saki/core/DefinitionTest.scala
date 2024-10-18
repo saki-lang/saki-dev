@@ -266,6 +266,210 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     module.eval("isOdd(n9)") should be(module.eval("true"))
   }
 
+  it should "rbtree" in {
+    val code = {
+      """
+        type Option[A: 'Type] = inductive {
+            None
+            Some(A)
+        }
+
+        // Definition of possible colors in a Red-Black Tree
+        // Red or Black color to maintain tree properties
+        type Color = inductive {
+            Red
+            Black
+        }
+
+        // Definition of the Red-Black Tree data structure
+        // Tree can be a Leaf or a Node with color, value, left and right children
+        type Tree = inductive {
+            Leaf
+            Node(Color, Int, Tree, Tree)
+        }
+
+        // Function to balance the Red-Black Tree after insertion
+        // Ensures that Red-Black Tree properties are maintained, such as balancing after consecutive red nodes
+        def balance(tree: Tree): Tree = match tree {
+            // Left-Left case (left subtree of left child is red)
+            // Perform a right rotation to balance the tree
+            // This situation occurs when the left child and its left child are both red, causing a violation
+            case Tree::Node(
+                Color::Black, valueRight,
+                Tree::Node(
+                    Color::Red, valueTop,
+                    Tree::Node(Color::Red, valueLeft, leftLeft, leftRight),
+                    rightLeft
+                ), rightRight
+            ) | Tree::Node(
+                Color::Black, valueRight,
+                Tree::Node(
+                    Color::Red, valueLeft,
+                    leftLeft,
+                    Tree::Node(Color::Red, valueTop, leftRight, rightLeft)
+                ), rightRight
+            ) => Tree::Node(
+                Color::Red, valueTop,
+                Tree::Node(Color::Black, valueLeft, leftLeft, leftRight),
+                Tree::Node(Color::Black, valueRight, rightLeft, rightRight)
+            )
+
+            // Right-Right case (right subtree of right child is red)
+            // Perform a left rotation to balance the tree
+            // This situation occurs when the right child and its right child are both red, causing a violation
+            case Tree::Node(
+                Color::Black, valueLeft,
+                leftLeft,
+                Tree::Node(
+                    Color::Red, valueRight,
+                    Tree::Node(Color::Red, valueTop, leftRight, rightLeft),
+                    rightRight
+                )
+            ) | Tree::Node(
+                Color::Black, valueLeft,
+                leftLeft,
+                Tree::Node(
+                    Color::Red, valueTop,
+                    leftRight,
+                    Tree::Node(Color::Red, valueRight, rightLeft, rightRight)
+                )
+            ) => Tree::Node(
+                Color::Red, valueTop,
+                Tree::Node(Color::Black, valueLeft, leftLeft, leftRight),
+                Tree::Node(Color::Black, valueRight, rightLeft, rightRight)
+            )
+
+            // Recoloring case: both children are red
+            // Recolor the children to black and maintain the parent as red
+            // This occurs to fix the situation where both children of a red node are also red
+            case Tree::Node(
+                Color::Red, value,
+                Tree::Node(Color::Red, leftValue, leftLeft, leftRight),
+                Tree::Node(Color::Red, rightValue, rightLeft, rightRight)
+            ) => Tree::Node(
+                Color::Red, value,
+                Tree::Node(Color::Black, leftValue, leftLeft, leftRight),
+                Tree::Node(Color::Black, rightValue, rightLeft, rightRight)
+            )
+
+            // Other cases: no need to balance
+            case node => node
+        }
+
+        // Insert a new value into the Red-Black Tree as a red node
+        // Recursively inserts the new value and then balances the tree if necessary
+        def insertRed(tree: Tree, newValue: Int): Tree = match tree {
+            case Tree::Leaf => Tree::Node(Color::Red, newValue, Tree::Leaf, Tree::Leaf)
+            case Tree::Node(color, value, left, right) => if newValue < value then {
+                Tree::Node(color, value, left.insertRed(newValue), right).balance
+            } else if newValue > value then {
+                Tree::Node(color, value, left, right.insertRed(newValue)).balance
+            } else {
+                Tree::Node(color, newValue, left, right)
+            }
+        }
+
+        // insert a value into the Red-Black Tree
+        // Ensures that the root of the tree is always black after insertion
+        def insert(tree: Tree, value: Int): Tree = match tree.insertRed(value) {
+            case Tree::Node(Color::Red, value, left, right) => Tree::Node(Color::Black, value, left, right)
+            case Tree::Node(Color::Black, value, left, right) => Tree::Node(Color::Black, value, left, right)
+            case Tree::Leaf => Tree::Leaf   // Should not happen
+        }
+
+        def find(tree: Tree, target: Int): Option[Int] = match tree {
+            case Tree::Leaf => Option[Int]::None
+            case Tree::Node(color, value, left, right) => {
+                if target < value then {
+                    left.find(target)
+                } else if target > value then {
+                    right.find(target)
+                } else {
+                    Option[Int]::Some(value)
+                }
+            }
+        }
+
+        // Find the predecessor of a given value in the Red-Black Tree
+        // The predecessor is the largest value smaller than the given value
+        def predecessor(tree: Tree, value: Int): Option[Int] = match tree {
+            case Tree::Leaf => Option[Int]::None
+            case Tree::Node(color, nodeValue, left, right) => if value <= nodeValue then {
+                // Search in the left subtree if the value is less than or equal to the current node's value
+                left.predecessor(value)
+            } else {
+                // Search in the right subtree, but also consider the current node as a potential predecessor
+                match right.predecessor(value) {
+                    case Option[Int]::None => Option[Int]::Some(nodeValue)
+                    case Option[Int]::Some(pred) => Option[Int]::Some(pred)
+                }
+            }
+        }
+
+        // Find the successor of a given value in the Red-Black Tree
+        // The successor is the smallest value greater than the given value
+        def successor(tree: Tree, value: Int): Option[Int] = match tree {
+            case Tree::Leaf => Option[Int]::None
+            case Tree::Node(color, nodeValue, left, right) => if value >= nodeValue then {
+                // Search in the right subtree if the value is greater than or equal to the current node's value
+                right.successor(value)
+            } else {
+                // Search in the left subtree, but also consider the current node as a potential successor
+                match left.successor(value) {
+                    case Option[Int]::None => Option[Int]::Some(nodeValue)
+                    case Option[Int]::Some(succ) => Option[Int]::Some(succ)
+                }
+            }
+        }
+
+        // It's myTree!!!!!
+        def myTree: Tree = {
+            let tree = Tree::Leaf
+            let tree = tree.insert(5)
+            let tree = tree.insert(2)
+            let tree = tree.insert(7)
+            let tree = tree.insert(9)
+            let tree = tree.insert(8)
+            let tree = tree.insert(1)
+            let tree = tree.insert(3)
+            let tree = tree.insert(1)
+            let tree = tree.insert(4)
+            tree
+        }
+      """
+    }
+    val module = compileModule(code)
+
+    module.eval("myTree.find(9)") should be (module.eval("Option(Int)::Some(9)"))
+    module.eval("myTree.find(0)") should be (module.eval("Option(Int)::None"))
+    module.eval("myTree.find(5)") should be (module.eval("Option(Int)::Some(5)"))
+    module.eval("myTree.find(1)") should be (module.eval("Option(Int)::Some(1)"))
+    module.eval("myTree.find(7)") should be (module.eval("Option(Int)::Some(7)"))
+    module.eval("myTree.find(3)") should be (module.eval("Option(Int)::Some(3)"))
+    module.eval("myTree.find(6)") should be (module.eval("Option(Int)::None"))
+    module.eval("myTree.find(8)") should be (module.eval("Option(Int)::Some(8)"))
+    module.eval("myTree.find(4)") should be (module.eval("Option(Int)::Some(4)"))
+    module.eval("myTree.find(2)") should be (module.eval("Option(Int)::Some(2)"))
+
+    module.eval("myTree.predecessor(5)") should be (module.eval("Option(Int)::Some(4)"))
+    module.eval("myTree.predecessor(2)") should be (module.eval("Option(Int)::Some(1)"))
+    module.eval("myTree.predecessor(7)") should be (module.eval("Option(Int)::Some(5)"))
+    module.eval("myTree.predecessor(9)") should be (module.eval("Option(Int)::Some(8)"))
+    module.eval("myTree.predecessor(8)") should be (module.eval("Option(Int)::Some(7)"))
+    module.eval("myTree.predecessor(1)") should be (module.eval("Option(Int)::None"))
+    module.eval("myTree.predecessor(3)") should be (module.eval("Option(Int)::Some(2)"))
+    module.eval("myTree.predecessor(4)") should be (module.eval("Option(Int)::Some(3)"))
+
+    module.eval("myTree.successor(5)") should be (module.eval("Option(Int)::Some(7)"))
+    module.eval("myTree.successor(2)") should be (module.eval("Option(Int)::Some(3)"))
+    module.eval("myTree.successor(7)") should be (module.eval("Option(Int)::Some(8)"))
+    module.eval("myTree.successor(9)") should be (module.eval("Option(Int)::None"))
+    module.eval("myTree.successor(8)") should be (module.eval("Option(Int)::Some(9)"))
+    module.eval("myTree.successor(1)") should be (module.eval("Option(Int)::Some(2)"))
+    module.eval("myTree.successor(3)") should be (module.eval("Option(Int)::Some(4)"))
+    module.eval("myTree.successor(4)") should be (module.eval("Option(Int)::Some(5)"))
+  }
+
   it should "eq refl" in {
     val code = {
       """

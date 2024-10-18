@@ -53,7 +53,7 @@ argList
     ;
 
 matchCase
-    :   'case' clauses+=matchClause (NL* '|' clauses+=matchClause)* NL* '=>' NL* body=expr
+    :   'case' clauses+=matchClause (NL* '|' clauses+=matchClause)* NL* '=>' NL* body=blockExpr
     ;
 
 matchClause
