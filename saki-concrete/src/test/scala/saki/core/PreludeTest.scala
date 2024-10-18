@@ -20,6 +20,8 @@ class PreludeTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     "114 * 514".synth should be (IntValue(58596).term)
     "527 / 98".synth should be (IntValue(5).term)
     "527 % 98".synth should be (IntValue(37).term)
+    "min(527, 98)".synth should be (IntValue(98).term)
+    "max(527, 98)".synth should be (IntValue(527).term)
   }
 
   it should "int operator precedence" in {
@@ -70,8 +72,9 @@ class PreludeTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
   }
 
   it should "string ops" in {
-    "\"It's\" ++ \" \" ++ \"mygo\" ++ \"!!!!!\"".synth should be (StringValue("It's mygo!!!!!").term)
+    "\"It's mygo\" ++  \"!\".repeat(5)".synth should be (StringValue("It's mygo!!!!!").term)
     "19260817.toString".synth should be (StringValue("19260817").term)
+    "19260817.toString.length".synth should be (IntValue(8).term)
   }
 
   it should "string escape" in {

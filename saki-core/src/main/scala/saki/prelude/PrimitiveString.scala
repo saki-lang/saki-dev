@@ -88,6 +88,20 @@ object PrimitiveString extends PreludeDefinitionSet {
     }
   )
 
+  val repeat: NativeFunction[Term] = NativeFunction(
+    ident = Var.Defined("repeat"),
+    params = Seq("str" @: StringType.toTerm, "n" @: IntType.toTerm),
+    resultType = StringType.toTerm,
+    nativeImpl = (args: ArgList[Value]) => {
+      val str: Value = args(0).value
+      val n: Value = args(1).value
+      (str, n) match {
+        case (Value.Primitive(StringValue(str)), Value.Primitive(IntValue(n))) => Value.Primitive(StringValue(str * n.toInt))
+        case _ => throw new IllegalArgumentException(s"Invalid arguments: $str, $n")
+      }
+    }
+  )
+
   override lazy val definitions: Seq[NativeFunction[Term]] = Seq(
     unaryFunction("toLowerCase", _.toLowerCase),
     unaryFunction("toUpperCase", _.toUpperCase),
@@ -98,6 +112,7 @@ object PrimitiveString extends PreludeDefinitionSet {
     binaryFunction("++", _ + _),
     length,
     parseInt,
+    repeat,
   )
   
 }

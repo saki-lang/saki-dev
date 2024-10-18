@@ -79,6 +79,9 @@ object PrimitiveInt extends PreludeDefinitionSet {
     binaryFunction("shr", _ >> _),
     binaryFunction("ushr", _ >>> _),
 
+    binaryFunction("max", Math.max),
+    binaryFunction("min", Math.min),
+
     binaryBoolFunction("==", _ == _),
     binaryBoolFunction("!=", _ != _),
     binaryBoolFunction("<", _ < _),
@@ -98,10 +101,10 @@ object PrimitiveInt extends PreludeDefinitionSet {
       params = Seq("a" @: IntType.toTerm),
       resultType = StringType.toTerm,
       nativeImpl = (args: ArgList[Value]) => {
-        val a: Value = args(0).value
-        a match {
-          case Value.Primitive(IntValue(a)) => Value.Primitive(StringValue(a.toString))
-          case _ => throw new IllegalArgumentException(s"Invalid argument: $a")
+        val str: Value = args(0).value
+        str match {
+          case Value.Primitive(IntValue(str)) => Value.Primitive(StringValue(str.toString))
+          case _ => throw new IllegalArgumentException(s"Invalid argument: $str")
         }
       }
     )
