@@ -73,4 +73,14 @@ class PreludeTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     "\"It's\" ++ \" \" ++ \"mygo\" ++ \"!!!!!\"".synth should be (StringValue("It's mygo!!!!!").term)
     "19260817.toString".synth should be (StringValue("19260817").term)
   }
+
+  it should "string escape" in {
+    "\"\\\"\"".synth should be (StringValue("\"").term)
+    "\"\\n\"".synth should be (StringValue("\n").term)
+    "\"\\t\"".synth should be (StringValue("\t").term)
+    "\"\\r\"".synth should be (StringValue("\r").term)
+    "\"\\b\"".synth should be (StringValue("\b").term)
+    "\"\\f\"".synth should be (StringValue("\f").term)
+    "\"\\\\\"".synth should be (StringValue("\\").term)
+  }
 }

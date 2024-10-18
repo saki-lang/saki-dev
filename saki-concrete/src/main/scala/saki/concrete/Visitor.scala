@@ -629,6 +629,6 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   override def visitLiteralRegularString(ctx: LiteralRegularStringContext): ExprTree = {
     given ParserRuleContext = ctx
     val text = ctx.value.getText
-    ExprTree.PrimitiveValue(StringValue(text.substring(1, text.length - 1)))
+    ExprTree.PrimitiveValue(StringValue(text.substring(1, text.length - 1).translateEscapes))
   }
 }
