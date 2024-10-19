@@ -13,8 +13,8 @@ trait LocalContext[T <: Entity] extends Context[Var.Local, T] {
   def contains(local: Var.Local): Boolean
 
   def uniqueVariable: Var.Local = {
-    // Iterator that generates names in the format "param$0", "param$1", ...
-    val nameIterator: Iterator[String] = Iterator.from(0).map(i => s"param$$$i")
+    // Iterator that generates names in the format "$0", "$1", ...
+    val nameIterator: Iterator[String] = Iterator.from(0).map(i => s"$$$i")
     // Find the first unique name that does not collide with any key in env
     val uniqueName = nameIterator.find(name => !this.contains(Var.Local(name))).get
     // Return a new Var.Local with the unique name
