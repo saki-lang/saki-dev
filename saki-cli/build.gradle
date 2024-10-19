@@ -40,10 +40,10 @@ jar {
 }
 
 task buildRust(type: Exec) {
-    workingDir "${rootProject.projectDir}/error-reporter"
+    workingDir "${rootProject.projectDir}/saki-repl"
     commandLine 'cargo', 'build', '--release'
-    inputs.dir "${rootProject.projectDir}/error-reporter/src"
-    outputs.dir "${rootProject.projectDir}/error-reporter/target/release"
+    inputs.dir "${rootProject.projectDir}/saki-repl/src"
+    outputs.dir "${rootProject.projectDir}/saki-repl/target/release"
 }
 
 compileJava {
@@ -62,8 +62,8 @@ graalvmNative {
             sharedLibrary = false
             useFatJar = true
             buildArgs.addAll([
-                "-H:CCompilerOption=-I${rootProject.projectDir}/error-reporter/target/include",
-                "-H:CCompilerOption=-L${rootProject.projectDir}/error-reporter/target/release"
+                "-H:CCompilerOption=-I${rootProject.projectDir}/saki-repl/target/include",
+                "-H:CCompilerOption=-L${rootProject.projectDir}/saki-repl/target/release"
             ])
         }
     }

@@ -1,7 +1,7 @@
 package saki.tool
 
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
-import saki.cli.ErrorReporter
+import saki.cli.ReadEvalPrintLoop
 import saki.concrete.{ErrorListener, Visitor}
 import saki.concrete.syntax.{Definition, Evaluation}
 import saki.core.syntax.Module
@@ -17,7 +17,7 @@ def catchError[R](source: String, path: Option[String] = None)(action: ErrorList
         case Some(span, info) => {
           println(s"Error: ${error.message}")
           val spanLength = span.end - span.start + 1
-          ErrorReporter.printError(source, path.getOrElse(""), error.message, info, span.start, spanLength)
+          ReadEvalPrintLoop.printError(source, path.getOrElse(""), error.message, info, span.start, spanLength)
         }
         case None => println(s"Error: ${error.message}")
       }
@@ -27,35 +27,8 @@ def catchError[R](source: String, path: Option[String] = None)(action: ErrorList
   }
 }
 
-def printSourceWithHighlight(source: String, span: SourceSpan, info: String): Unit = {
-  // Split source by lines for display
-  val lines = source.split("\n").zipWithIndex
-
-  // Calculate the line and character positions of the error
-  val (startLine, endLine) = {
-    val (start, end) = (span.start, span.end)
-    val startLine = source.substring(0, start).count(_ == '\n')
-    val endLine = source.substring(0, end).count(_ == '\n')
-    (startLine, endLine)
-  }
-
-  // Print each line, and highlight the range containing the error
-  lines.foreach {
-    case (line, idx) if idx >= startLine && idx <= endLine => {
-      println(f"$idx%4d: $line")
-      // Highlight the error within the line
-      if (idx == startLine) {
-        val highlightStart = span.start - source.substring(0, span.start).lastIndexOf('\n') - 1
-        val highlightEnd = if (startLine == endLine) span.end - span.start + highlightStart else line.length
-        println(" " * (highlightStart + 6) + "^" * (highlightEnd - highlightStart + 1) + " " + info)
-      }
-    }
-    case (line, idx) => println(f"$idx%4d: $line")
-  }
-}
-
-def compileModule(source: String, doEvaluation: Boolean = true): Module = {
-  catchError(source) { listener =>
+def compileModule(source: String, path: Option[String] = None, doEvaluation: Boolean = true): Module = {
+  catchError(source, path) { listener =>
     
     val lexer = SakiLexer(CharStreams.fromString(source))
     lexer.removeErrorListeners()

@@ -1,0 +1,64 @@
+%YAML 1.2
+---
+# http://www.sublimetext.com/docs/syntax.html
+name: Saki
+scope: source.saki
+contexts:
+  main:
+    - include: comments
+    - include: keywords
+    - include: operators
+    - include: literals
+    - include: identifiers
+  comments:
+    - match: /\*
+      push:
+        - meta_scope: comment.block.saki
+        - match: \*/
+          pop: true
+    - match: //.*$
+      scope: comment.line.double-slash.saki
+  identifiers:
+    - match: '\b[a-zα-ω][a-zA-Zα-ωΑ-Ω0-9]*(''*?)\b'
+      scope: variable.parameter.saki
+    - match: '\b''([A-ZΑ-Ω][a-zA-Zα-ωΑ-Ω]*)\b'
+      scope: entity.name.contract.saki
+    - match: '\b([A-ZΑ-Ω][a-zA-Zα-ωΑ-Ω]*)\b'
+      scope: entity.name.type.saki
+    - match: '\b([𝔸𝔹ℂ𝔻𝔼𝔽𝔾ℍ𝕀𝕁𝕂𝕃𝕄ℕ𝕆ℙℚℝ𝕊𝕋𝕌𝕍𝕎𝕏𝕐ℤ])\b'
+      scope: entity.name.class.saki
+    - match: '\(([+\-/*<>=&!^%#:|@]+)\)'
+      scope: entity.name.function.operator.saki
+  keywords:
+    - match: \b(if|then|else|match|case|forall|exists|eval)\b
+      scope: keyword.control.saki
+    - match: \b(let|def|type|impl|instance|record|inductive|flat|prefix|postfix|self|operator|binary|unary|left-assoc|right-assoc|tighter-than|looser-than|same-as)\b
+      scope: keyword.operator.new.saki
+  literals:
+    - match: '\b([0-9]+(\.[0-9]+)?i)\b'
+      scope: constant.numeric.imaginary.saki
+    - match: '\b(0x[0-9a-fA-F]+|0o[0-7]+|0b[01]+|[0-9]+(\.[0-9]+)?)\b'
+      scope: constant.numeric.saki
+    - match: '''([^''\\]|\\.)'''
+      scope: constant.character.saki
+    - match: '"'
+      push:
+        - meta_scope: string.regular.saki
+        - match: '"'
+          pop: true
+        - match: \\.
+          scope: constant.character.escape.saki
+    - match: '#\{'
+      push:
+        - meta_scope: string.raw.saki
+        - match: '\}'
+          pop: true
+        - match: \\.
+          scope: constant.character.escape.saki
+    - match: \b(true|false)\b
+      scope: constant.language.boolean.saki
+  operators:
+    - match: (->|=>|::|\.|\^|=|:|∀|Π|∃|Σ)
+      scope: keyword.operator.saki
+    - match: '[+\-/*<>=&!^%#:|@]+'
+      scope: keyword.operator.symbol.saki

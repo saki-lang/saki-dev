@@ -8,18 +8,18 @@ import org.graalvm.nativeimage.c.type.CTypeConversion;
 import java.util.List;
 
 @SuppressWarnings("unused")
-@CContext(ErrorReporter.Directives.class)
-public class ErrorReporter {
+@CContext(ReadEvalPrintLoop.Directives.class)
+public class ReadEvalPrintLoop {
 
     static class Directives implements CContext.Directives {
         @Override
         public List<String> getHeaderFiles() {
-            return List.of("<reporter.h>");
+            return List.of("<repl.h>");
         }
 
         @Override
         public List<String> getLibraries() {
-            return List.of("reporter");
+            return List.of("sakirepl");
         }
     }
 
@@ -36,7 +36,7 @@ public class ErrorReporter {
         String src, String path, String title,
         String message, int offset, int length
     ) {
-        ErrorReporter.printError(
+        ReadEvalPrintLoop.printError(
             stringToCCharPointer(src),
             stringToCCharPointer(path),
             stringToCCharPointer(title),
