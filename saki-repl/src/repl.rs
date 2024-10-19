@@ -1,6 +1,7 @@
+use std::borrow::Cow;
 use std::process::exit;
 use crate::theme::ParseSettings;
-use reedline::{default_emacs_keybindings, ColumnarMenu, DefaultCompleter, DefaultPrompt, DefaultPromptSegment, Emacs, Highlighter, KeyCode, KeyModifiers, MenuBuilder, Reedline, ReedlineEvent, ReedlineMenu, Signal, StyledText, ValidationResult, Validator};
+use reedline::{default_emacs_keybindings, ColumnarMenu, DefaultCompleter, DefaultPrompt, DefaultPromptSegment, Emacs, Highlighter, KeyCode, KeyModifiers, MenuBuilder, Prompt, PromptEditMode, PromptHistorySearch, Reedline, ReedlineEvent, ReedlineMenu, Signal, StyledText, ValidationResult, Validator};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style, Theme};
 use syntect::parsing::{SyntaxDefinition, SyntaxSet, SyntaxSetBuilder};
@@ -60,7 +61,7 @@ impl SakiRepl {
                 left_prompt: DefaultPromptSegment::Basic(" saki ".into()),
                 right_prompt: DefaultPromptSegment::Basic(format!(" -<{}>- ", self.counter)),
             };
-            match self.line_editor.read_line(&prompt) {
+            match self.line_editor.read_line(&SakiPrompt(prompt)) {
                 Ok(Signal::Success(buffer)) => {
                     if !buffer.trim().is_empty() {
                         if buffer.trim() == "exit" {
@@ -112,6 +113,36 @@ impl Highlighter for SakiHighlighter {
         StyledText { buffer: ranges }
     }
 }
+
+pub struct SakiPrompt(DefaultPrompt);
+
+impl Prompt for SakiPrompt {
+    fn render_prompt_left(&self) -> Cow<str> {
+        self.0.render_prompt_left()
+    }
+
+    fn render_prompt_right(&self) -> Cow<str> {
+        self.0.render_prompt_right()
+    }
+
+    fn render_prompt_indicator(&self, prompt_mode: PromptEditMode) -> Cow<str> {
+        self.0.render_prompt_indicator(prompt_mode)
+    }
+
+    fn render_prompt_multiline_indicator(&self) -> Cow<str> {
+        let prompt_length = match &self.0.left_prompt {
+            DefaultPromptSegment::Basic(prompt) => prompt.len(),
+            _ => 4
+        };
+        Cow::Owned(" ".repeat(prompt_length) + "| ")
+    }
+
+    fn render_prompt_history_search_indicator(&self, history_search: PromptHistorySearch) -> Cow<str> {
+        self.0.render_prompt_history_search_indicator(history_search)
+    }
+}
+
+
 
 pub struct SakiValidator;
 
@@ -220,7 +251,7 @@ impl Validator for SakiValidator {
 
 #[cfg(test)]
 mod tests {
-    
+
     use reedline::{ValidationResult, Validator};
     use crate::repl::SakiValidator;
 
