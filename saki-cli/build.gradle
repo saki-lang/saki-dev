@@ -1,7 +1,7 @@
 plugins {
     id 'application'
     id 'scala'
-    id 'org.graalvm.buildtools.native' version '0.9.19'
+    id 'org.graalvm.buildtools.native' version '0.10.3'
 }
 
 group = 'saki'
@@ -24,6 +24,8 @@ dependencies {
     implementation 'org.scala-lang:scala3-library_3:3.3.4'
     implementation 'commons-collections:commons-collections:3.2.2'
 
+    implementation 'org.graalvm.sdk:graal-sdk:23.1.5'
+
     implementation 'info.picocli:picocli:4.7.6'
     annotationProcessor 'info.picocli:picocli-codegen:4.7.6'
 
@@ -37,9 +39,34 @@ jar {
     }
 }
 
-nativeBuild {
-    sharedLibrary = false
-    useFatJar = true
+task buildRust(type: Exec) {
+    workingDir "${rootProject.projectDir}/error-reporter"
+    commandLine 'cargo', 'build', '--release'
+    inputs.dir "${rootProject.projectDir}/error-reporter/src"
+    outputs.dir "${rootProject.projectDir}/error-reporter/target/release"
+}
+
+compileJava {
+    dependsOn buildRust
+}
+
+graalvmNative {
+    toolchainDetection = true
+    binaries {
+        main {
+            mainClass = 'main'
+            javaLauncher = javaToolchains.launcherFor {
+                languageVersion = JavaLanguageVersion.of(17)
+                vendor = JvmVendorSpec.matching("GraalVM")
+            }
+            sharedLibrary = false
+            useFatJar = true
+            buildArgs.addAll([
+                "-H:CCompilerOption=-I${rootProject.projectDir}/error-reporter/target/include",
+                "-H:CCompilerOption=-L${rootProject.projectDir}/error-reporter/target/release"
+            ])
+        }
+    }
 }
 
 test {

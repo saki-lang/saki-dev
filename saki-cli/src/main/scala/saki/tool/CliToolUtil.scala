@@ -1,6 +1,7 @@
 package saki.tool
 
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
+import saki.cli.ErrorReporter
 import saki.concrete.{ErrorListener, Visitor}
 import saki.concrete.syntax.{Definition, Evaluation}
 import saki.core.syntax.Module
@@ -8,14 +9,15 @@ import saki.error.Error
 import saki.grammar.{SakiLexer, SakiParser}
 import saki.util.SourceSpan
 
-def catchError[R](source: String)(action: ErrorListener => R): R = {
+def catchError[R](source: String, path: Option[String] = None)(action: ErrorListener => R): R = {
   val errorListener = ErrorListener(source)
   try action(errorListener) catch {
     case error: Error => {
       error.infoSpans.headOption match {
         case Some(span, info) => {
           println(s"Error: ${error.message}")
-          printSourceWithHighlight(source, span, info)
+          val spanLength = span.end - span.start + 1
+          ErrorReporter.printError(source, path.getOrElse(""), error.message, info, span.start, spanLength)
         }
         case None => println(s"Error: ${error.message}")
       }

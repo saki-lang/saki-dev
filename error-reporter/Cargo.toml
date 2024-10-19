@@ -1,0 +1,15 @@
+[package]
+name = "saki-error-reporter"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib"]
+name = "reporter"
+
+[dependencies]
+thiserror = "1.0"
+miette = { version = "7.2", features = ["fancy"] }
+
+[build-dependencies]
+cbindgen = "0.27"
