@@ -15,11 +15,11 @@ import saki.prelude.Prelude
 
 private class ReplCore {
   val visitor: Visitor = Visitor()
-  var environment: Environment.Typed[Value] = Prelude.environment
-  var resolveContext: Resolve.Context = Resolve.Context(Prelude.symbols)
+  implicit var environment: Environment.Typed[Value] = Prelude.environment
+  implicit var resolveContext: Resolve.Context = Resolve.Context(Prelude.symbols)
 
   def evaluate(expr: Expr): EvalResult = {
-    val (term, ty) = expr.resolve(Resolve.Context(environment))._1.synth(environment).unpack
+    val (term, ty) = expr.resolve(resolveContext)._1.synth(environment).unpack
     EvalResult(term.normalize(environment), ty.readBack(environment))
   }
 
@@ -77,9 +77,9 @@ private class ReplCore {
               expectedTypeExpr match {
                 case Some(expectedTypeExpr) => {
                   val expectedType = expectedTypeExpr.emit.resolve._1.synth.term.normalize
-                  if (ty != expectedType) {
-                    throw CoreErrorKind.TypeNotMatch.raise(expectedTypeExpr.span) {
-                      s"Expected type ${expectedType}, but got ${ty.readBack(environment)}"
+                  if !(expectedType.eval <:< ty) then {
+                    throw CoreErrorKind.TypeNotMatch.raise(valueExpr.span) {
+                      s"Expected type ${expectedType}, but got a ${ty.readBack(environment)}"
                     }
                   }
                 }

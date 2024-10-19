@@ -14,7 +14,7 @@ enum Literal {
   override def toString: String = this match {
     case UnitValue => "unit"
     case BoolValue(value) => value.toString
-    case IntValue(value) => value.toString + 'i'
+    case IntValue(value) => value.toString
     case FloatValue(value) => value.toString + 'f'
     case RuneValue(value) => s"'${value.toString}'"
     case StringValue(value) => s""""$value""""
