@@ -7,7 +7,6 @@ import saki.concrete.syntax.{Definition, Evaluation}
 import saki.core.syntax.Module
 import saki.error.Error
 import saki.grammar.{SakiLexer, SakiParser}
-import saki.util.SourceSpan
 
 def catchError[R](source: String, path: Option[String] = None)(action: ErrorListener => R): R = {
   val errorListener = ErrorListener(source)
@@ -15,7 +14,6 @@ def catchError[R](source: String, path: Option[String] = None)(action: ErrorList
     case error: Error => {
       error.infoSpans.headOption match {
         case Some(span, info) => {
-          println(s"Error: ${error.message}")
           val spanLength = span.end - span.start + 1
           ReadEvalPrintLoop.printError(source, path.getOrElse(""), error.message, info, span.start, spanLength)
         }
@@ -29,14 +27,7 @@ def catchError[R](source: String, path: Option[String] = None)(action: ErrorList
 
 def compileModule(source: String, path: Option[String] = None, doEvaluation: Boolean = true): Module = {
   catchError(source, path) { listener =>
-    
-    val lexer = SakiLexer(CharStreams.fromString(source))
-    lexer.removeErrorListeners()
-    lexer.addErrorListener(listener)
-    
-    val parser = SakiParser(CommonTokenStream(lexer))
-    parser.removeErrorListeners()
-    parser.addErrorListener(listener)
+    val parser = parseSource(source, listener)
     
     val entities = Visitor().visitProgram(parser.program())
     val definitions = entities.collect { case defn: Definition => defn }
@@ -47,6 +38,16 @@ def compileModule(source: String, path: Option[String] = None, doEvaluation: Boo
       println(s"${module.evaluate(evaluation.expr.emit)}")
     }
 
-    module
+    return module
   }
+}
+
+def parseSource(source: String, listener: ErrorListener): SakiParser = {
+  val lexer = SakiLexer(CharStreams.fromString(source))
+  lexer.removeErrorListeners()
+  lexer.addErrorListener(listener)
+  val parser = SakiParser(CommonTokenStream(lexer))
+  parser.removeErrorListeners()
+  parser.addErrorListener(listener)
+  return parser
 }

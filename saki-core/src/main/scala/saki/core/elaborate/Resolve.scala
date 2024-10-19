@@ -84,7 +84,7 @@ object Resolve {
       }
 
       case Expr.Unresolved(name) => ctx.get(name) match {
-        case Some(variable) => Expr.Variable(variable).resolve(ctx)
+        case Some(variable) => Expr.Variable(variable).resolve
         case None => UnresolvedReference.raise(s"Unresolved variable: $name")
       }
 

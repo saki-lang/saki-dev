@@ -4,6 +4,7 @@ import picocli.CommandLine;
 
 import java.io.File;
 
+@SuppressWarnings("unused")
 @CommandLine.Command(
     name = "saki",
     description = "Saki programming language CLI",
@@ -11,13 +12,24 @@ import java.io.File;
         SakiCliMain.Run.class,
     }
 )
-public class SakiCliMain {
+public class SakiCliMain implements Runnable {
 
     private final SakiToolTrait core;
     public final CommandLine commandLine = new CommandLine(this, new InnerClassFactory(this));
 
     public SakiCliMain(SakiToolTrait core) {
         this.core = core;
+    }
+
+    @Override
+    @SuppressWarnings("InfiniteLoopStatement")
+    public void run() {
+        try (var repl = new ReadEvalPrintLoop()) {
+            while (true) {
+                String source = repl.iterate();
+                core.iterate(source);
+            }
+        }
     }
 
     @CommandLine.Command(
@@ -30,7 +42,7 @@ public class SakiCliMain {
             index = "0",
             description = "The Saki program file, with the '.saki' extension"
         )
-        private File file = null;
+        private File file;
 
         @Override
         public void run() { core.run(file); }

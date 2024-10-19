@@ -29,17 +29,17 @@ object Module {
   
   def empty: Module = Module(Set.empty)
 
-  def from(pristineDefinitions: Seq[Definition[Expr]]): Module = {
+  def from(definitions: Seq[Definition[Expr]]): Module = {
 
     // Pre-resolve phase
-    val preResolveContext = pristineDefinitions.foldLeft(Resolve.Context(Prelude.symbols)) {
+    val preResolveContext = definitions.foldLeft(Resolve.Context(Prelude.symbols)) {
       (ctx, definition) => definition.preResolve(ctx)
     }
 
     // TODO: Pre-build environment for mutual recursion
 
     // Resolve phase
-    val (_, finalEnv) = pristineDefinitions.foldLeft((preResolveContext, Prelude.environment)) {
+    val (_, finalEnv) = definitions.foldLeft((preResolveContext, Prelude.environment)) {
       case ((resolvingContext, env), definition) => {
         val (resolved, newCtx) = definition.resolve(resolvingContext)
         val definitionSynth = resolved.synth(env)

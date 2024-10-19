@@ -8,6 +8,7 @@ use crate::repl::SakiRepl;
 use crate::reporter::{PrintableError, RawError};
 use lazy_static::lazy_static;
 use std::ffi::c_char;
+use std::slice;
 use std::sync::Mutex;
 
 const BUFFER_SIZE: usize = 2usize.pow(16);
@@ -32,20 +33,30 @@ pub extern "C" fn report_error(
 #[no_mangle]
 pub unsafe extern "C" fn repl_iterate(buffer: *mut std::os::raw::c_char) {
     assert!(!buffer.is_null());
-    let output = std::ffi::CString::new(SAKI_REPL.lock().unwrap().iterate()).unwrap();
-    unsafe {
-        std::ptr::copy_nonoverlapping(output.as_ptr(), buffer, BUFFER_SIZE);
+    let output = SAKI_REPL.lock().unwrap().iterate();
+    let output_bytes = output.as_bytes();
+    if output_bytes.len() > BUFFER_SIZE {
+        panic!("Output buffer too small");
     }
+    // clear buffer
+    for i in 0 .. BUFFER_SIZE {
+        buffer.add(i).write_volatile(0);
+    }
+    let buf_slice = slice::from_raw_parts_mut(buffer as *mut u8, BUFFER_SIZE);
+    buf_slice[..output_bytes.len()].copy_from_slice(output_bytes);
 }
 
 #[no_mangle]
 pub extern "C" fn repl_create_buffer() -> *mut std::os::raw::c_char {
-    let buffer = vec![0; BUFFER_SIZE];
-    std::ffi::CString::new(buffer).unwrap().into_raw()
+    let mut buffer = vec![0; BUFFER_SIZE];
+    let ptr: *mut i32 = buffer.as_mut_ptr();
+    std::mem::forget(buffer);
+    ptr as *mut std::os::raw::c_char
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn repl_drop_buffer(buffer: *mut std::os::raw::c_char) {
-    if buffer.is_null() { return; }
-    let _ = std::ffi::CString::from_raw(buffer);
+    if !buffer.is_null() {
+        unsafe { Vec::from_raw_parts(buffer as *mut u8, BUFFER_SIZE, BUFFER_SIZE); }
+    }
 }

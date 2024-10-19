@@ -10,7 +10,7 @@ import saki.error.CoreErrorKind.*
 import scala.collection.Seq
 import scala.collection.mutable.ArrayBuffer
 
-private[core] object Synthesis:
+object Synthesis:
 
   def elaborate(expr: Expr, expectedType: Term)(
     implicit env: Environment.Typed[Value]

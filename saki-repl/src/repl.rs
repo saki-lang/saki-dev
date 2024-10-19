@@ -57,7 +57,7 @@ impl SakiRepl {
         loop {
             let prompt = DefaultPrompt {
                 left_prompt: DefaultPromptSegment::Basic(" saki ".into()),
-                right_prompt: DefaultPromptSegment::Basic(format!("-<{}>-", self.counter)),
+                right_prompt: DefaultPromptSegment::Basic(format!(" -<{}>- ", self.counter)),
             };
             match self.line_editor.read_line(&prompt) {
                 Ok(Signal::Success(buffer)) => {
@@ -97,7 +97,7 @@ impl SakiHighlighter {
 
 impl Highlighter for SakiHighlighter {
     fn highlight(&self, line: &str, _cursor: usize) -> StyledText {
-        let syntax = self.syntax.find_syntax_by_extension("saki").unwrap();
+        let syntax = self.syntax.find_syntax_by_name("Saki").unwrap();
         let mut highlighter = HighlightLines::new(syntax, &self.theme);
         // Highlight the line using syntect's mechanism
         let ranges: Vec<(Style, &str)> = highlighter
