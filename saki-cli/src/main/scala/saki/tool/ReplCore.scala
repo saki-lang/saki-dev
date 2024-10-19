@@ -29,7 +29,7 @@ private class ReplCore {
       environment.locals.foreach { case (local, Typed(value, ty)) =>
         println(s"  $local: ${ty.readBack(environment)} = ${value.readBack(environment)}")
       }
-      println("")
+      println()
       return
     }
 
@@ -58,6 +58,7 @@ private class ReplCore {
         environment = newEnv
 
         evaluations.foreach { evaluation => println("  " + evaluate(evaluation.expr.emit)) }
+        println()
       }
 
     } catch {
