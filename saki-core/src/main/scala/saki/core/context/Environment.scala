@@ -14,7 +14,7 @@ object Environment {
   export saki.core.context.TypedEnvironment as Typed
 }
 
-case class TypedEnvironment[T <: Entity](
+case class TypedEnvironment[T <: Entity] private (
   override val definitions: Map[Var.Defined[Term, ?], Definition[Term]] = Map.empty,
   override val currentDefinition: Option[Var.Defined[Term, ?]] = None,
   declarations: Map[Var.Defined[Term, ?], PreDeclaration[Term, ?]] = Map.empty,
@@ -116,15 +116,13 @@ object TypedEnvironment {
     )
   }
 
-  def definitionsToMap(definitions: Seq[Definition[Term]]): Map[Var.Defined[Term, ?], Definition[Term]] = {
+  private def definitionsToMap(definitions: Seq[Definition[Term]]): Map[Var.Defined[Term, ?], Definition[Term]] = {
     definitions.groupBy(_.ident).map { (ident, definitions) =>
       val definition = if definitions.size == 1 then definitions.head else {
         definitions.map {
           case function: Function[Term] => {
             val overloadedIdent: Var.Defined[Term, Overloaded] = Var.Defined(ident.name)
-            val overloaded = Overloaded(overloadedIdent, Seq(function))
-            overloaded.ident.definition := overloaded
-            overloaded
+            Overloaded(overloadedIdent, Seq(function))
           }
           case overloaded: Overloaded[Term] => overloaded
           case _ => DefinitionNotMatch.raise {

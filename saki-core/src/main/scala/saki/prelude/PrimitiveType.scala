@@ -16,7 +16,6 @@ object PrimitiveType extends PreludeDefinitionSet {
     primitiveType("Nothing", LiteralType.NothingType.toValue),
     primitiveType("Unit", LiteralType.UnitType.toValue),
     primitiveType("Bool", LiteralType.BoolType.toValue),
-    primitiveType("\uD835\uDD39", LiteralType.BoolType.toValue),
     primitiveType("Int", LiteralType.IntType.toValue),
     primitiveType("ℤ", LiteralType.IntType.toValue),
     primitiveType("Float", LiteralType.FloatType.toValue),

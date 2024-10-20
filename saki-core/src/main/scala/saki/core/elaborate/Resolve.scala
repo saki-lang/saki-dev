@@ -227,7 +227,7 @@ object Resolve {
           val isRecursive = funcCtx.dependencyGraph.isInCycle(ident)
           // update the global context with the dependency graph
           global = global.copy(dependencyGraph = funcCtx.dependencyGraph)
-          DefinedFunction[Expr](ident, resolvedParams, resolvedResultType, isRecursive, LateInit(resolvedBody))
+          DefinedFunction[Expr](Var.Defined(ident.name), resolvedParams, resolvedResultType, isRecursive, LateInit(resolvedBody))
         }
       }
 
@@ -238,7 +238,7 @@ object Resolve {
           val (resolvedConsParams, _) = constructor.params.resolve(ctx + ident)
           Constructor[Expr](constructor.ident, constructor.owner, resolvedConsParams)
         }
-        Inductive[Expr](ident, resolvedParams, resolvedConstructors)
+        Inductive[Expr](Var.Defined(ident.name), resolvedParams, resolvedConstructors)
       }
 
       case Overloaded(ident, body) => {
@@ -255,7 +255,7 @@ object Resolve {
             (resolvedBody :+ resolved.asInstanceOf[Function[Expr]], newCtx)
           }
         }
-        Overloaded(ident, resolvedBody)
+        Overloaded(Var.Defined(ident.name), resolvedBody)
       }
 
       case _ => unreachable

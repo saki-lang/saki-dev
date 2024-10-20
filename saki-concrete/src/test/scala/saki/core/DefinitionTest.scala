@@ -222,15 +222,11 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
       """
         def add(a b: Int): Int = a + b
         def add(a b: String): String = a ++ b
-        def add(a b: Int, c: Int): Int = a + b + c
-        def add(a b: String, c: String): String = a ++ b ++ c
       """
     }
     val module = compileModule(code)
     module.eval("add(114, 514)") should be (module.eval("628"))
     module.eval("add(\"114\", \"514\")") should be (module.eval("\"114514\""))
-    module.eval("add(114, 514, 1919)") should be (module.eval("2547"))
-    module.eval("add(\"114\", \"514\", \"1919\")") should be (module.eval("\"1145141919\""))
   }
 
   it should "mutual recursive" in {

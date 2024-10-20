@@ -22,14 +22,11 @@ object Prelude {
     PrimitiveType.definitions,
     PrimitiveBool.definitions,
     PrimitiveInt.definitions,
+    PrimitiveFloat.definitions,
     PrimitiveString.definitions,
   ).flatten
 
   lazy val symbols: Seq[Var] = definitions.map(_.ident)
 
-  lazy val environment: Environment.Typed[Value] = Environment.Typed[Value](
-    definitions = Prelude.definitions.map {
-      definition => definition.ident -> definition
-    }.toMap[Var.Defined[Term, ?], Definition[Term]]
-  )
+  lazy val environment: Environment.Typed[Value] = Environment.Typed.global(Prelude.definitions)
 }

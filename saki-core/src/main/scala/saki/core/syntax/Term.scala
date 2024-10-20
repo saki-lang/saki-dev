@@ -32,15 +32,37 @@ enum Term extends RuntimeEntity[Type] {
 
   case Projection(record: Term, field: String)
 
-  def apply(args: Term*)(implicit env: Environment.Typed[Value]): Term = {
-    args.foldLeft(this) {
-      case (Lambda(param, body), arg) => {
-        env.withLocal(param.ident, Typed[Value](arg.eval, arg.infer)) { env =>
-          body.eval(env).readBack(env)
+  def apply(args: Term*)(implicit env: Environment.Typed[Value]): Term = args.foldLeft(this) {
+
+    case (Lambda(param, body), arg) => {
+      env.withLocal(param.ident, Typed[Value](arg.eval, arg.infer)) {
+        implicit env => body.eval.readBack
+      }
+    }
+
+    case (OverloadedLambda(states), arg) => {
+      val argType = arg.infer
+      val candidateStates = states.filter {
+        (param, _) => param.`type`.eval <:< argType
+      }
+      if candidateStates.isEmpty then OverloadingNotMatch.raise {
+        s"No matched overloading in overloaded lambda type of argument with type: ${argType.readBack}"
+      }
+      val validStates = candidateStates.filter {
+        (param, _) => !candidateStates.exists { (param2, _) =>
+          param != param2 && param2.`type`.eval <:< param.`type`.eval
         }
       }
-      case (fn, arg) => Apply(fn, arg)
+      if validStates.size > 1 then OverloadingAmbiguous.raise {
+        s"Ambiguous overloading in overloaded lambda type of argument with type: ${argType.readBack}"
+      }
+      val (param, body) = validStates.head
+      env.withLocal(param.ident, Typed[Value](arg.eval, arg.infer)) {
+        implicit env => body.eval.readBack
+      }
     }
+
+    case (fn, arg) => Apply(fn, arg)
   }
 
   override def toString: String = this match {
@@ -106,12 +128,14 @@ enum Term extends RuntimeEntity[Type] {
       }
     }
 
-    case FunctionInvoke(fnRef, _) => {
-      env.definitions(fnRef).asInstanceOf[Function[Term]].resultType.eval
+    case FunctionInvoke(fn, args) => env.definitions(fn) match {
+      case fn: Function[Term] => fn.resultType.eval
+      case overloaded: Overloaded[Term] => Term.OverloadInvoke(overloaded.ident, args).infer
+      case _: Inductive[Term] => Value.Universe
     }
 
     case invoke: OverloadInvoke => {
-      val (func, _) = invoke.getOverload
+      val func = invoke.getOverload
       val paramMap = func.params.map { param =>
         (param.ident, Typed[Value](Value.variable(param.ident), param.`type`.eval))
       }.toMap
@@ -165,7 +189,9 @@ enum Term extends RuntimeEntity[Type] {
         }
         // Find the states that there is no other state that is closer to the argument type
         val validStates = candidateStates.filter {
-          (paramType, _) => !candidateStates.exists(_._1 <:< paramType)
+          (paramType, _) => !candidateStates.exists { (paramType2, _) =>
+            paramType2 != paramType && paramType2 <:< paramType
+          }
         }
         if validStates.size > 1 then OverloadingAmbiguous.raise {
           s"Ambiguous overloading in overloaded Pi type of argument with type: ${argType.readBack}"
@@ -218,7 +244,15 @@ enum Term extends RuntimeEntity[Type] {
     case Variable(variable) => env.getValue(variable).get
 
     case FunctionInvoke(fnRef, argTerms) => {
-      val function = env.definitions(fnRef).asInstanceOf[Function[Term]]
+
+      val function: Function[Term] = env.definitions(fnRef) match {
+        case function: Function[Term] => function
+        case _: Overloaded[Term] => fnRef.definition.get
+        case _ => DefinitionNotMatch.raise {
+          s"Expected function, but got: ${fnRef.definition.get.getClass.getSimpleName}"
+        }
+      }
+
       env.currentDefinition match {
         case Some(current) if current.name == fnRef.name => {
           // Recursive call, keep it a neutral value
@@ -254,8 +288,7 @@ enum Term extends RuntimeEntity[Type] {
     }
 
     case invoke: OverloadInvoke => {
-      val (function, _) = invoke.getOverload
-      Term.functionInvoke(function.ident, invoke.args).eval
+      Term.functionInvoke(invoke.getOverload.ident, invoke.args).eval
     }
 
     case InductiveType(indRef, argTerms) => {
@@ -316,38 +349,16 @@ enum Term extends RuntimeEntity[Type] {
         bodyClosure(arg.eval)
       }
       
-      case Value.OverloadedLambda(states) => {
-
-        val argType = arg.infer
-        val candidateStates = states.filter {
-          case (paramType, _) => paramType <:< argType
-        }
-        
-        if candidateStates.isEmpty then NoSuchOverloading.raise {
-          s"No overloading found for argument with type: ${argType.readBack}"
-        }
-        
-        if candidateStates.size == 1 then {
-          // If there is only one state that matches the argument type, evaluate it
-          val (_, closure) = candidateStates.head
-          closure(arg.eval)
-        } else {
-          // If there are multiple states that match the argument type, evaluate all of them
-          val argValue = arg.eval
-          // Evaluate each state and merge the results
-          val newStates = candidateStates.flatMap { (_, closure) =>
-            // Since the parameter type is checked to be a subtype of the argument type,
-            // we don't need to check the type of the argument value again
-            closure(argValue) match {
-              case Value.OverloadedLambda(states) => states
-              case value => TypeNotMatch.raise {
-                s"Expected an overloaded lambda, but got: ${value.readBack}"
-              }
+      case overloaded: Value.OverloadedLambda => {
+        overloaded.applyArgument(
+          arg.eval, arg.infer, Value.OverloadedLambda.apply,
+          unwrapStates = {
+            case Value.OverloadedLambda(states) => states
+            case value => TypeNotMatch.raise {
+              s"Expected an overloaded lambda, but got: ${value.readBack}"
             }
           }
-          // Merge the new states
-          Value.OverloadedLambda(newStates)
-        }
+        )
       }
 
       // If the evaluation of the function stuck, the whole application is stuck
@@ -443,7 +454,7 @@ object Term extends RuntimeEntityFactory[Term] {
     case head +: tail => {
       val updatedState: Term = overloaded.states.get(head) match {
         case Some(term: Term.OverloadedLambda) => addOverloadedPath(term, tail, body)
-        case Some(_) => OverloadingAmbiguous.raise(s"Ambiguous overloading for function: ${head.name}")
+        case Some(_) => OverloadingAmbiguous.raise(s"Ambiguous overloading for ${overloaded}")
         case None => if tail.isEmpty then body else addOverloadedPath(overloaded.copy(Map.empty), tail, body)
       }
       overloaded.copy(overloaded.states + (head -> updatedState))
@@ -587,26 +598,24 @@ private sealed trait OverloadInvokeExt {
    * @return 1. The most suitable eigenstate of the overloaded function body
    *         2. The parameters of the state
    */
-  def getOverload(
-    implicit env: Environment.Typed[Value]
-  ): (Function[Term], Seq[Value]) = {
+  def getOverload(implicit env: Environment.Typed[Value]): Function[Term] = {
+    
     val fn = env.definitions(this.fn).asInstanceOf[Overloaded[Term]]
-    val argsValue: Seq[Value] = this.args.map(_.eval)
 
     // Filter out the candidate overloads that fit the argument types
     val candidateOverloads = fn.overloads.filter { overload =>
       val params = overload.params
-      if params.size != argsValue.size then false
-      else params.zip(argsValue).forall {
-        (param, arg) => param.`type`.eval <:< arg.infer
+      if params.size != this.args.size then false
+      else params.zip(this.args).forall {
+        (param, arg) => arg.infer <:< param.`type`.eval
       }
     }
 
     // If no candidate overload fits the argument types, throw an error
     if candidateOverloads.isEmpty then {
       NoSuchOverloading.raise {
-        s"No overloading of function ${fn.ident.name} found for arguments: " +
-        argsValue.map(_.readBack).mkString(", ")
+        s"No overloading of function ${fn.ident.name} found for arguments of types: " +
+        this.args.map(_.infer.readBack).mkString(", ")
       }
     }
 
@@ -634,11 +643,11 @@ private sealed trait OverloadInvokeExt {
 
     if (remainingOverloads.size != 1) {
       OverloadingAmbiguous.raise {
-        s"Ambiguous overloading for function ${fn.ident.name} with arguments: " +
-        argsValue.map(_.readBack).mkString(", ")
+        s"Ambiguous overloading for function ${fn.ident.name} with arguments of types: " +
+        this.args.map(_.infer.readBack).mkString(", ")
       }
     }
 
-    (remainingOverloads.head, argsValue)
+    remainingOverloads.head
   }
 }

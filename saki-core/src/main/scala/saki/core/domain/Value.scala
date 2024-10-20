@@ -24,7 +24,7 @@ enum Value extends RuntimeEntity[Type] {
 
   case OverloadedPi(
     states: Map[Type, Value => Value]
-  ) extends Value with OverloadedLambdaLike
+  ) extends Value with OverloadedLambdaLike[OverloadedPi]
 
   case Sigma(paramType: Type, closure: Value => Value)
 
@@ -32,7 +32,7 @@ enum Value extends RuntimeEntity[Type] {
 
   case OverloadedLambda(
     states: Map[Type, Value => Value]
-  ) extends Value with OverloadedLambdaLike
+  ) extends Value with OverloadedLambdaLike[OverloadedLambda]
 
   case Record(fields: Map[String, Value])
 
@@ -254,7 +254,7 @@ object Value extends RuntimeEntityFactory[Value] {
 
 }
 
-private sealed trait OverloadedLambdaLike {
+private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] {
 
   def states: Map[Type, Value => Value]
 
@@ -266,6 +266,37 @@ private sealed trait OverloadedLambdaLike {
         closure(param).readBack
       }
       (Param(paramIdent, paramType.readBack), body)
+    }
+  }
+
+  def applyArgument(
+    arg: Value, argType: Type,
+    constructor: Map[Type, Value => Value] => S,
+    unwrapStates: Value => Map[Type, Value => Value],
+  )(implicit env: Environment.Typed[Value]): Value = {
+
+    val candidateStates = states.filter {
+      case (paramType, _) => paramType <:< argType
+    }
+
+    if candidateStates.isEmpty then NoSuchOverloading.raise {
+      s"No overloading found for argument with type: ${argType.readBack}"
+    }
+
+    if candidateStates.size == 1 then {
+      // If there is only one state that matches the argument type, evaluate it
+      val (_, closure) = candidateStates.head
+      closure(arg)
+    } else {
+      // If there are multiple states that match the argument type, evaluate all of them
+      // Evaluate each state and merge the results
+      val newStates = candidateStates.flatMap { (_, closure) =>
+        // Since the parameter type is checked to be a subtype of the argument type,
+        // we don't need to check the type of the argument value again
+        unwrapStates(closure(arg))
+      }
+      // Merge the new states by constructing a new overloaded type
+      constructor(newStates)
     }
   }
 }

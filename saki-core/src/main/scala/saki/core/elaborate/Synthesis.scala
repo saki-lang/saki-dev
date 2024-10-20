@@ -85,7 +85,7 @@ object Synthesis:
       // Converting a definition reference to a lambda, enabling curry-style function application
       case definitionVar: Var.Defined[Term@unchecked, ?] => env.getDefinition(definitionVar) match {
         case Some(definition) => {
-          definition.ident.definition :=! definition
+          // definition.ident.definition :=! definition
           synthDeclarationRef(definition)
         }
         case None => env.declarations.get(definitionVar) match {
@@ -130,21 +130,41 @@ object Synthesis:
     }
 
     case Expr.Apply(fnExpr, argExpr) => {
+
       val (fn, fnType) = fnExpr.synth.unpack
+      val paramIdent = env.uniqueVariable
+      val param = Value.variable(paramIdent)
+
       fnType match {
+
         case Value.Pi(paramType, codomain) => {
-          val paramIdent = env.uniqueVariable
-          val param = Value.variable(paramIdent)
           env.withLocal(paramIdent, param, paramType) { implicit env =>
-            val (arg, argType) = argExpr.value.synth(env).unpack
-            if !(argType unify paramType) then {
-              TypeNotMatch.raise(argExpr.value.span) {
-                s"Expected type: $paramType, found: $argType"
-              }
+            val (argTerm, argType) = argExpr.value.synth(env).unpack
+            if !(paramType <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
+              s"Expected type: $paramType, found: $argType"
             }
-            Synth(fn.apply(arg), codomain(arg.eval))
+            Synth(fn.apply(argTerm), codomain(argTerm.eval))
           }
         }
+
+        case overloaded: Value.OverloadedPi => {
+
+          val (argTerm, argType) = argExpr.value.synth(env).unpack
+          val eigenState = overloaded.applyArgument(
+            argTerm.eval, argType, Value.OverloadedPi.apply,
+            unwrapStates = {
+              case Value.OverloadedPi(states) => states
+              case value => TypeNotMatch.raise {
+                s"Expected an overloaded pi, but got: ${value.readBack}"
+              }
+            }
+          )
+
+          env.withLocal(paramIdent, param, argType) { implicit env =>
+            Synth(fn.apply(argTerm), eigenState)
+          }
+        }
+
         case _ => TypeNotMatch.raise(fnExpr.span) {
           s"Expected a function type, found: $fnType"
         }
@@ -303,7 +323,6 @@ object Synthesis:
         case _ => Var.Defined[Term, Function](ident.name)
       }
       val function = DefinedFunction[Term](defVar, params, resultType, isRecursive)
-      function.ident.definition := function
       function.body := envParams.withCurrentDefinition(function.ident) {
         implicit env => pristineBody.get.elaborate(resultType)(env)
       }
@@ -319,7 +338,6 @@ object Synthesis:
         case _ => Var.Defined[Term, Inductive](inductiveExpr.ident.name)
       }
       val inductiveDefinition: Inductive[Term] = Inductive(defVar, params, constructors)
-      inductiveDefinition.ident.definition := inductiveDefinition
       // To support recursive inductive types, we need to add the inductive type to the context
       // before synthesizing the constructors
       envParams.withCurrentDefinition[Inductive[Term]](inductiveDefinition.ident) { implicit env =>
@@ -373,9 +391,10 @@ object Synthesis:
     case declaration: PreDeclaration[Term, ?] => ???
 
     case overloaded: Overloaded[Term] => {
-      val paths = overloaded.overloads.map(overloaded => (overloaded.params, overloaded.resultType))
-      val lambda = Term.overloaded(Term.OverloadedLambda.apply, paths)
-      val pi = Term.overloaded(Term.OverloadedLambda.apply, paths)
+      val lambdaPaths = overloaded.overloads.map(overloaded => (overloaded.params, overloaded.buildInvoke(Term)))
+      val piPaths = overloaded.overloads.map(overloaded => (overloaded.params, overloaded.resultType))
+      val lambda = Term.overloaded(Term.OverloadedLambda.apply, lambdaPaths)
+      val pi = Term.overloaded(Term.OverloadedPi.apply, piPaths)
       Synth(lambda, pi.eval)
     }
 

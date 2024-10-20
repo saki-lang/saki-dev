@@ -142,6 +142,8 @@ case class DefinedFunction[T <: Entity](
   body: LateInit[T] = LateInit[T](),
 ) extends Function[T] {
 
+  ident.definition := this
+
   override def resultType(implicit ev: EntityFactory[T, T]): T = resultType
 
   override def toIdent[U <: Entity]: Var.Defined[U, Function] = Var.Defined(ident.name)
@@ -158,8 +160,13 @@ case class NativeFunction[T <: Entity](
   override val isRecursive: Boolean = false,
   nativeImpl: ArgList[Value] => Value,
 ) extends Function[T] {
+
+  ident.definition := this
+
   override def toIdent[U <: Entity]: Var.Defined[U, Function] = Var.Defined(ident.name)
+
   override def resultType(implicit ev: EntityFactory[T, T]): T = resultType
+
   def invoke(args: ArgList[Value]): Value = {
     assert(args.length == params.length)
     nativeImpl(args)
@@ -171,17 +178,17 @@ case class Overloaded[T <: Entity](
   overloads: Seq[Function[T]],
 ) extends Definition[T] {
 
+  ident.definition := this
+
   override def toIdent[U <: Entity]: Var.Defined[U, Overloaded] = Var.Defined(ident.name)
 
   def merge(other: Overloaded[T] | Function[T]): Overloaded[T] = {
     assert(other.ident == this.ident)
     val ident: Var.Defined[T, Overloaded] = Var.Defined(this.ident.name)
-    val overloaded: Overloaded[T] = other match {
+    other match {
       case function: Function[T] => Overloaded(ident, overloads :+ function)
       case overloaded: Overloaded[T] => Overloaded(ident, overloads ++ overloaded.overloads)
     }
-    overloaded.ident.definition := overloaded
-    return overloaded
   }
 }
 
@@ -190,9 +197,7 @@ object Overloaded {
     (lhs, rhs) match {
       case (lhs: Function[T], rhs: Function[T]) => {
         val ident: Var.Defined[T, Overloaded] = Var.Defined(lhs.ident.name)
-        val overloaded: Overloaded[T] = Overloaded(ident, Seq(lhs, rhs))
-        overloaded.ident.definition := overloaded
-        overloaded
+        Overloaded(ident, Seq(lhs, rhs))
       }
       case (lhs: Overloaded[T], rhs: Function[T]) => lhs.merge(rhs)
       case (lhs: Function[T], rhs: Overloaded[T]) => rhs.merge(lhs)
@@ -206,6 +211,8 @@ case class Inductive[T <: Entity](
   override val params: ParamList[T],
   constructors: Seq[Constructor[T]],
 ) extends NaiveDefinition[T] {
+
+  ident.definition := this
 
   def resultType(implicit ev: EntityFactory[T, T]): T = ev.universe
 
