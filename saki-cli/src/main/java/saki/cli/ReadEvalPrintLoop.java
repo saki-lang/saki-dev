@@ -24,6 +24,9 @@ public class ReadEvalPrintLoop implements Closeable {
         }
     }
 
+    @CFunction(value = "init_reporter")
+    public static native void initReporter();
+
     @CFunction(value = "report_error")
     private static native void printError(
         CCharPointer src,

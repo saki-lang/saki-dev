@@ -8,8 +8,9 @@ crate-type = ["staticlib"]
 name = "sakirepl"
 
 [dependencies]
+term = "1"
 thiserror = "1.0"
-miette = { version = "7.2", features = ["fancy"] }
+miette = { version = "7.2", features = ["fancy", "syntect-highlighter"] }
 lazy_static = "1.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

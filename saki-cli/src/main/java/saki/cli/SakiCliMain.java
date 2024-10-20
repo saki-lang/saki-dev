@@ -19,6 +19,7 @@ public class SakiCliMain implements Runnable {
 
     public SakiCliMain(SakiToolTrait core) {
         this.core = core;
+        ReadEvalPrintLoop.initReporter();
     }
 
     @Override

@@ -1,16 +1,13 @@
+use reedline::{
+    default_emacs_keybindings, 
+    ColumnarMenu, DefaultCompleter, DefaultPrompt, DefaultPromptSegment, 
+    Emacs, KeyCode, KeyModifiers, MenuBuilder, Prompt, PromptEditMode, 
+    PromptHistorySearch, Reedline, ReedlineEvent, ReedlineMenu, Signal, 
+    ValidationResult, Validator
+};
 use std::borrow::Cow;
 use std::process::exit;
-use crate::theme::ParseSettings;
-use reedline::{default_emacs_keybindings, ColumnarMenu, DefaultCompleter, DefaultPrompt, DefaultPromptSegment, Emacs, Highlighter, KeyCode, KeyModifiers, MenuBuilder, Prompt, PromptEditMode, PromptHistorySearch, Reedline, ReedlineEvent, ReedlineMenu, Signal, StyledText, ValidationResult, Validator};
-use syntect::easy::HighlightLines;
-use syntect::highlighting::{Style, Theme};
-use syntect::parsing::{SyntaxDefinition, SyntaxSet, SyntaxSetBuilder};
-
-use nu_ansi_term::Color as NuColor;
-use nu_ansi_term::Style as NuStyle;
-
-const SYNTAX_YAML: &str = include_str!("../saki.sublime-syntax.yml");
-const THEME_JSON: &str = include_str!("../theme.json");
+use crate::highlighter::SakiHighlighter;
 
 pub struct SakiRepl {
     line_editor: Reedline,
@@ -78,42 +75,6 @@ impl SakiRepl {
     }
 }
 
-pub struct SakiHighlighter {
-    pub syntax: SyntaxSet,
-    pub theme: Theme,
-}
-
-impl SakiHighlighter {
-    pub fn new() -> Self {
-        let syntax_definition = SyntaxDefinition::load_from_str(SYNTAX_YAML, true, None)
-            .expect("Failed to load syntax definition");
-        let theme_settings = serde_json::from_str(THEME_JSON)
-            .expect("Failed to parse theme settings");
-        let theme = Theme::parse_settings(theme_settings)
-            .expect("Failed to load theme settings");
-        let mut syntax_set = SyntaxSetBuilder::new();
-        syntax_set.add(syntax_definition);
-        SakiHighlighter { syntax: syntax_set.build(), theme }
-    }
-}
-
-impl Highlighter for SakiHighlighter {
-    fn highlight(&self, line: &str, _cursor: usize) -> StyledText {
-        let syntax = self.syntax.find_syntax_by_name("Saki").unwrap();
-        let mut highlighter = HighlightLines::new(syntax, &self.theme);
-        // Highlight the line using syntect's mechanism
-        let ranges: Vec<(Style, &str)> = highlighter
-            .highlight_line(line, &self.syntax)
-            .expect("Failed to highlight line");
-        let ranges: Vec<(NuStyle, String)> = ranges.into_iter().map(|(style, piece)| {
-            let fg = style.foreground;
-            let style = NuStyle::new().fg(NuColor::Rgb(fg.r, fg.g, fg.b));
-            (style, piece.to_string())
-        }).collect();
-        StyledText { buffer: ranges }
-    }
-}
-
 pub struct SakiPrompt(DefaultPrompt);
 
 impl Prompt for SakiPrompt {
@@ -141,8 +102,6 @@ impl Prompt for SakiPrompt {
         self.0.render_prompt_history_search_indicator(history_search)
     }
 }
-
-
 
 pub struct SakiValidator;
 
@@ -251,9 +210,8 @@ impl Validator for SakiValidator {
 
 #[cfg(test)]
 mod tests {
-
-    use reedline::{ValidationResult, Validator};
     use crate::repl::SakiValidator;
+    use reedline::{ValidationResult, Validator};
 
     fn is_line_complete(line: &str) -> bool {
         let validator = SakiValidator;

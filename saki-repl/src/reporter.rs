@@ -1,6 +1,21 @@
-use std::ffi::{c_char, CStr};
+use crate::highlighter::SakiHighlighter;
+use miette::highlighters::SyntectHighlighter;
 use miette::{Diagnostic, NamedSource, SourceOffset, SourceSpan};
+use std::ffi::{c_char, CStr};
 use thiserror::Error;
+
+pub fn init_reporter() {
+    miette::set_hook(Box::new(|_| {
+        let highlighter: SyntectHighlighter = SakiHighlighter::new().into();
+        let handler = miette::MietteHandlerOpts::new()
+            .terminal_links(true)
+            .unicode(supports_unicode())
+            .context_lines(5)
+            .with_syntax_highlighting(highlighter)
+            .build();
+        Box::new(handler)
+    })).expect("Failed to set up miette error handler");
+}
 
 #[derive(Error, Debug, Diagnostic)]
 #[error("{title}")]
@@ -34,4 +49,8 @@ impl From<RawError> for PrintableError {
             message: unsafe { CStr::from_ptr(err.message).to_string_lossy().into_owned() },
         }
     }
+}
+
+fn supports_unicode() -> bool {
+    matches!(term::stdout(), Some(terminal) if terminal.supports_color())
 }

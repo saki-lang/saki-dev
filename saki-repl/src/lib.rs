@@ -3,6 +3,7 @@
 mod repl;
 mod reporter;
 mod theme;
+mod highlighter;
 
 use crate::repl::SakiRepl;
 use crate::reporter::{PrintableError, RawError};
@@ -15,6 +16,11 @@ const BUFFER_SIZE: usize = 2usize.pow(16);
 
 lazy_static! {
     pub static ref SAKI_REPL: Mutex<SakiRepl> = Mutex::new(SakiRepl::new());
+}
+
+#[no_mangle]
+pub extern "C" fn init_reporter() {
+    reporter::init_reporter();
 }
 
 #[no_mangle]
