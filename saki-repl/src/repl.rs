@@ -1,10 +1,4 @@
-use reedline::{
-    default_emacs_keybindings, 
-    ColumnarMenu, DefaultCompleter, DefaultPrompt, DefaultPromptSegment, 
-    Emacs, KeyCode, KeyModifiers, MenuBuilder, Prompt, PromptEditMode, 
-    PromptHistorySearch, Reedline, ReedlineEvent, ReedlineMenu, Signal, 
-    ValidationResult, Validator
-};
+use reedline::{default_emacs_keybindings, ColumnarMenu, DefaultCompleter, DefaultPrompt, DefaultPromptSegment, Emacs, KeyCode, KeyModifiers, MenuBuilder, Prompt, PromptEditMode, PromptHistorySearch, PromptViMode, Reedline, ReedlineEvent, ReedlineMenu, Signal, ValidationResult, Validator};
 use std::borrow::Cow;
 use std::process::exit;
 use crate::highlighter::SakiHighlighter;
@@ -87,7 +81,14 @@ impl Prompt for SakiPrompt {
     }
 
     fn render_prompt_indicator(&self, prompt_mode: PromptEditMode) -> Cow<str> {
-        self.0.render_prompt_indicator(prompt_mode)
+        match prompt_mode {
+            PromptEditMode::Default | PromptEditMode::Emacs => "> ".into(),
+            PromptEditMode::Vi(vi_mode) => match vi_mode {
+                PromptViMode::Normal => "> ".into(),
+                PromptViMode::Insert => ": ".into(),
+            },
+            PromptEditMode::Custom(str) => format!("({str})").into(),
+        }
     }
 
     fn render_prompt_multiline_indicator(&self) -> Cow<str> {
@@ -108,9 +109,8 @@ pub struct SakiValidator;
 impl Validator for SakiValidator {
     fn validate(&self, line: &str) -> ValidationResult {
         let mut in_string = false;
-        let mut in_char = false;
-        let mut in_comment = false;
-        let mut block_comment_depth = 0;
+        let mut in_single_line_comment = false;
+        let mut in_block_comment = false;
 
         let mut parens = 0;
         let mut braces = 0;
@@ -119,67 +119,59 @@ impl Validator for SakiValidator {
         let mut chars = line.chars().peekable();
         let mut prev_char = None; // Track previous character for escape sequence handling
 
-        while let Some(c) = chars.next() {
-            // Handle single-line comments: ignore everything after `//`
-            if !in_string && !in_char && !in_comment && c == '/' {
+        while let Some(current) = chars.next() {
+            // Handle single-line comments: ignore everything after `//` until the end of the line
+            if !in_string && !in_block_comment && !in_single_line_comment && current == '/' {
                 if chars.peek() == Some(&'/') {
-                    break;  // Ignore rest of the line in a single-line comment
+                    in_single_line_comment = true;
+                    chars.next(); // Skip the second '/'
+                    continue;
                 } else if chars.peek() == Some(&'*') {
-                    in_comment = true;
-                    block_comment_depth += 1;
+                    in_block_comment = true;
                     chars.next(); // Skip the '*'
                     continue;
                 }
             }
 
-            // Handle block comments: keep track of depth
-            if in_comment {
-                if c == '*' && chars.peek() == Some(&'/') {
-                    chars.next();
-                    block_comment_depth -= 1;
-                    if block_comment_depth == 0 {
-                        in_comment = false;
-                    }
-                    continue;
-                } else if c == '/' && chars.peek() == Some(&'*') {
-                    chars.next();
-                    block_comment_depth += 1;
-                    continue;
+            // End single-line comment at the end of the line
+            if in_single_line_comment {
+                if current == '\n' {
+                    in_single_line_comment = false;
+                }
+                continue;  // Ignore the rest of the line in single-line comment
+            }
+
+            // Handle block comments: end the block comment when encountering '*/'
+            if in_block_comment {
+                if current == '*' && chars.peek() == Some(&'/') {
+                    chars.next(); // Skip the '/'
+                    in_block_comment = false;
                 }
                 continue;  // Ignore content inside block comment
             }
 
             // Handle string literals (including escaped quotes)
-            if !in_char && !in_comment {
-                if c == '"' {
-                    if in_string {
-                        // Handle escaped quotes inside string
-                        if prev_char != Some('\\') {
-                            in_string = false;
-                        }
-                    } else {
-                        in_string = true;
+            if !in_block_comment && current == '"' {
+                if in_string {
+                    // Handle escaped quotes inside string
+                    if prev_char != Some('\\') {
+                        in_string = false;
                     }
-                    prev_char = Some(c);
-                    continue;
+                } else {
+                    in_string = true;
                 }
-
-                // Handle character literals (e.g., `'a'`)
-                if c == '\'' {
-                    in_char = !in_char;
-                    prev_char = Some(c);
-                    continue;
-                }
+                prev_char = Some(current);
+                continue;
             }
 
-            // If inside a string literal or char literal, ignore all structural characters
-            if in_string || in_char {
-                prev_char = Some(c);
+            // If inside a string literal, ignore all structural characters
+            if in_string {
+                prev_char = Some(current);
                 continue;
             }
 
             // Track parentheses, braces, and brackets
-            match c {
+            match current {
                 '(' => parens += 1,
                 ')' => parens -= 1,
                 '{' => braces += 1,
@@ -189,23 +181,25 @@ impl Validator for SakiValidator {
                 _ => {}
             }
 
-            // If at any point we have more closing than opening, we know the line is incomplete
+            // If at any point we have more closing than opening, the line is incomplete
             if parens < 0 || braces < 0 || brackets < 0 {
                 return ValidationResult::Incomplete;
             }
 
-            prev_char = Some(c);
+            prev_char = Some(current);
         }
 
         // A line is complete if:
         // - No unbalanced parentheses, braces, or brackets
-        // - We are not inside a string literal or block comment
-        if parens == 0 && braces == 0 && brackets == 0 && !in_string && !in_comment {
+        // - We are not inside a string literal, block comment, or single-line comment
+        if parens == 0 && braces == 0 && brackets == 0 && !in_string && !in_block_comment {
             ValidationResult::Complete
         } else {
             ValidationResult::Incomplete
         }
     }
+
+
 }
 
 #[cfg(test)]
@@ -224,14 +218,14 @@ mod tests {
     #[test]
     fn test_complete_line() {
         // Simple assignment, no unbalanced brackets
-        assert!(is_line_complete("val a = 1"));
+        assert!(is_line_complete("let a = 1"));
         // Single-line braces and parentheses
-        assert!(is_line_complete("val a = (1 + 2)"));
-        assert!(is_line_complete("val a = { 1 + 2 }"));
+        assert!(is_line_complete("let a = (1 + 2)"));
+        assert!(is_line_complete("let a = { 1 + 2 }"));
         // Complete string literal with braces inside
-        assert!(is_line_complete("val a = \"{\""));
+        assert!(is_line_complete("let a = \"{\""));
         // Braces and parentheses closed correctly
-        assert!(is_line_complete("val a = [{()}]"));
+        assert!(is_line_complete("let a = [{()}]"));
     }
 
     #[test]
@@ -239,51 +233,66 @@ mod tests {
         // Open brace without closing
         assert!(!is_line_complete("def foo(a: Int): Int = {"));
         // Open parentheses without closing
-        assert!(!is_line_complete("val a = ("));
+        assert!(!is_line_complete("let a = ("));
         // Unmatched quotes
-        assert!(!is_line_complete("val a = \"{"));
+        assert!(!is_line_complete("let a = \"{"));
         // Mixed braces and parentheses, unbalanced
-        assert!(!is_line_complete("val a = [({})"));
+        assert!(!is_line_complete("let a = [({})"));
     }
 
     #[test]
     fn test_comment_handling() {
         // Comment containing a brace should be ignored
-        assert!(is_line_complete("val a = 1 // {"));
+        assert!(is_line_complete("let a = 1 // {"));
         // Block comment should be ignored
-        assert!(is_line_complete("val a = /* { */ 1"));
+        assert!(is_line_complete("let a = /* { */ 1"));
         // Open block comment that doesn't close
-        assert!(!is_line_complete("val a = /*"));
+        assert!(!is_line_complete("let a = /*"));
         // Properly closed block comment
-        assert!(is_line_complete("val a = /* { */ 1 /* } */"));
+        assert!(is_line_complete("let a = /* { */ 1 /* } */"));
+        // Nested block comments
+        assert!(is_line_complete("let a = /* /* 1 */"));
+        // Block comment with closing delimiter inside a comment
+        assert!(is_line_complete("let a = /* 1 */ */"));
+        // Single-line comment at the end
+        assert!(is_line_complete("let a = { // comment \n 1 }"));
+    }
+
+    #[test]
+    fn test_block_comment_handling() {
+        // Valid block comment
+        assert!(is_line_complete("let a = /* /* */ 1"));
+        assert!(is_line_complete("let a = /* */ 1 */"));
+        assert!(is_line_complete("let a = /* /* */ */"));
+        assert!(is_line_complete("let a = /* 1 */ */"));
     }
 
     #[test]
     fn test_string_handling() {
         // String containing braces should be ignored
-        assert!(is_line_complete("val a = \"{(}\""));
+        assert!(is_line_complete("let a = \"{(}\""));
         // Open string without closing
-        assert!(!is_line_complete("val a = \"{"));
+        assert!(!is_line_complete("let a = \"{"));
         // Empty string should be complete
-        assert!(is_line_complete("val a = \"\""));
+        assert!(is_line_complete("let a = \"\""));
         // Escaped quotes inside a string
-        assert!(is_line_complete("val a = \"\\\"{\""));
+        assert!(is_line_complete("let a = \"\\\"{\""));
         // Unmatched quote at the end
-        assert!(!is_line_complete("val a = \"\"{\""));
+        assert!(!is_line_complete("let a = \"\"{\""));
     }
 
     #[test]
     fn test_complex_cases() {
         // Mixed braces and comments
-        assert!(is_line_complete("val a = { 1 + /* comment */ 2 }"));
+        assert!(is_line_complete("let a = { 1 + /* comment */ 2 }"));
         // Single-line comment at the end
-        assert!(is_line_complete("val a = 1 // comment {"));
+        assert!(is_line_complete("let a = 1 // comment {"));
         // Block comment that closes properly, despite containing braces
-        assert!(is_line_complete("val a = /* { */ { /* } */ }"));
+        assert!(is_line_complete("let a = /* { */ { /* } */ }"));
         // String and open brace outside of string
-        assert!(!is_line_complete("val a = \"}\"{"));
+        assert!(!is_line_complete("let a = \"}\"{"));
         // String with escaped quotes and braces
-        assert!(is_line_complete("val a = \"\\\"}\""));
+        assert!(is_line_complete("let a = \"\\\"}\""));
     }
 }
 

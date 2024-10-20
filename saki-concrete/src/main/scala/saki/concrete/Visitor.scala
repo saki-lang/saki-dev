@@ -483,7 +483,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       case _: LiteralBoolContext => LiteralValue.BoolValue(valueString.toBoolean)
       case _: LiteralCharContext => LiteralValue.RuneValue(valueString.charAt(1))
       case _: LiteralFloatContext => LiteralValue.FloatValue(valueString.toDouble)
-      case _: LiteralIntContext => LiteralValue.IntValue(valueString.toLong)
+      case _: LiteralIntContext => LiteralValue.IntValue(BigInt(valueString))
       case _: LiteralRegularStringContext => LiteralValue.StringValue(valueString.substring(1, valueString.length - 1))
       case _: LiteralRawStringContext => {
         LiteralValue.StringValue(valueString.stripPrefix("#").stripPrefix("{").stripSuffix("}"))

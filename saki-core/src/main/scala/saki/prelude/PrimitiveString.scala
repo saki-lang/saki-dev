@@ -69,7 +69,7 @@ object PrimitiveString extends PreludeDefinitionSet {
     nativeImpl = (args: ArgList[Value]) => {
       val a: Value = args(0).value
       a match {
-        case Value.Primitive(StringValue(a)) => Value.Primitive(IntValue(a.toLong))
+        case Value.Primitive(StringValue(a)) => Value.Primitive(IntValue(BigInt(a)))
         case _ => throw new IllegalArgumentException(s"Invalid argument: $a")
       }
     }
@@ -112,6 +112,7 @@ object PrimitiveString extends PreludeDefinitionSet {
     binaryFunction("++", _ + _),
     length,
     parseInt,
+    parseFloat,
     repeat,
   )
   
