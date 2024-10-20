@@ -119,8 +119,8 @@ object Synthesis:
       // `obj.method`
       case _ => {
         given SourceSpan = expr.span
-        val method: Function[Term] = env.getDefinitionByName(member) match {
-          case Some(definition: Function[Term]) => definition
+        val method: (Function[Term] | Overloaded[Term]) = env.getDefinitionByName(member) match {
+          case Some(definition: (Function[Term] | Overloaded[Term])) => definition
           case _ => MethodNotFound.raise(expr.span) {
             s"Method not found: $member"
           }
