@@ -2,7 +2,7 @@ package saki.core
 
 import saki.core.context.Environment
 import saki.core.domain.Value
-import saki.core.syntax.{Constructor, Function, Inductive, Overloaded, Var}
+import saki.core.syntax.{Constructor, Function, Inductive, Var}
 
 import scala.collection.Seq
 

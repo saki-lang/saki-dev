@@ -33,6 +33,7 @@ enum CoreErrorKind(override val message: String) extends ErrorKind {
   case UnsupportedFeature extends CoreErrorKind("Unsupported feature")
   case SizeNotMatch extends CoreErrorKind("Size not match")
   case TypeNotMatch extends CoreErrorKind("Type not match")
+  case DefinitionNotMatch extends CoreErrorKind("Definition not match")
   case OverloadingNotMatch extends CoreErrorKind("Overloading not match")
   case OverloadingAmbiguous extends CoreErrorKind("Overloading ambiguous")
   case NoSuchOverloading extends CoreErrorKind("No such overloading")

@@ -170,7 +170,35 @@ case class Overloaded[T <: Entity](
   override val ident: Var.Defined[T, Overloaded],
   overloads: Seq[Function[T]],
 ) extends Definition[T] {
+
   override def toIdent[U <: Entity]: Var.Defined[U, Overloaded] = Var.Defined(ident.name)
+
+  def merge(other: Overloaded[T] | Function[T]): Overloaded[T] = {
+    assert(other.ident == this.ident)
+    val ident: Var.Defined[T, Overloaded] = Var.Defined(this.ident.name)
+    val overloaded: Overloaded[T] = other match {
+      case function: Function[T] => Overloaded(ident, overloads :+ function)
+      case overloaded: Overloaded[T] => Overloaded(ident, overloads ++ overloaded.overloads)
+    }
+    overloaded.ident.definition := overloaded
+    return overloaded
+  }
+}
+
+object Overloaded {
+  def merge[T <: Entity](lhs: Overloaded[T] | Function[T], rhs: Overloaded[T] | Function[T]): Overloaded[T] = {
+    (lhs, rhs) match {
+      case (lhs: Function[T], rhs: Function[T]) => {
+        val ident: Var.Defined[T, Overloaded] = Var.Defined(lhs.ident.name)
+        val overloaded: Overloaded[T] = Overloaded(ident, Seq(lhs, rhs))
+        overloaded.ident.definition := overloaded
+        overloaded
+      }
+      case (lhs: Overloaded[T], rhs: Function[T]) => lhs.merge(rhs)
+      case (lhs: Function[T], rhs: Overloaded[T]) => rhs.merge(lhs)
+      case (lhs: Overloaded[T], rhs: Overloaded[T]) => lhs.merge(rhs)
+    }
+  }
 }
 
 case class Inductive[T <: Entity](

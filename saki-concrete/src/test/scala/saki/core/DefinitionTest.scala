@@ -194,7 +194,7 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     module.eval("map(Int, String, Option(Int)::Some(114514), (n: Int) => n.toString)") should be (module.eval("Option(String)::Some(\"114514\")"))
   }
 
-  it should "option" in {
+  it should "GADT implicit type param" in {
     val code = {
       """
         type Option[A: 'Type] = inductive {
@@ -215,6 +215,22 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
       let option = Option[Int]::Some(19260817)
       option.map[Int, String]((n: Int) => n.toString)
     }""") should be (module.eval("Option(String)::Some(\"19260817\")"))
+  }
+
+  it should "overloaded" in {
+    val code = {
+      """
+        def add(a b: Int): Int = a + b
+        def add(a b: String): String = a ++ b
+        def add(a b: Int, c: Int): Int = a + b + c
+        def add(a b: String, c: String): String = a ++ b ++ c
+      """
+    }
+    val module = compileModule(code)
+    module.eval("add(114, 514)") should be (module.eval("628"))
+    module.eval("add(\"114\", \"514\")") should be (module.eval("\"114514\""))
+    module.eval("add(114, 514, 1919)") should be (module.eval("2547"))
+    module.eval("add(\"114\", \"514\", \"1919\")") should be (module.eval("\"1145141919\""))
   }
 
   it should "mutual recursive" in {

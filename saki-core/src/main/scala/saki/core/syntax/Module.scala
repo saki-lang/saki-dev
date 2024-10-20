@@ -43,7 +43,7 @@ object Module {
       case ((resolvingContext, env), definition) => {
         val (resolved, newCtx) = definition.resolve(resolvingContext)
         val definitionSynth = resolved.synth(env)
-        (newCtx, env.copy(definitions = env.definitions.updated(definitionSynth.ident, definitionSynth)))
+        (newCtx, env.add(definitionSynth))
       }
     }
     Module(finalEnv.definitions.values.toSet)
