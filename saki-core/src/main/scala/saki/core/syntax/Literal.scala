@@ -15,7 +15,7 @@ enum Literal {
     case UnitValue => "unit"
     case BoolValue(value) => value.toString
     case IntValue(value) => value.toString
-    case FloatValue(value) => value.toString + 'f'
+    case FloatValue(value) => value.toString
     case RuneValue(value) => s"'${value.toString}'"
     case StringValue(value) => s""""$value""""
   }

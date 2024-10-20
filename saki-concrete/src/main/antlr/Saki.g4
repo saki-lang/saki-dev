@@ -166,11 +166,11 @@ literal
     ;
 
 // Literals
-Dec: [0-9]+;
+Dec: '-'?[0-9]+;
 Hex: '0x' HexDigit+;
 Oct: '0o' [0-7]+;
 Bin: '0b' [01]+;
-Float: [0-9]+[.][0-9]+;
+Float: '-'?[0-9]+[.][0-9]+;
 Imaginary: [0-9]+[.][0-9]+ 'i';
 CharacterLiteral: '\'' (~['\\\r\n] | CommonCharacter) '\'';
 RegularStringLiteral: '"'  (~["\\\r\n] | CommonCharacter)* '"';
