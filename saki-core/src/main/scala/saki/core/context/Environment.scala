@@ -73,6 +73,8 @@ case class TypedEnvironment[T <: Entity] private (
   
   override def contains(local: Var.Local): Boolean = locals.contains(local)
 
+  def contains(definition: Var.Defined[?, ?]): Boolean = definitions.contains(Var.Defined(definition.name))
+
   def withCurrentDefinition[R](definition: Var.Defined[Term, ?])(action: TypedEnvironment[T] => R): R = {
     action(TypedEnvironment[T](
       definitions = definitions + (definition -> definition.definition.get),

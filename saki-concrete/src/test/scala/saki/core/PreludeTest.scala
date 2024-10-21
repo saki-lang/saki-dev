@@ -1,20 +1,19 @@
 package saki.core
 
-import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should
 import saki.core.context.Environment
 import saki.core.domain.Value
 
-class PreludeTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
+class PreludeTest extends AnyFunSuite with should.Matchers with SakiTestExt {
 
   import Literal.*
-  import LiteralType.*
 
   extension (code: String) {
     def synth(implicit env: Environment.Typed[Value]): Term = synthExpr(code)._1.normalize
   }
 
-  it should "primitive int" in {
+  test("primitive int") {
     "114 + 514".synth should be (IntValue(628).term)
     "114 - 514".synth should be (IntValue(-400).term)
     "114 * 514".synth should be (IntValue(58596).term)
@@ -24,7 +23,7 @@ class PreludeTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     "max(527, 98)".synth should be (IntValue(527).term)
   }
 
-  it should "int operator precedence" in {
+  test("int operator precedence") {
     "527 ** 2 / 98 + 412 * 65".synth should be (IntValue(29613).term)
     "(300 + 876) % 153 * 47 - 29".synth should be (IntValue(4906).term)
     "789 + 32 ** 3 * 15 - 450 / 9".synth should be (IntValue(492259).term)
@@ -36,7 +35,7 @@ class PreludeTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     "480 * (134 + 217) ** 2 - (900 / 45 + 35) * 8".synth should be (IntValue(59136040).term)
   }
 
-  it should "int value cmp" in {
+  test("int value cmp") {
     "114 < 514".synth should be (BoolValue(true).term)
     "114 <= 514".synth should be (BoolValue(true).term)
     "114 > 514".synth should be (BoolValue(false).term)
@@ -45,7 +44,7 @@ class PreludeTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     "114 != 514".synth should be (BoolValue(true).term)
   }
 
-  it should "int value logic" in {
+  test("int value logic") {
     "true && false".synth should be (BoolValue(false).term)
     "true || false".synth should be (BoolValue(true).term)
     "false || true".synth should be (BoolValue(true).term)
@@ -53,7 +52,7 @@ class PreludeTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     "!false".synth should be (BoolValue(true).term)
   }
 
-  it should "int cmp logic" in {
+  test("int cmp logic") {
     "527 + 98 < 1122 && 1919 - 810 > 1926".synth should be (BoolValue(false).term)
     "1122 % 98 == 26 || 1919 / 47 >= 40".synth should be (BoolValue(true).term)
     "817 ** 2 < 222 * 626 && !(114 + 47 >= 61)".synth should be (BoolValue(false).term)
@@ -71,13 +70,13 @@ class PreludeTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     "((114514 / 98 < 1200 && 1919810 % 61 == 35) || !(222 + 514 >= 800)) && 19260817 % 626 == 9".synth should be (BoolValue(false).term)
   }
 
-  it should "string ops" in {
+  test("string ops") {
     "\"It's mygo\" ++  \"!\".repeat(5)".synth should be (StringValue("It's mygo!!!!!").term)
     "19260817.toString".synth should be (StringValue("19260817").term)
     "19260817.toString.length".synth should be (IntValue(8).term)
   }
 
-  it should "string escape" in {
+  test("string escape") {
     "\"\\\"\"".synth should be (StringValue("\"").term)
     "\"\\n\"".synth should be (StringValue("\n").term)
     "\"\\t\"".synth should be (StringValue("\t").term)

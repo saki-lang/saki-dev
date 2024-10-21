@@ -80,8 +80,8 @@ object PrimitiveInt extends PreludeDefinitionSet {
     // binaryFunction("shr", _ >> _),
     // binaryFunction("ushr", _ >>> _),
 
-     binaryFunction("max", _.max(_)),
-     binaryFunction("min", _.min(_)),
+    binaryFunction("max", _.max(_)),
+    binaryFunction("min", _.min(_)),
 
     binaryBoolFunction("==", _ == _),
     binaryBoolFunction("!=", _ != _),

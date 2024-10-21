@@ -84,10 +84,7 @@ object Synthesis:
     case Expr.Variable(ref) => ref match {
       // Converting a definition reference to a lambda, enabling curry-style function application
       case definitionVar: Var.Defined[Term@unchecked, ?] => env.getDefinition(definitionVar) match {
-        case Some(definition) => {
-          // definition.ident.definition :=! definition
-          synthDeclarationRef(definition)
-        }
+        case Some(definition) => synthDeclarationRef(definition)
         case None => env.declarations.get(definitionVar) match {
           case Some(declaration) => synthDeclarationRef(declaration)
           case None => UnresolvedReference.raise(expr.span) {

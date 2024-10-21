@@ -595,8 +595,7 @@ private sealed trait OverloadInvokeExt {
   /**
    * Get the most suitable state of the overloaded function that matches the argument types.
    * @param env The environment
-   * @return 1. The most suitable eigenstate of the overloaded function body
-   *         2. The parameters of the state
+   * @return The most suitable eigenstate of the overloaded function body
    */
   def getOverload(implicit env: Environment.Typed[Value]): Function[Term] = {
     

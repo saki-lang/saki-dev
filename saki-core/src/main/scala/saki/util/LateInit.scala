@@ -33,14 +33,6 @@ case class LateInit[A]() extends Product with IterableOnce[A] {
     this.value = Some(value)
   }
 
-  /**
-   * Deal with type erasure.
-   */
-  @targetName("forceInit")
-  def :=![B](value: B): Unit = {
-    this.value = Some(value.asInstanceOf[A])
-  }
-
   override def iterator: Iterator[A] = value.iterator
 
   override def toString: String = value match {

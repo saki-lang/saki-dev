@@ -38,7 +38,7 @@ def compileModule(source: String, path: Option[String] = None, doEvaluation: Boo
       println(s"${module.evaluate(evaluation.expr.emit)}")
     }
 
-    return module
+    module
   }
 }
 

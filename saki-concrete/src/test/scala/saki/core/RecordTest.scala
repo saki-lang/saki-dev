@@ -1,14 +1,14 @@
 package saki.core
 
-import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should
 
-class RecordTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
+class RecordTest extends AnyFunSuite with should.Matchers with SakiTestExt {
 
   import Literal.*
   import LiteralType.*
 
-  it should "record" in {
+  test("record definition") {
     val code = {
       """
         type Date = record {

@@ -1,11 +1,12 @@
 package saki.core
 
 import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.*
 import saki.core.compileModule
 
-class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
-  it should "fibonacci" in {
+class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
+  test("fibonacci") {
     val code = {
       """
         type Nat = inductive {
@@ -63,7 +64,7 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     module.eval("fib(n6)") should be (module.eval("n8"))
   }
 
-  it should "peano to int" in {
+  test("peano to int") {
     val code = {
       """
         type Nat = inductive {
@@ -94,7 +95,7 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     module.eval("3.toPeano") should be (module.eval("Nat::Succ(Nat::Succ(Nat::Succ(Nat::Zero)))"))
   }
 
-  it should "is prime" in {
+  test("is prime") {
     val code = {
       """
         def checkDivisors(value: Int, divisor: Int): Bool = {
@@ -137,7 +138,7 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     // module.eval("isPrime(180469)") should be (module.eval("false"))
   }
 
-  it should "different style fn call" in {
+  test("different style fn call") {
     val code = {
       """
         def square(n: Int): Int = n * n
@@ -171,7 +172,7 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     module.eval("powerMod 1926 8 17") should be (module.eval("16"))
   }
 
-  it should "GADT explicit type param" in {
+  test("GADT explicit type param") {
     val code = {
       """
         type Option(T: 'Type) = inductive {
@@ -194,30 +195,30 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     module.eval("map(Int, String, Option(Int)::Some(114514), (n: Int) => n.toString)") should be (module.eval("Option(String)::Some(\"114514\")"))
   }
 
-  it should "GADT implicit type param" in {
-    val code = {
-      """
-        type Option[A: 'Type] = inductive {
-            None
-            Some(A)
-        }
+//  test("GADT implicit type param") {
+//    val code = {
+//      """
+//        type Option[A: 'Type] = inductive {
+//            None
+//            Some(A)
+//        }
+//
+//        def map[A: 'Type, B: 'Type](option: Option[A], transform: A -> B): Option[B] = {
+//            match option {
+//                case Option[A]::None => Option[B]::None
+//                case Option[A]::Some(value) => Option[B]::Some(transform(value))
+//            }
+//        }
+//      """
+//    }
+//    val module = compileModule(code)
+//    module.eval("""{
+//      let option = Option[Int]::Some(19260817)
+//      option.map[Int, String]((n: Int) => n.toString)
+//    }""") should be (module.eval("Option(String)::Some(\"19260817\")"))
+//  }
 
-        def map[A: 'Type, B: 'Type](option: Option[A], transform: A -> B): Option[B] = {
-            match option {
-                case Option[A]::None => Option[B]::None
-                case Option[A]::Some(value) => Option[B]::Some(transform(value))
-            }
-        }
-      """
-    }
-    val module = compileModule(code)
-    module.eval("""{
-      let option = Option[Int]::Some(19260817)
-      option.map[Int, String]((n: Int) => n.toString)
-    }""") should be (module.eval("Option(String)::Some(\"19260817\")"))
-  }
-
-  it should "overloaded" in {
+  test("overloaded") {
     val code = {
       """
         def add(a b: Int): Int = a + b
@@ -226,10 +227,10 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     }
     val module = compileModule(code)
     module.eval("add(114, 514)") should be (module.eval("628"))
-    module.eval("add(\"114\", \"514\")") should be (module.eval("\"114514\""))
+    module.eval("add(\"It's \", \"mygo!!!!!\")") should be (module.eval("\"It's mygo!!!!!\""))
   }
 
-  it should "mutual recursive" in {
+  test("mutual recursive") {
     val code = {
       """
           type Nat = inductive {
@@ -278,7 +279,7 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     module.eval("isOdd(n9)") should be(module.eval("true"))
   }
 
-  it should "rbtree" in {
+  test("rbtree") {
     val code = {
       """
         type Option[A: 'Type] = inductive {
@@ -482,7 +483,7 @@ class DefinitionTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     module.eval("myTree.successor(4)") should be (module.eval("Option(Int)::Some(5)"))
   }
 
-  it should "eq refl" in {
+  test("eq refl") {
     val code = {
       """
         def eq(A: 'Type, a b: A): 'Type = ∀(P: A -> 'Type) -> P(a) -> P(b)

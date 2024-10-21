@@ -1,35 +1,35 @@
 package saki.core
 
-import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should
 import saki.core.domain.Value
 
-class ExprTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
+class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
 
   import Literal.*
   import LiteralType.*
 
-  it should "synth primitive type Int" in {
+  test("synth primitive type Int") {
     val (term, ty) = synthExpr("1")
     term should be (Term.Primitive(IntValue(1)))
     ty should be (Value.PrimitiveType(IntType))
   }
 
-  it should "synth lambda" in {
+  test("synth lambda") {
     val (term, ty) = synthExpr("(x: Int) => x")
     term should be (Term.Lambda(Param(!"x", IntType.term), Term.Variable(!"x")))
     ty.readBack should be (Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType)).readBack)
   }
 
-  it should "synth lambda with explicit type" in {
+  test("synth lambda with explicit type") {
     val (term, ty) = synthExpr("(x: Int): Int => x")
     term should be (Term.Lambda(Param(!"x", IntType.term), Term.Variable(!"x")))
     ty.readBack should be (Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType)).readBack)
   }
 
-  it should "synth high-order lambda" in {
+  test("synth high-order lambda") {
     val (term, ty) = synthExpr("(x: Int) => (y: Float) => (z: String): Int => x")
-    term should be(
+    term should be (
       Term.Lambda(
         Param(!"x", IntType.term),
         Term.Lambda(
@@ -41,7 +41,7 @@ class ExprTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
         )
       )
     )
-    ty.readBack should be(
+    ty.readBack should be (
       Value.Pi(
         Value.PrimitiveType(LiteralType.IntType),
         _ => Value.Pi(
@@ -55,7 +55,7 @@ class ExprTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     )
   }
 
-  it should "synth dependent typed lambda" in {
+  test("synth dependent typed lambda") {
     val (term, ty) = synthExpr("(A: 'Type) => (B: 'Type) => (t: A) => (f: A -> B) => f(t)")
     term.normalize should be (
       Value.Lambda(
@@ -83,7 +83,7 @@ class ExprTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     )
   }
 
-  it should "synth simplified dependent typed lambda" in {
+  test("synth simplified dependent typed lambda") {
     val (term, ty) = synthExpr("(A B: 'Type, t: A, f: A -> B) => f(t)")
     term.normalize should be(
       Value.Lambda(
@@ -111,12 +111,12 @@ class ExprTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     )
   }
 
-  it should "beta reduction" in {
+  test("beta reduction") {
     val (expr, _) = synthExpr("((x: Int) => x)(114514)")
     expr should be (IntValue(114514).toTerm)
   }
 
-  it should "let expr" in {
+  test("let expr") {
     val code = {
       """
         let x: Int = 1
@@ -127,7 +127,7 @@ class ExprTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     expr should be (IntValue(1).toTerm)
   }
 
-  it should "let apply" in {
+  test("let apply") {
     val code = {
       """
         let f: Int -> Int = (x: Int) => x
@@ -138,12 +138,12 @@ class ExprTest extends AnyFlatSpec with should.Matchers with SakiTestExt {
     expr should be (IntValue(114514).toTerm)
   }
 
-  it should "if expr" in {
+  test("if expr") {
     val (expr, _) = synthCodeBlock("if true then 114 else 514")
     expr.normalize should be (IntValue(114).toTerm)
   }
 
-  it should "eq refl" in {
+  test("eq refl") {
     val code = {
       """
         let eq = (A: 'Type, a b: A): 'Type => ∀(P: A -> 'Type) -> P(a) -> P(b)
