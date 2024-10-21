@@ -12,7 +12,7 @@ object Resolve {
 
   case class Context(
     variableMap: Map[String, Var] = Map.empty,
-    dependencyGraph: Graph[Var.Defined[?, ?]] = Graph.directed,
+    dependencyGraph: Graph[String] = Graph.directed,
     currentDefinition: Option[Var.Defined[Expr, ?]] = None,
   ) {
     
@@ -23,7 +23,7 @@ object Resolve {
 
     def ref(variable: Var.Defined[?, ?]): Context = {
       val updatedDependencies = currentDefinition match {
-        case Some(definition) => dependencyGraph.addEdge(definition, variable)
+        case Some(definition) => dependencyGraph.addEdge(definition.name, variable.name)
         case None => dependencyGraph
       }
       copy(variableMap = variableMap + (variable.name -> variable), dependencyGraph = updatedDependencies)
@@ -40,7 +40,7 @@ object Resolve {
         action(copy(
           currentDefinition = Some(definition),
           variableMap = variableMap + (definition.name -> definition),
-          dependencyGraph = dependencyGraph.addVertex(definition),
+          dependencyGraph = dependencyGraph.addVertex(definition.name),
         ))
       }
     }
@@ -122,7 +122,7 @@ object Resolve {
         // If the member is a definition, indicating that this is a method call.
         // Thus, we need to update the dependency graph.
         val updatedContext = context.variableMap.get(member) match {
-          case Some(definition: Var.Defined[Term, ?]) => context.ref(definition)
+          case Some(definition: Var.Defined[Term@unchecked, ?]) => context.ref(definition)
           case _ => context
         }
         val resolved = Expr.Elimination(resolvedObj, member)
@@ -183,23 +183,8 @@ object Resolve {
 
     }
   }
-
-  extension (params: ParamList[Expr]) {
-    def resolve(ctx: Resolve.Context): (ParamList[Expr], Resolve.Context) = {
-      params.foldLeft((Seq.empty: ParamList[Expr], ctx)) {
-        case ((params, ctx), param) => {
-          val (resolvedParamType, paramCtx) = param.`type`.resolve(ctx)
-          val resolvedParam = Param(param.ident, resolvedParamType)
-          (params :+ resolvedParam, paramCtx + resolvedParam.ident)
-        }
-      }
-    }
-  }
   
   extension (definition: Definition[Expr]) {
-    def preResolve(implicit ctx: Resolve.Context): Resolve.Context = {
-      ctx.copy(variableMap = ctx.variableMap + (definition.ident.name -> definition.ident))
-    }
 
     def resolve(implicit ctx: Resolve.Context): (Definition[Expr], Resolve.Context) = {
       resolveDefinition(definition)
@@ -214,31 +199,46 @@ object Resolve {
 
     var global: Resolve.Context = ctx
 
+    def resolveParams(
+      params: ParamList[Expr], ctx: Resolve.Context = global
+    ): (ParamList[Expr], Resolve.Context) = {
+      params.foldLeft((Seq.empty: ParamList[Expr], ctx)) {
+        case ((resolvedParams, ctx), param) => {
+          val (resolvedParamType, paramCtx) = param.`type`.resolve(ctx)
+          val resolvedParam = Param(param.ident, resolvedParamType)
+          global = global.copy(dependencyGraph = paramCtx.dependencyGraph)
+          (resolvedParams :+ resolvedParam, paramCtx + resolvedParam.ident)
+        }
+      }
+    }
+
     val resolvedDefinition: Definition[Expr] = definition match {
 
       case DefinedFunction(ident, params, resultType, _, body) => {
-        val (resolvedParams, ctxWithParam) = params.resolve(global)
+        val (resolvedParams, ctxWithParam) = resolveParams(params)
+        val (resolvedResultType, signatureCtx) = resultType.resolve(ctxWithParam)
         // register the function name to global context
         global += ident
         // add the function name to the context for recursive calls
-        ctxWithParam.withDefinition(ident) { implicit ctx =>
+        signatureCtx.withDefinition(ident) { implicit ctx =>
           val (resolvedBody, bodyCtx) = body.get.resolve(ctx)
-          val (resolvedResultType, funcCtx) = resultType.resolve(bodyCtx)
-          val isRecursive = funcCtx.dependencyGraph.isInCycle(ident)
+          val isRecursive = bodyCtx.dependencyGraph.isInCycle(ident.name)
           // update the global context with the dependency graph
-          global = global.copy(dependencyGraph = funcCtx.dependencyGraph)
+          global = global.copy(dependencyGraph = bodyCtx.dependencyGraph)
           DefinedFunction[Expr](Var.Defined(ident.name), resolvedParams, resolvedResultType, isRecursive, LateInit(resolvedBody))
         }
       }
 
       case Inductive(ident, params, constructors) => {
-        val (resolvedParams, ctx) = params.resolve(global)
+        val (resolvedParams, ctx) = resolveParams(params)
         global += ident
-        val resolvedConstructors: Seq[Constructor[Expr]] = constructors.map { constructor =>
-          val (resolvedConsParams, _) = constructor.params.resolve(ctx + ident)
-          Constructor[Expr](constructor.ident, constructor.owner, resolvedConsParams)
+        ctx.withDefinition(ident) { implicit ctx =>
+          val resolvedConstructors = constructors.map { constructor =>
+            val (resolvedConsParams, _) = resolveParams(constructor.params, ctx)
+            Constructor[Expr](constructor.ident, constructor.owner, resolvedConsParams)
+          }
+          Inductive[Expr](Var.Defined(ident.name), resolvedParams, resolvedConstructors)
         }
-        Inductive[Expr](Var.Defined(ident.name), resolvedParams, resolvedConstructors)
       }
 
       case Overloaded(ident, body) => {
@@ -255,7 +255,7 @@ object Resolve {
             (resolvedBody :+ resolved.asInstanceOf[Function[Expr]], newCtx)
           }
         }
-        Overloaded(Var.Defined(ident.name), resolvedBody)
+        Overloaded[Expr](Var.Defined(ident.name), resolvedBody)
       }
 
       case _ => unreachable

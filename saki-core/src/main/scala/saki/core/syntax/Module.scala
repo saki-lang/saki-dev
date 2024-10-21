@@ -3,7 +3,7 @@ package saki.core.syntax
 import saki.core.context.Environment
 import saki.core.domain.Value
 import saki.core.elaborate.Resolve
-import saki.core.elaborate.Resolve.{preResolve, resolve}
+import saki.core.elaborate.Resolve.resolve
 import saki.core.elaborate.Synthesis.synth
 import saki.core.syntax.Module.EvalResult
 import saki.prelude.Prelude
@@ -26,28 +26,48 @@ case class Module(definitions: Set[Definition[Term]]) {
 }
 
 object Module {
-  
+
   def empty: Module = Module(Set.empty)
 
   def from(definitions: Seq[Definition[Expr]]): Module = {
 
-    // Pre-resolve phase
+    // Pre-resolve phase: add all definitions to the context
     val preResolveContext = definitions.foldLeft(Resolve.Context(Prelude.symbols)) {
-      (ctx, definition) => definition.preResolve(ctx)
+      (ctx, definition) => ctx + definition.ident
     }
 
-    // TODO: Pre-build environment for mutual recursion
+    val resolvedContext = definitions.foldLeft(preResolveContext) {
+      (ctx, definition) => definition.resolve(ctx)._2
+    }
 
-    // Resolve phase
-    val (_, finalEnv) = definitions.foldLeft((preResolveContext, Prelude.environment)) {
-      case ((resolvingContext, env), definition) => {
-        val (resolved, newCtx) = definition.resolve(resolvingContext)
-        val definitionSynth = resolved.synth(env)
-        (newCtx, env.add(definitionSynth))
+    val stronglyConnectedSeq: Seq[Set[Definition[Expr]]] = {
+      resolvedContext.dependencyGraph.stronglyConnectedComponents.reverse.map(
+        _.flatMap(name => definitions.filter(name == _.ident.name))
+      )
+    }.filter(_.nonEmpty)
+
+    val (_, finalEnv) = stronglyConnectedSeq.foldLeft((resolvedContext, Prelude.environment)) {
+      case ((resolvingContext, env), definitions) => {
+        if definitions.size == 1 then {
+          // If the strongly connected component contains only one definition,
+          // resolve and synthesis it immediately
+          val (resolved, newCtx) = definitions.head.resolve(resolvingContext)
+          val definitionSynth = resolved.synth(env)
+          (newCtx, env.add(definitionSynth))
+        } else {
+          // Otherwise, the definitions in the strongly connected component
+          // are mutually recursive, so we need to resolve them together
+          synthStronglyConnectedDefinitions(definitions)(env)
+        }
       }
     }
+
     Module(finalEnv.definitions.values.toSet)
   }
+
+  private def synthStronglyConnectedDefinitions(definitions: Set[Definition[Expr]])(
+    implicit env: Environment.Typed[Value]
+  ): (Resolve.Context, Environment.Typed[Value]) = ???
 
   case class EvalResult(term: Term, `type`: Term) {
     def unapply: (Term, Term) = (term, `type`)

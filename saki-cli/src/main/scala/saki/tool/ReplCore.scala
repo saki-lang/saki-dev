@@ -6,7 +6,7 @@ import saki.concrete.syntax.{Definition, Evaluation, Statement}
 import saki.core.context.{Environment, Typed}
 import saki.core.domain.Value
 import saki.core.elaborate.Resolve
-import saki.core.elaborate.Resolve.{preResolve, resolve}
+import saki.core.elaborate.Resolve.resolve
 import saki.core.elaborate.Synthesis.synth
 import saki.core.syntax.{Expr, Var}
 import saki.core.syntax.Module.EvalResult
@@ -41,11 +41,6 @@ private class ReplCore {
       val evaluations = entities.collect { case eval: Evaluation => eval }
 
       catchError(source) { _ =>
-
-        resolveContext = definitions.foldLeft(resolveContext) {
-          (ctx, definition) => definition.preResolve(ctx)
-        }
-
         val (newContext, newEnv) = definitions.foldLeft((resolveContext, environment)) {
           case ((resolvingContext, env), definition) => {
             val (resolved, newCtx) = definition.resolve(resolvingContext)

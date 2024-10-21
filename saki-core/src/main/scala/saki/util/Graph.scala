@@ -11,7 +11,7 @@ import scala.collection.mutable
  */
 class Graph[T](
   val isDirected: Boolean = true,
-  private val adjacencyList: Map[T, List[T]] = Map(),
+  private val adjacencyList: Map[T, Set[T]] = Map.empty[T, Set[T]],
 ) {
 
   /**
@@ -22,7 +22,7 @@ class Graph[T](
    */
   def addVertex(vertex: T): Graph[T] = {
     if adjacencyList.contains(vertex) then this else {
-      Graph(isDirected, adjacencyList + (vertex -> List()))
+      Graph(isDirected, adjacencyList + (vertex -> Set.empty[T]))
     }
   }
 
@@ -35,9 +35,9 @@ class Graph[T](
    */
   def addEdge(v1: T, v2: T): Graph[T] = {
     val updatedGraph = addVertex(v1).addVertex(v2)
-    val updatedAdjList = updatedGraph.adjacencyList + (v1 -> (v2 :: updatedGraph.adjacencyList(v1)))
+    val updatedAdjList = updatedGraph.adjacencyList + (v1 -> (updatedGraph.adjacencyList(v1) + v2))
     val finalAdjList = if isDirected then updatedAdjList else {
-      updatedAdjList + (v2 -> (v1 :: updatedAdjList.getOrElse(v2, List())))
+      updatedAdjList + (v2 -> (updatedAdjList.getOrElse(v2, Set.empty[T]) + v1))
     }
     Graph(isDirected, finalAdjList)
   }
@@ -46,9 +46,9 @@ class Graph[T](
    * Retrieves the neighbors of a given vertex.
    *
    * @param vertex The vertex whose neighbors are to be retrieved.
-   * @return A list of neighbors of the given vertex.
+   * @return A set of neighbors of the given vertex.
    */
-  def neighbors(vertex: T): List[T] = adjacencyList.getOrElse(vertex, List())
+  def neighbors(vertex: T): Set[T] = adjacencyList.getOrElse(vertex, Set.empty[T])
 
   /**
    * Checks if the graph contains a given vertex.
@@ -144,8 +144,8 @@ class Graph[T](
   def merge(other: Graph[T]): Graph[T] = {
     val combinedAdjacencyList = other.adjacencyList.foldLeft(adjacencyList) {
       case (acc, (vertex, neighbors)) => {
-        val updatedNeighbors = acc.getOrElse(vertex, List()) ++ neighbors
-        acc + (vertex -> updatedNeighbors.distinct) // Ensure no duplicate neighbors
+        val updatedNeighbors = acc.getOrElse(vertex, Set.empty[T]) ++ neighbors
+        acc + (vertex -> updatedNeighbors)
       }
     }
     Graph(isDirected, combinedAdjacencyList)
@@ -245,10 +245,10 @@ class Graph[T](
    * @return A new graph that is the transpose of this graph.
    */
   private def transpose(): Graph[T] = {
-    val transposedAdjList = mutable.Map[T, List[T]]().withDefaultValue(List())
+    val transposedAdjList = mutable.Map[T, Set[T]]().withDefaultValue(Set.empty[T])
     for ((vertex, neighbors) <- adjacencyList) {
       for (neighbor <- neighbors) {
-        transposedAdjList(neighbor) = vertex :: transposedAdjList(neighbor)
+        transposedAdjList(neighbor) = transposedAdjList(neighbor) + vertex
       }
     }
     Graph(isDirected = true, transposedAdjList.toMap)
@@ -267,18 +267,18 @@ class Graph[T](
 }
 
 object Graph {
-  
+
   /**
-  * Creates an empty directed graph.
-  *
-  * @tparam T The type of the vertices in the graph.
-  * @return An empty directed graph.
-  */
+   * Creates an empty directed graph.
+   *
+   * @tparam T The type of the vertices in the graph.
+   * @return An empty directed graph.
+   */
   def directed[T]: Graph[T] = Graph[T](isDirected = true, Map())
 
   /**
    * Creates an empty undirected graph.
-   * 
+   *
    * @tparam T The type of the vertices in the graph.
    * @return An empty undirected graph.
    */
