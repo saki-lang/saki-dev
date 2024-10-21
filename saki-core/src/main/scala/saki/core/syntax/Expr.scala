@@ -6,6 +6,7 @@ import saki.core.elaborate.{Resolve, Synthesis}
 import saki.core.Entity
 import saki.util.SourceSpan
 import saki.error.{CoreError, Error, UnknownError}
+import saki.error.CoreErrorKind.TypeNotMatch
 
 import scala.collection.Seq
 
@@ -125,9 +126,12 @@ enum Expr(val span: SourceSpan) extends Entity {
     }
   }
 
-  def elaborate(expected: Term)(
-    implicit env: Environment.Typed[Value]
-  ): Term = Synthesis.elaborate(this, expected)
+  def elaborate(expectedType: Term)(implicit env: Environment.Typed[Value]): Term = {
+    val (term, ty) = this.synth(env).unpack
+    if !(ty <:< expectedType.eval) then TypeNotMatch.raise(this.span) {
+      s"Expected type: $expectedType, found: $ty"
+    } else term
+  }
 
   def resolve(implicit ctx: Resolve.Context): (Expr, Resolve.Context) = {
     try Resolve.resolveExpr(this) catch {

@@ -12,41 +12,6 @@ import scala.collection.mutable.ArrayBuffer
 
 object Synthesis:
 
-  def elaborate(expr: Expr, expectedType: Term)(
-    implicit env: Environment.Typed[Value]
-  ): Term = expr match {
-    case Expr.Lambda(lambdaParam, body, returnType) => {
-      // Check that expectedType is a Pi type
-      expectedType.normalize match {
-        case Term.Pi(piParam, codomain) => Term.Lambda(
-          param = lambdaParam.map(_.elaborate(piParam.`type`)),
-          body = env.withLocal(lambdaParam.ident, piParam.`type`.eval, piParam.`type`.infer) {
-            // Check that the body type is the same as the codomain of the Pi type
-            returnType.map(_.synth.term.eval unify codomain.eval) match {
-              case Some(false) => TypeNotMatch.raise(returnType.get.span) {
-                s"Expected type: $codomain, found: ${returnType.get.synth.term}"
-              }
-              case _ => body.elaborate(codomain)
-            }
-          }
-        )
-        case ty => TypeNotMatch.raise(expr.span) {
-          s"Expected a function type or a Pi type, found: $ty"
-        }
-      }
-    }
-    case Expr.Hole(_) => UnexpectedValue.raise(expr.span) {
-      "Holes are not allowed in this context"
-    }
-    case _ => {
-      val synthResult = expr.synth
-      if !(synthResult.`type` unify expectedType.eval) then TypeNotMatch.raise(expr.span) {
-        s"Expected type: $expectedType, found: ${synthResult.`type`}"
-      }
-      synthResult.term
-    }
-  }
-
   case class Synth(term: Term, `type`: Type) {
     def unpack: (Term, Type) = (term, `type`)
     def normalize(implicit env: Environment.Typed[Value]): Synth = {
@@ -162,8 +127,24 @@ object Synthesis:
           }
         }
 
+        case Value.Universe => fn match {
+          case Term.Pi(piParam, codomain) => {
+            val (argTerm, argType) = argExpr.value.synth(env).unpack
+            if !(piParam.`type`.eval <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
+              s"Expected type: ${piParam.`type`}, found: $argType"
+            }
+            val codomainValue = env.withLocal(piParam.ident, argTerm.eval, argType) {
+              implicit env => codomain.eval(env)
+            }
+            Synth(codomainValue.readBack, Value.Universe)
+          }
+          case _ => TypeNotMatch.raise(fnExpr.span) {
+            s"Expected a function, found: $fn"
+          }
+        }
+
         case _ => TypeNotMatch.raise(fnExpr.span) {
-          s"Expected a function type, found: $fnType"
+          s"Expected a function, found: $fn"
         }
       }
     }
@@ -389,7 +370,7 @@ object Synthesis:
   ): (Seq[Param[Term]], Environment.Typed[Value]) = {
     paramExprs.foldLeft((Seq.empty[Param[Term]], env: Environment.Typed[Value])) {
       case ((params, env), paramExpr) => {
-        val param = Param(paramExpr.ident, paramExpr.`type`.elaborate(Term.Universe)(env))
+        val param = Param(paramExpr.ident, paramExpr.`type`.synth(env).term)
         (params :+ param, env.add(param.ident, Value.variable(param.ident), param.`type`.eval(env)))
       }
     }

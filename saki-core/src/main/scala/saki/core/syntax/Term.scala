@@ -241,6 +241,10 @@ enum Term extends RuntimeEntity[Type] {
 
     case PrimitiveType(ty) => Value.PrimitiveType(ty)
 
+    // case Variable(variable) => env.getValue(variable) match {
+    //   case Some(value) => value
+    //   case None => Value.Neutral(NeutralValue.Variable(variable))
+    // }
     case Variable(variable) => env.getValue(variable).get
 
     case FunctionInvoke(fnRef, argTerms) => {

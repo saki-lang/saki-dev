@@ -214,12 +214,13 @@ object Resolve {
 
       case DefinedFunction(ident, params, resultType, _, body) => {
         val (resolvedParams, ctxWithParam) = resolveParams(params)
-        val (resolvedResultType, signatureCtx) = resultType.resolve(ctxWithParam)
         // register the function name to global context
         global += ident
         // add the function name to the context for recursive calls
-        signatureCtx.withDefinition(ident) { implicit ctx =>
-          val (resolvedBody, bodyCtx) = body.get.resolve(ctx)
+        ctxWithParam.withDefinition(ident) { implicit ctx =>
+          // TODO: return type cannot call itself, add a check or remove the ident from the context
+          val (resolvedResultType, signatureCtx) = resultType.resolve(ctx)
+          val (resolvedBody, bodyCtx) = body.get.resolve(signatureCtx)
           val isRecursive = bodyCtx.dependencyGraph.isInCycle(ident.name)
           // update the global context with the dependency graph
           global = global.copy(dependencyGraph = bodyCtx.dependencyGraph)
