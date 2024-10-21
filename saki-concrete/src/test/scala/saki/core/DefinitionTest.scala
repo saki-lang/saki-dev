@@ -255,6 +255,37 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     module.eval("isOdd(n9)") should be(module.eval("true"))
   }
 
+  test("inductive mutual recursive") {
+    val code = {
+      """
+        type Expr = inductive {
+            Var(String)
+            // Π(x : A). B
+            Pi(String, Expr, Expr)
+            // λ(x : A). t
+            Lambda(String, Expr, Expr)
+            // f a
+            Apply(Expr, Expr)
+        }
+
+        type Value = inductive {
+            Neutral(NeutralValue)
+            Type(Int)
+            Lambda(Value, Value -> Value)
+            Pi(Value, Value -> Value)
+        }
+
+        type Type = Value
+
+        type NeutralValue = inductive {
+            Var(String)
+            Apply(NeutralValue, Value)
+        }
+      """
+    }
+    compileModule(code)
+  }
+
   test("rbtree") {
     val code = {
       """

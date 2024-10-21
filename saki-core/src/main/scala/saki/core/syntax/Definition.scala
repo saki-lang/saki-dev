@@ -105,12 +105,18 @@ trait FnLike[T <: Entity] {
   def arguments[T1 <: Entity](argValues: Seq[T1]): Seq[(Param[T], T1)] = params.zip(argValues)
 }
 
-trait Declaration[T <: Entity] {
+trait Symbol[T <: Entity] {
   def ident: Var.Defined[T, ?]
   def toIdent[U <: Entity]: Var.Defined[U, ?]
+  def kind: SymbolKind
 }
 
-sealed trait Definition[T <: Entity] extends Declaration[T]
+enum SymbolKind {
+  case Function
+  case Inductive
+}
+
+sealed trait Definition[T <: Entity] extends Symbol[T]
 
 // Too young, too simple, sometimes naive
 sealed trait NaiveDefinition[T <: Entity] extends Definition[T] with FnLike[T] {
@@ -129,6 +135,7 @@ trait Function[T <: Entity] extends NaiveDefinition[T] {
   override def ident: Var.Defined[T, Function]
   def isRecursive: Boolean
   def resultType: T
+  override def kind: SymbolKind = SymbolKind.Function
 }
 
 case class DefinedFunction[T <: Entity](
@@ -173,9 +180,9 @@ case class NativeFunction[T <: Entity](
   }
 }
 
-trait OverloadedDeclaration[
-  T <: Entity, Self <: Declaration[T], OverloadedType <: Declaration[T]
-] extends Declaration[T] {
+trait OverloadedSymbol[
+  T <: Entity, Self <: Symbol[T], OverloadedType <: Symbol[T]
+] extends Symbol[T] {
   def overloads: Seq[OverloadedType]
   def merge(other: OverloadedType | Self): Self
 }
@@ -183,9 +190,11 @@ trait OverloadedDeclaration[
 case class Overloaded[T <: Entity](
   override val ident: Var.Defined[T, Overloaded],
   overloads: Seq[Function[T]],
-) extends Definition[T] with OverloadedDeclaration[T, Overloaded[T], Function[T]] {
+) extends Definition[T] with OverloadedSymbol[T, Overloaded[T], Function[T]] {
 
   ident.definition := this
+
+  override def kind: SymbolKind = SymbolKind.Function
 
   override def toIdent[U <: Entity]: Var.Defined[U, Overloaded] = Var.Defined(ident.name)
 
@@ -221,6 +230,8 @@ case class Inductive[T <: Entity](
 
   ident.definition := this
 
+  override def kind: SymbolKind = SymbolKind.Inductive
+
   def resultType(implicit ev: EntityFactory[T, T]): T = ev.universe
 
   override def toString: String = {
@@ -244,47 +255,58 @@ case class Constructor[T <: Entity](
   }
 }
 
-trait PreDeclaration[T <: Entity, Def[E <: Entity] <: Definition[E]] extends Declaration[T] {
+trait Declaration[T <: Entity, Def[E <: Entity] <: Definition[E]] extends Symbol[T] {
   override def toIdent[U <: Entity]: Var.Defined[U, Def] = Var.Defined(ident.name)
 }
 
-case class NaivePreDeclaration[T <: Entity, Def[E <: Entity] <: NaiveDefinition[E]](
+case class NaiveDeclaration[T <: Entity, Def[E <: Entity] <: NaiveDefinition[E]](
   override val ident: Var.Defined[T, Def],
   override val params: Seq[Param[T]],
   resultType: T,
-) extends PreDeclaration[T, Def] with FnLike[T]
+  override val kind: SymbolKind,
+) extends Declaration[T, Def] with FnLike[T] {
 
-case class OverloadedPreDeclaration[T <: Entity](
+  def signature: Signature[T] = Signature(params, resultType)
+
+  def buildInvoke(implicit factory: EntityFactory[T, T]): T = this.kind match {
+    case SymbolKind.Function => factory.functionInvoke(Var.Defined(ident.name), signature.paramToVars)
+    case SymbolKind.Inductive => factory.inductiveType(Var.Defined(ident.name), signature.paramToVars)
+  }
+}
+
+case class OverloadedDeclaration[T <: Entity](
   override val ident: Var.Defined[T, Overloaded],
-  overloads: Seq[PreDeclaration[T, Function]],
-) extends PreDeclaration[T, Overloaded] with OverloadedDeclaration[
-  T, OverloadedPreDeclaration[T], PreDeclaration[T, Function]
+  overloads: Seq[Declaration[T, Function]],
+) extends Declaration[T, Overloaded] with OverloadedSymbol[
+  T, OverloadedDeclaration[T], Declaration[T, Function]
 ] {
-  override def merge(other: OverloadedPreDeclaration[T] | PreDeclaration[T, Function]): OverloadedPreDeclaration[T] = {
+  override def kind: SymbolKind = SymbolKind.Function
+
+  override def merge(other: OverloadedDeclaration[T] | Declaration[T, Function]): OverloadedDeclaration[T] = {
     assert(other.ident == this.ident)
     val ident: Var.Defined[T, Overloaded] = Var.Defined(this.ident.name)
     other match {
-      case function: PreDeclaration[T, Function] @unchecked => OverloadedPreDeclaration(ident, overloads :+ function)
-      case overloaded: OverloadedPreDeclaration[T] => OverloadedPreDeclaration(ident, overloads ++ overloaded.overloads)
+      case function: Declaration[T, Function] @unchecked => OverloadedDeclaration(ident, overloads :+ function)
+      case overloaded: OverloadedDeclaration[T] => OverloadedDeclaration(ident, overloads ++ overloaded.overloads)
     }
   }
 
   override def toIdent[U <: Entity]: Var.Defined[U, Overloaded] = Var.Defined(ident.name)
 }
 
-object OverloadedPreDeclaration {
+object OverloadedDeclaration {
   def merge[T <: Entity](
-    lhs: OverloadedPreDeclaration[T] | PreDeclaration[T, Function],
-    rhs: OverloadedPreDeclaration[T] | PreDeclaration[T, Function],
-  ): OverloadedPreDeclaration[T] = {
+    lhs: OverloadedDeclaration[T] | Declaration[T, Function],
+    rhs: OverloadedDeclaration[T] | Declaration[T, Function],
+  ): OverloadedDeclaration[T] = {
     (lhs, rhs) match {
-      case (lhs: PreDeclaration[T, Function] @unchecked, rhs: PreDeclaration[T, Function] @unchecked)  => {
+      case (lhs: Declaration[T, Function] @unchecked, rhs: Declaration[T, Function] @unchecked)  => {
         val ident: Var.Defined[T, Overloaded] = Var.Defined(lhs.ident.name)
-        OverloadedPreDeclaration(ident, Seq(lhs, rhs))
+        OverloadedDeclaration(ident, Seq(lhs, rhs))
       }
-      case (lhs: OverloadedPreDeclaration[T], rhs: PreDeclaration[T, Function] @unchecked) => lhs.merge(rhs)
-      case (lhs: PreDeclaration[T, Function] @unchecked, rhs: OverloadedPreDeclaration[T]) =>  rhs.merge(lhs)
-      case (lhs: OverloadedPreDeclaration[T], rhs: OverloadedPreDeclaration[T]) => lhs.merge(rhs)
+      case (lhs: OverloadedDeclaration[T], rhs: Declaration[T, Function] @unchecked) => lhs.merge(rhs)
+      case (lhs: Declaration[T, Function] @unchecked, rhs: OverloadedDeclaration[T]) =>  rhs.merge(lhs)
+      case (lhs: OverloadedDeclaration[T], rhs: OverloadedDeclaration[T]) => lhs.merge(rhs)
     }
   }
 }

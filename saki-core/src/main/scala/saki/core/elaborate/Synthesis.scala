@@ -84,9 +84,9 @@ object Synthesis:
     case Expr.Variable(ref) => ref match {
       // Converting a definition reference to a lambda, enabling curry-style function application
       case definitionVar: Var.Defined[Term@unchecked, ?] => env.getDefinition(definitionVar) match {
-        case Some(definition) => synthDeclarationRef(definition)
+        case Some(definition) => synthSymbol(definition)
         case None => env.declarations.get(definitionVar) match {
-          case Some(declaration) => synthDeclarationRef(declaration)
+          case Some(declaration) => synthSymbol(declaration)
           case None => UnresolvedReference.raise(expr.span) {
             s"Unresolved reference: ${definitionVar.name}"
           }
@@ -359,19 +359,19 @@ object Synthesis:
     case _ => unreachable
   }
 
-  def synthPreDeclaration(definition: Definition[Expr])(
+  def synthDeclaration(definition: Definition[Expr])(
     implicit env: Environment.Typed[Value]
-  ): PreDeclaration[Term, ?] = definition match {
+  ): Declaration[Term, ?] = definition match {
 
     case definition @ DefinedFunction(_, paramExprs, resultTypeExpr, _, _) => {
       val (params, envParams) = synthParams(paramExprs)
       val (resultType, _) = resultTypeExpr.synth(envParams).unpack
-      NaivePreDeclaration[Term, Function](definition.toIdent[Term], params, resultType)
+      NaiveDeclaration[Term, Function](definition.toIdent[Term], params, resultType, SymbolKind.Function)
     }
 
     case inductive @ Inductive(_, paramExprs, _) => {
       val (params, _) = synthParams(paramExprs)
-      NaivePreDeclaration[Term, Inductive](inductive.toIdent[Term], params, Term.Universe)
+      NaiveDeclaration[Term, Inductive](inductive.toIdent[Term], params, Term.Universe, SymbolKind.Inductive)
     }
 
     case _ => unreachable
@@ -395,7 +395,7 @@ object Synthesis:
     }
   }
 
-  def synthDeclarationRef(decl: Declaration[Term])(
+  def synthSymbol(decl: Symbol[Term])(
     implicit env: Environment.Typed[Value]
   ): Synth = decl match {
 
@@ -412,7 +412,10 @@ object Synthesis:
       Synth(lambda, pi.eval)
     }
 
-    case declaration: NaivePreDeclaration[Term, ?] => ???
+    case declaration: NaiveDeclaration[Term, ?] => Synth(
+      term = declaration.params.buildLambda(declaration.buildInvoke(Term)).normalize,
+      `type` = declaration.params.buildPiType(declaration.resultType).eval,
+    )
 
   }
 

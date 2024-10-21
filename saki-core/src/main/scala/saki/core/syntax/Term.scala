@@ -245,11 +245,15 @@ enum Term extends RuntimeEntity[Type] {
 
     case FunctionInvoke(fnRef, argTerms) => {
 
-      val function: Function[Term] = env.definitions(fnRef) match {
+      val function: Function[Term] = env.getSymbol(fnRef).get match {
         case function: Function[Term] => function
         case _: Overloaded[Term] => fnRef.definition.get
+        case _: Declaration[Term, Function] @unchecked => {
+          // If the function is a pre-declared function, keep it as a neutral value
+          return Value.functionInvoke(fnRef, argTerms.map(_.eval))
+        }
         case _ => DefinitionNotMatch.raise {
-          s"Expected function, but got: ${fnRef.definition.get.getClass.getSimpleName}"
+          s"Expected function, but got: ${fnRef.name}"
         }
       }
 

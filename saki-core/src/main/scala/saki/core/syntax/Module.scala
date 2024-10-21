@@ -4,9 +4,9 @@ import saki.core.context.Environment
 import saki.core.domain.Value
 import saki.core.elaborate.Resolve
 import saki.core.elaborate.Resolve.resolve
-import saki.core.elaborate.Synthesis.{synth, synthPreDeclaration}
+import saki.core.elaborate.Synthesis.{synth, synthDeclaration}
 import saki.core.syntax.Module.EvalResult
-import saki.core.syntax.OverloadedPreDeclaration.merge
+import saki.core.syntax.OverloadedDeclaration.merge
 import saki.prelude.Prelude
 
 import scala.collection.Seq
@@ -73,17 +73,27 @@ object Module {
   private def synthStronglyConnectedDefinitions(definitions: Set[Definition[Expr]])(
     implicit env: Environment.Typed[Value]
   ): (Resolve.Context, Environment.Typed[Value]) = {
+    // TODO: In a same strongly connected component, the dependency order of the
+    //  params and the return type of the functions should be preserved:
+    //  sort the definitions in the strongly connected component based on the
+    //  topological order of the dependency relation between types
+    //  e.g. def A: C; def B: A. In this case, B should be resolved before A
+
     // Pre-build declarations for definitions of the strongly connected component
     // Step 1. Merge overloaded functions
-    val declarations = definitions.map(synthPreDeclaration).groupBy(_.ident).map {
+    val declarations = definitions.map(synthDeclaration).groupBy(_.ident).map {
       case (_, decls) => if decls.size == 1 then decls.head else {
         decls.reduce { (decl1, decl2) => merge(decl1.asInstanceOf, decl2.asInstanceOf) }
       }
     }
+    // Step 2. Add declarations to the environment
     val declEnv: Environment.Typed[Value] = declarations.foldLeft(env) {
       (env, declaration) => env.addDeclaration(declaration)
     }
-    definitions.foldLeft((Resolve.Context(env), env)) {
+    // Step 3. Resolve and synthesis definitions with the pre-built declarations
+    val variables = declEnv.definitions.keys ++ declEnv.declarations.keys
+    val resolveCtx = Resolve.Context(variableMap = variables.map(variable => variable.name -> variable).toMap)
+    definitions.foldLeft((resolveCtx, env)) {
       case ((resolvingContext, env), definition) => {
         val (resolved, newCtx) = definition.resolve(resolvingContext)
         val definitionSynth = resolved.synth(declEnv)

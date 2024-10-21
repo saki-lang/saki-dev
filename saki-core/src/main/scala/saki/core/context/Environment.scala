@@ -17,7 +17,7 @@ object Environment {
 case class TypedEnvironment[T <: Entity] private (
   override val definitions: Map[Var.Defined[Term, ?], Definition[Term]] = Map.empty,
   override val currentDefinition: Option[Var.Defined[Term, ?]] = None,
-  declarations: Map[Var.Defined[Term, ?], PreDeclaration[Term, ?]] = Map.empty,
+  declarations: Map[Var.Defined[Term, ?], Declaration[Term, ?]] = Map.empty,
   locals: Map[Var.Local, Typed[T]] = Map.empty[Var.Local, Typed[T]],
 ) extends Environment[T] with TypedLocalMutableContext[T] {
 
@@ -65,7 +65,7 @@ case class TypedEnvironment[T <: Entity] private (
     )
   }
 
-  def addDeclaration(declaration: PreDeclaration[Term, ?]): TypedEnvironment[T] = {
+  def addDeclaration(declaration: Declaration[Term, ?]): TypedEnvironment[T] = {
     TypedEnvironment[T](
       definitions = definitions,
       currentDefinition = currentDefinition,
@@ -76,6 +76,13 @@ case class TypedEnvironment[T <: Entity] private (
 
   override def getDefinition(definition: Var.Defined[Term, ?]): Option[Definition[Term]] = {
     definitions.get(definition)
+  }
+
+  def getSymbol(ident: Var.Defined[Term, ?]): Option[Symbol[Term]] = {
+    definitions.get(ident) match {
+      case Some(symbol: Symbol[Term]) => Some(symbol)
+      case _ => declarations.get(ident)
+    }
   }
 
   override def getValue(local: Var.Local): Option[T] = locals.get(local).map(_.value)

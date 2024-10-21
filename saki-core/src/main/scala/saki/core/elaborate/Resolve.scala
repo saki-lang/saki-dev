@@ -195,8 +195,6 @@ object Resolve {
     definition: Definition[Expr]
   )(implicit ctx: Resolve.Context): (Definition[Expr], Resolve.Context) = {
 
-    // TODO: support mutual recursion (need another pass to pre-build declarations)
-
     var global: Resolve.Context = ctx
 
     def resolveParams(
@@ -206,7 +204,7 @@ object Resolve {
         case ((resolvedParams, ctx), param) => {
           val (resolvedParamType, paramCtx) = param.`type`.resolve(ctx)
           val resolvedParam = Param(param.ident, resolvedParamType)
-          global = global.copy(dependencyGraph = paramCtx.dependencyGraph)
+          global = global.copy(dependencyGraph = global.dependencyGraph merge paramCtx.dependencyGraph)
           (resolvedParams :+ resolvedParam, paramCtx + resolvedParam.ident)
         }
       }
