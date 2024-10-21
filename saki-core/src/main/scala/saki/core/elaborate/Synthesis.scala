@@ -311,12 +311,13 @@ object Synthesis:
   def synthDefinition(definition: Definition[Expr])(
     implicit env: Environment.Typed[Value]
   ): Definition[Term] = definition match {
+
     case DefinedFunction(ident, paramExprs, resultTypeExpr, isRecursive, pristineBody) => {
       val (params, envParams) = synthParams(paramExprs)
       val (resultType, _) = resultTypeExpr.synth(envParams).unpack
       // Try to obtain the declaration of the function from the environment
       val defVar: Var.Defined[Term, Function] = env.declarations.get(Var.Defined(ident.name)) match {
-        case Some(decl) => decl.ident.asInstanceOf[Var.Defined[Term, Function]]
+        case Some(decl) => Var.Defined[Term, Function](decl.ident.name)
         case _ => Var.Defined[Term, Function](ident.name)
       }
       val function = DefinedFunction[Term](defVar, params, resultType, isRecursive)
@@ -358,6 +359,24 @@ object Synthesis:
     case _ => unreachable
   }
 
+  def synthPreDeclaration(definition: Definition[Expr])(
+    implicit env: Environment.Typed[Value]
+  ): PreDeclaration[Term, ?] = definition match {
+
+    case definition @ DefinedFunction(_, paramExprs, resultTypeExpr, _, _) => {
+      val (params, envParams) = synthParams(paramExprs)
+      val (resultType, _) = resultTypeExpr.synth(envParams).unpack
+      NaivePreDeclaration[Term, Function](definition.toIdent[Term], params, resultType)
+    }
+
+    case inductive @ Inductive(_, paramExprs, _) => {
+      val (params, _) = synthParams(paramExprs)
+      NaivePreDeclaration[Term, Inductive](inductive.toIdent[Term], params, Term.Universe)
+    }
+
+    case _ => unreachable
+  }
+
   /**
    * Synthesize the parameters of a function
    * @param paramExprs Sequence of Param[Expr]
@@ -385,8 +404,6 @@ object Synthesis:
       `type` = definition.params.buildPiType(definition.resultType).eval,
     )
     
-    case declaration: PreDeclaration[Term, ?] => ???
-
     case overloaded: Overloaded[Term] => {
       val lambdaPaths = overloaded.overloads.map(overloaded => (overloaded.params, overloaded.buildInvoke(Term)))
       val piPaths = overloaded.overloads.map(overloaded => (overloaded.params, overloaded.resultType))
@@ -394,6 +411,8 @@ object Synthesis:
       val pi = Term.overloaded(Term.OverloadedPi.apply, piPaths)
       Synth(lambda, pi.eval)
     }
+
+    case declaration: NaivePreDeclaration[Term, ?] => ???
 
   }
 

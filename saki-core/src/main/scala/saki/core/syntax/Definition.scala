@@ -100,7 +100,7 @@ case class Signature[T <: Entity](params: ParamList[T], resultType: T) extends F
 type ArgList[T <: Entity] = Seq[Argument[T]]
 
 trait FnLike[T <: Entity] {
-  def params: ParamList[T]
+  def params: Seq[Param[T]]
   def paramToVars(implicit factory: EntityFactory[T, T]): Seq[T] = params.map(_.ident).map(factory.variable)
   def arguments[T1 <: Entity](argValues: Seq[T1]): Seq[(Param[T], T1)] = params.zip(argValues)
 }
@@ -133,7 +133,7 @@ trait Function[T <: Entity] extends NaiveDefinition[T] {
 
 case class DefinedFunction[T <: Entity](
   override val ident: Var.Defined[T, Function],
-  override val params: ParamList[T],
+  override val params: Seq[Param[T]],
   override val resultType: T,
   // Mark this function as a recursive or mutual recursive function
   // When a function is a recursive function, its invocation will not be evaluated instantly
@@ -173,10 +173,17 @@ case class NativeFunction[T <: Entity](
   }
 }
 
+trait OverloadedDeclaration[
+  T <: Entity, Self <: Declaration[T], OverloadedType <: Declaration[T]
+] extends Declaration[T] {
+  def overloads: Seq[OverloadedType]
+  def merge(other: OverloadedType | Self): Self
+}
+
 case class Overloaded[T <: Entity](
   override val ident: Var.Defined[T, Overloaded],
   overloads: Seq[Function[T]],
-) extends Definition[T] {
+) extends Definition[T] with OverloadedDeclaration[T, Overloaded[T], Function[T]] {
 
   ident.definition := this
 
@@ -237,8 +244,47 @@ case class Constructor[T <: Entity](
   }
 }
 
-case class PreDeclaration[T <: Entity, Def[E <: Entity] <: Definition[E]](
-  ident: Var.Defined[T, Def], signature: Signature[T],
-) extends Declaration[T] {
+trait PreDeclaration[T <: Entity, Def[E <: Entity] <: Definition[E]] extends Declaration[T] {
   override def toIdent[U <: Entity]: Var.Defined[U, Def] = Var.Defined(ident.name)
+}
+
+case class NaivePreDeclaration[T <: Entity, Def[E <: Entity] <: NaiveDefinition[E]](
+  override val ident: Var.Defined[T, Def],
+  override val params: Seq[Param[T]],
+  resultType: T,
+) extends PreDeclaration[T, Def] with FnLike[T]
+
+case class OverloadedPreDeclaration[T <: Entity](
+  override val ident: Var.Defined[T, Overloaded],
+  overloads: Seq[PreDeclaration[T, Function]],
+) extends PreDeclaration[T, Overloaded] with OverloadedDeclaration[
+  T, OverloadedPreDeclaration[T], PreDeclaration[T, Function]
+] {
+  override def merge(other: OverloadedPreDeclaration[T] | PreDeclaration[T, Function]): OverloadedPreDeclaration[T] = {
+    assert(other.ident == this.ident)
+    val ident: Var.Defined[T, Overloaded] = Var.Defined(this.ident.name)
+    other match {
+      case function: PreDeclaration[T, Function] @unchecked => OverloadedPreDeclaration(ident, overloads :+ function)
+      case overloaded: OverloadedPreDeclaration[T] => OverloadedPreDeclaration(ident, overloads ++ overloaded.overloads)
+    }
+  }
+
+  override def toIdent[U <: Entity]: Var.Defined[U, Overloaded] = Var.Defined(ident.name)
+}
+
+object OverloadedPreDeclaration {
+  def merge[T <: Entity](
+    lhs: OverloadedPreDeclaration[T] | PreDeclaration[T, Function],
+    rhs: OverloadedPreDeclaration[T] | PreDeclaration[T, Function],
+  ): OverloadedPreDeclaration[T] = {
+    (lhs, rhs) match {
+      case (lhs: PreDeclaration[T, Function] @unchecked, rhs: PreDeclaration[T, Function] @unchecked)  => {
+        val ident: Var.Defined[T, Overloaded] = Var.Defined(lhs.ident.name)
+        OverloadedPreDeclaration(ident, Seq(lhs, rhs))
+      }
+      case (lhs: OverloadedPreDeclaration[T], rhs: PreDeclaration[T, Function] @unchecked) => lhs.merge(rhs)
+      case (lhs: PreDeclaration[T, Function] @unchecked, rhs: OverloadedPreDeclaration[T]) =>  rhs.merge(lhs)
+      case (lhs: OverloadedPreDeclaration[T], rhs: OverloadedPreDeclaration[T]) => lhs.merge(rhs)
+    }
+  }
 }

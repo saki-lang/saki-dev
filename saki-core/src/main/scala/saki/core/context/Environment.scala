@@ -65,6 +65,15 @@ case class TypedEnvironment[T <: Entity] private (
     )
   }
 
+  def addDeclaration(declaration: PreDeclaration[Term, ?]): TypedEnvironment[T] = {
+    TypedEnvironment[T](
+      definitions = definitions,
+      currentDefinition = currentDefinition,
+      declarations = declarations + (declaration.ident -> declaration),
+      locals = locals,
+    )
+  }
+
   override def getDefinition(definition: Var.Defined[Term, ?]): Option[Definition[Term]] = {
     definitions.get(definition)
   }

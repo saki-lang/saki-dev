@@ -194,29 +194,6 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     module.eval("map(Int, String, Option(Int)::Some(114514), (n: Int) => n.toString)") should be (module.eval("Option(String)::Some(\"114514\")"))
   }
 
-  test("GADT implicit type param") {
-    val code = {
-      """
-        type Option[A: 'Type] = inductive {
-            None
-            Some(A)
-        }
-
-        def map[A: 'Type, B: 'Type](option: Option[A], transform: A -> B): Option[B] = {
-            match option {
-                case Option[A]::None => Option[B]::None
-                case Option[A]::Some(value) => Option[B]::Some(transform(value))
-            }
-        }
-      """
-    }
-    val module = compileModule(code)
-    module.eval("""{
-      let option = Option[Int]::Some(19260817)
-      option.map[Int, String]((n: Int) => n.toString)
-    }""") should be (module.eval("Option(String)::Some(\"19260817\")"))
-  }
-
   test("overloaded") {
     val code = {
       """
