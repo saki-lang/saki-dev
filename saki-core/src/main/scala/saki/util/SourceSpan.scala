@@ -32,7 +32,12 @@ case class SourcePosition(line: Int, column: Int) {
   }
 
   def toCharPos(code: String): Int = {
-    code.split('\n').take(line - 1).map(_.length + 1).iterator.sum + column - 1
+    val lines = code.split("\n")
+    var charPoint = 0
+    for (i <- 0 until line - 1) {
+      charPoint += lines(i).length + 1 // Add 1 for the newline character
+    }
+    charPoint + column
   }
 }
 
