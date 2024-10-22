@@ -31,6 +31,7 @@ trait ErrorKind {
 
 enum CoreErrorKind(override val message: String) extends ErrorKind {
   case UnsupportedFeature extends CoreErrorKind("Unsupported feature")
+  case PanicFailure extends CoreErrorKind("Panic")
   case SizeNotMatch extends CoreErrorKind("Size not match")
   case TypeNotMatch extends CoreErrorKind("Type not match")
   case DefinitionNotMatch extends CoreErrorKind("Definition not match")
@@ -47,6 +48,7 @@ enum CoreErrorKind(override val message: String) extends ErrorKind {
   case PatternMismatch extends CoreErrorKind("Pattern mismatch")
   case PatternMatchFail extends CoreErrorKind("Pattern match fail")
   case MatchNotExhaustive extends CoreErrorKind("Match not exhaustive")
+  case NoLeastUpperBound extends CoreErrorKind("No least upper bound")
   case RecordMissingField extends CoreErrorKind("Missing field")
 
   def raise(info: => String): Nothing = throw CoreError(this, info)

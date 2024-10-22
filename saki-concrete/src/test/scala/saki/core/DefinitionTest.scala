@@ -442,6 +442,37 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             }
         }
 
+        def depth(tree: Tree): ℤ = match tree {
+            case Tree::Leaf => 0
+            case Tree::Node(c, x, left, right) => max(left.depth, right.depth) + 1
+        }
+
+        def formatLevel(tree: Tree, level maxDepth: ℤ): String = {
+            let spaces = " ".repeat(2 ** maxDepth - 1)
+            if level == 0 then {
+                match tree {
+                    case Tree::Leaf => " "
+                    case Tree::Node(c, value, l, r) => value.toString
+                } ++ spaces
+            } else match tree {
+                case Tree::Leaf => " "
+                case Tree::Node(c, x, left, right) => {
+                    let leftStr = left.formatLevel(level - 1, maxDepth - 1)
+                    let rightStr = right.formatLevel(level - 1, maxDepth - 1)
+                    leftStr ++ rightStr
+                }
+            }
+        }
+
+        def formatLevelBelow(tree: Tree, level maxDepth: ℤ): String = {
+            if level >= maxDepth then "" else {
+                let prefixStr = " ".repeat(2 ** (maxDepth - 1 - level) + 4)
+                let currentLevelStr = tree.formatLevel(level, maxDepth)
+                let levelBelowStr = tree.formatLevelBelow(level + 1, maxDepth)
+                prefixStr ++ currentLevelStr ++ "\n" ++ levelBelowStr
+            }
+        }
+
         // It's myTree!!!!!
         def myTree: Tree = {
             let tree = Tree::Leaf

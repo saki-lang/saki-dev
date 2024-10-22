@@ -94,7 +94,7 @@ trait SakiTestExt {
       parser.addErrorListener(listener)
 
       val block = Visitor().visitBlockExpr(parser.blockExpr())
-      block.emit.synth.unpack
+      block.emit.synth.normalize.unpack
     }
   }
 }

@@ -192,6 +192,89 @@ enum Value extends RuntimeEntity[Type] {
     case _ => false
   }
 
+  infix def leastUpperBound(that: Type)(implicit env: Environment.Typed[Value]): Type = (this, that) match {
+
+    // Case where both types are equal: the LUB is the type itself
+    case (t1, t2) if t1 == t2 => t1
+
+    // If one of the types is Nothing, the LUB is the other type
+    case (t1, PrimitiveType(LiteralType.NothingType)) => t1
+    case (PrimitiveType(LiteralType.NothingType), t2) => t2
+
+    // LUB for Universe levels: choose the larger Universe level
+    case (Value.Universe, Value.Universe) => Value.Universe
+
+    // LUB for Primitive types: If they match, return it, otherwise no common LUB
+    case (Value.PrimitiveType(t1), Value.PrimitiveType(t2)) => {
+      if (t1 == t2) Value.PrimitiveType(t1)
+      else NoLeastUpperBound.raise {
+        s"No least upper bound for incompatible primitive types: $t1 and $t2"
+      }
+    }
+
+    // LUB for Pi types: contravariant parameter type, covariant return type
+    case (Value.Pi(paramType1, closure1), Value.Pi(paramType2, closure2)) => {
+      val paramLub = paramType2 leastUpperBound paramType1  // Contravariant parameter type
+      val param = Value.variable(env.uniqueVariable)
+      val returnLub = closure1(param) leastUpperBound closure2(param) // Covariant return type
+      Value.Pi(paramLub, _ => returnLub)
+    }
+
+    // LUB for Sigma types: covariant parameter and closure type
+    case (Value.Sigma(paramType1, closure1), Value.Sigma(paramType2, closure2)) => {
+      val paramLub = paramType1 leastUpperBound paramType2 // Covariant parameter
+      val param = Value.variable(env.uniqueVariable)
+      val closureLub = closure1(param) leastUpperBound closure2(param) // Covariant closure
+      Value.Sigma(paramLub, _ => closureLub)
+    }
+
+    // LUB for Lambda values: parameter types must match, and take the LUB of bodies
+    case (Value.Lambda(paramType1, body1), Value.Lambda(paramType2, body2)) => {
+      val paramLub = paramType1 leastUpperBound paramType2 // Parameters must match
+      val param = Value.variable(env.uniqueVariable)
+      val bodyLub = body1(param) leastUpperBound body2(param) // LUB of bodies
+      Value.Lambda(paramLub, _ => bodyLub)
+    }
+
+    // LUB for Records: combine fields if types match
+    case (Value.Record(fields1), Value.Record(fields2)) => {
+      val commonFields = fields1.keySet.intersect(fields2.keySet)
+      val lubFields = commonFields.map { key =>
+        key -> (fields1(key) leastUpperBound fields2(key))
+      }.toMap
+      Value.Record(lubFields)
+    }
+
+    // LUB for Record Types: similar strategy to records, fields must be present in both and have a LUB
+    case (Value.RecordType(fields1), Value.RecordType(fields2)) => {
+      val commonFields = fields1.keySet.intersect(fields2.keySet)
+      val lubFields = commonFields.map { key =>
+        key -> (fields1(key) leastUpperBound fields2(key))
+      }.toMap
+      Value.RecordType(lubFields)
+    }
+
+    // LUB for Inductive Types: if they match, take LUB of arguments
+    case (InductiveType(ind1, args1), InductiveType(ind2, args2)) if ind1.name == ind2.name => {
+      val lubArgs = args1.zip(args2).map { case (arg1, arg2) => arg1 leastUpperBound arg2 }
+      Value.InductiveType(ind1, lubArgs)
+    }
+
+    // LUB for Inductive Variants: constructors and types must match, arguments need LUB
+    case (
+      Value.InductiveVariant(ind1, cons1, args1),
+      Value.InductiveVariant(ind2, cons2, args2),
+    ) if (ind1 unify ind2) && cons1.ident == cons2.ident => {
+      val lubArgs = args1.zip(args2).map { case (arg1, arg2) => arg1 leastUpperBound arg2 }
+      Value.InductiveVariant(ind1, cons1, lubArgs)
+    }
+
+    // No common LUB for incompatible types
+    case _ => NoLeastUpperBound.raise {
+      s"No least upper bound exists between: $this and $that"
+    }
+  }
+
   @deprecatedOverriding("For debugging purposes only, don't call it in production code")
   override def toString: String = this.readBack(Environment.Typed.empty).toString
 }

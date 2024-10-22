@@ -105,7 +105,7 @@ object Synthesis:
             if !(paramType <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
               s"Expected type: $paramType, found: $argType"
             }
-            Synth(fn.apply(argTerm), codomain(argTerm.eval))
+            Synth(Term.Apply(fn, argTerm), codomain(argTerm.eval))
           }
         }
 
@@ -181,18 +181,15 @@ object Synthesis:
       val clausesSynth: Seq[(Clause[Term], Term)] = clauses.map { clause =>
         synthClause(clause, scrutineesSynth)
       }
-      val clauseBodyTypes: Seq[Term] = clausesSynth.map(_._2)
-      if clauseBodyTypes.isEmpty then {
+      val clauseBodyTypeTerms: Seq[Term] = clausesSynth.map(_._2)
+      if clauseBodyTypeTerms.isEmpty then {
         SizeNotMatch.raise(expr.span) { "Expected at least one clause" }
       }
-      if !clauseBodyTypes.tail.forall(_.eval unify clauseBodyTypes.head.eval) then {
-        TypeNotMatch.raise(expr.span) {
-          s"Expected all clause bodies to have the same type, found: ${clauseBodyTypes.map(_.eval)}"
-        }
-      }
+      val clauseBodyTypes: Seq[Value] = clauseBodyTypeTerms.map(_.eval)
+      val leastUpperBoundType: Type = clauseBodyTypes.reduce((a, b) => a leastUpperBound b)
       Synth(
         term = Term.Match(scrutineesSynth.map(_.term), clausesSynth.map(_._1)),
-        `type` = clauseBodyTypes.head.eval
+        `type` = leastUpperBoundType
       )
     }
 

@@ -21,7 +21,16 @@ extension (clauses: Seq[Clause[Term]]) {
    * Return the body of the first matching clause.
    */
   def tryMatch(args: Seq[Value])(implicit env: Environment.Typed[Value]): Option[Value] = {
-    clauses.map { clause =>
+    // Here we use `iterator` to avoid evaluating all clauses.
+    // This is not just an optimization, but also a crucial approach when dealing with panics.
+    // e.g.
+    // ```
+    // match value {
+    //   case 0 => 0
+    //   case _ => panic("not zero")
+    // }
+    // ```
+    clauses.iterator.map { clause =>
       val optionalSubstMap: Option[Map[Var.Local, Value]] = {
         clause.patterns.zip(args).foldLeft(Some(Map.empty): Option[Map[Var.Local, Value]]) {
           case (Some(subst), (pattern, value)) => pattern.buildSubstMap(value).map(subst ++ _)

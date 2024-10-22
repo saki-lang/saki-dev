@@ -36,7 +36,7 @@ enum Term extends RuntimeEntity[Type] {
 
     case (Lambda(param, body), arg) => {
       env.withLocal(param.ident, Typed[Value](arg.eval, arg.infer)) {
-        implicit env => body.eval.readBack
+        implicit env => body.normalize
       }
     }
 
@@ -58,7 +58,7 @@ enum Term extends RuntimeEntity[Type] {
       }
       val (param, body) = validStates.head
       env.withLocal(param.ident, Typed[Value](arg.eval, arg.infer)) {
-        implicit env => body.eval.readBack
+        implicit env => body.normalize
       }
     }
 
@@ -66,7 +66,7 @@ enum Term extends RuntimeEntity[Type] {
   }
 
   override def toString: String = this match {
-    case Universe => s"#Universe"
+    case Universe => s"'Type"
     case Primitive(value) => value.toString
     case PrimitiveType(ty) => ty.toString
     case Variable(variable) => variable.name
@@ -158,6 +158,7 @@ enum Term extends RuntimeEntity[Type] {
         }
         env.withLocals(bindings.toMap) { implicit env => clause.body.infer(env) }
       }
+      // TODO: compute the most general type of all clauses (all clauses are subtypes of the most general type)
       if clausesType.tail.forall(_ unify clausesType.head) then clausesType.head
       else TypeNotMatch.raise("Clauses have different types")
       clausesType.head
@@ -215,7 +216,7 @@ enum Term extends RuntimeEntity[Type] {
 
     // Lambda returns a dependent function type
     case Lambda(param, body) => {
-      val paramType = param.`type`.infer
+      val paramType = param.`type`.eval
       def closure(arg: Value): Value = {
         val argVar = Typed[Value](arg, paramType)
         env.withLocal(param.ident, argVar) { implicit env => body.infer(env) }
@@ -224,7 +225,7 @@ enum Term extends RuntimeEntity[Type] {
     }
 
     case OverloadedLambda(states) => Value.OverloadedPi(states.map { (param, body) =>
-      val paramType = param.`type`.infer
+      val paramType = param.`type`.eval
       def closure(arg: Value): Value = {
         val argVar = Typed[Value](arg, paramType)
         env.withLocal(param.ident, argVar) { implicit env => body.infer(env) }
@@ -249,10 +250,6 @@ enum Term extends RuntimeEntity[Type] {
 
     case PrimitiveType(ty) => Value.PrimitiveType(ty)
 
-    // case Variable(variable) => env.getValue(variable) match {
-    //   case Some(value) => value
-    //   case None => Value.Neutral(NeutralValue.Variable(variable))
-    // }
     case Variable(variable) => env.getValue(variable).get
 
     case FunctionInvoke(fnRef, argTerms) => {

@@ -113,7 +113,7 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
 
   test("beta reduction") {
     val (expr, _) = synthExpr("((x: Int) => x)(114514)")
-    expr should be (IntValue(114514).toTerm)
+    expr.normalize should be (IntValue(114514).toTerm)
   }
 
   test("let expr") {
@@ -124,7 +124,7 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
       """
     }
     val (expr, _) = synthCodeBlock(code)
-    expr should be (IntValue(1).toTerm)
+    expr.normalize should be (IntValue(1).toTerm)
   }
 
   test("let apply") {
@@ -135,12 +135,51 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
       """
     }
     val (expr, _) = synthCodeBlock(code)
-    expr should be (IntValue(114514).toTerm)
+    expr.normalize should be (IntValue(114514).toTerm)
   }
 
   test("if expr") {
     val (expr, _) = synthCodeBlock("if true then 114 else 514")
     expr.normalize should be (IntValue(114).toTerm)
+  }
+
+  test("pattern match") {
+    val code = {
+      """
+        match 514 {
+          case 114 => 1919
+          case 514 => 810
+        }
+      """
+    }
+    val (expr, _) = synthCodeBlock(code)
+    expr.normalize should be (IntValue(810).toTerm)
+  }
+
+  test("wildcard pattern match") {
+    val code = {
+      """
+        match 514 {
+          case 114 => 1919
+          case _ => 810
+        }
+      """
+    }
+    val (expr, _) = synthCodeBlock(code)
+    expr.normalize should be (IntValue(810).toTerm)
+  }
+
+  test("panic test") {
+    val code = {
+      """
+        match 114 {
+          case 114 => 514
+          case _ => panic("test")
+        }
+      """
+    }
+    val (expr, _) = synthCodeBlock(code)
+    expr.normalize should be (IntValue(514).toTerm)
   }
 
   test("eq refl") {
