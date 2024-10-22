@@ -36,6 +36,20 @@ object PrimitiveString extends PreludeDefinitionSet {
     }
   )
 
+  private def binaryBoolFunction(ident: String, fn: (String, String) => Boolean): NativeFunction[Term] = NativeFunction(
+    ident = Var.Defined(ident),
+    params = Seq("a" @: StringType.toTerm, "b" @: StringType.toTerm),
+    resultType = BoolType.toTerm,
+    nativeImpl = (args: ArgList[Value]) => {
+      val a: Value = args(0).value
+      val b: Value = args(1).value
+      (a, b) match {
+        case (Value.Primitive(StringValue(a)), Value.Primitive(StringValue(b))) => Value.Primitive(BoolValue(fn(a, b)))
+        case _ => throw new IllegalArgumentException(s"Invalid arguments: $a, $b")
+      }
+    }
+  )
+
   private def unaryBoolFunction(ident: String, fn: String => Boolean): NativeFunction[Term] = NativeFunction(
     ident = Var.Defined(ident),
     params = Seq("a" @: StringType.toTerm),
@@ -110,6 +124,7 @@ object PrimitiveString extends PreludeDefinitionSet {
     unaryBoolFunction("isEmpty", _.isEmpty),
     unaryBoolFunction("nonEmpty", _.nonEmpty),
     binaryFunction("++", _ + _),
+    binaryBoolFunction("==", _ == _),
     length,
     parseInt,
     parseFloat,
