@@ -42,6 +42,6 @@ class ErrorListener(code: String) extends BaseErrorListener {
   ): Unit = {
     val charPos = SourcePosition(line, charPositionInLine).toCharPos(code)
     val span = SourceSpan(charPos, charPos)
-    throw SyntaxError.ParsingError(message, span, exception)
+    throw SyntaxError.ParsingError("Syntax error encountered", span, exception)
   }
 }

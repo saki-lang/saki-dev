@@ -81,7 +81,8 @@ patternRecordField
 statement
     // Definition
     :   expr                                                                    # statementExpr
-    |   'let' name=Identifier (':' type=expr)? '=' NL* value=blockExpr           # statementLet
+    |   blockExpr                                                               # statementBlock
+    |   'let' name=Identifier (':' type=expr)? '=' NL* value=blockExpr          # statementLet
     |   'instance' ':' type=expr '=' NL* value=blockExpr                        # statementInstance
     ;
 

@@ -182,6 +182,9 @@ object Synthesis:
         synthClause(clause, scrutineesSynth)
       }
       val clauseBodyTypes: Seq[Term] = clausesSynth.map(_._2)
+      if clauseBodyTypes.isEmpty then {
+        SizeNotMatch.raise(expr.span) { "Expected at least one clause" }
+      }
       if !clauseBodyTypes.tail.forall(_.eval unify clauseBodyTypes.head.eval) then {
         TypeNotMatch.raise(expr.span) {
           s"Expected all clause bodies to have the same type, found: ${clauseBodyTypes.map(_.eval)}"

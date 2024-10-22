@@ -455,6 +455,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   extension (self: StatementContext) {
     private def visit: Statement = self match {
       case ctx: StatementExprContext => visitStatementExpr(ctx)
+      case ctx: StatementBlockContext => visitStatementBlock(ctx)
       case ctx: StatementLetContext => visitStatementLet(ctx)
       case ctx: StatementInstanceContext => visitStatementInstance(ctx)
     }
@@ -469,6 +470,11 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     given ParserRuleContext = ctx
     val ty = if ctx.`type` == null then None else Some(ctx.`type`.visit)
     Statement.Let(ctx.name.getText, ty, ctx.value.visit)
+  }
+
+  override def visitStatementBlock(ctx: StatementBlockContext): Statement = {
+    given ParserRuleContext = ctx
+    Statement.Expression(visitBlockExpr(ctx.blockExpr))
   }
 
   override def visitStatementInstance(ctx: StatementInstanceContext): Statement = {

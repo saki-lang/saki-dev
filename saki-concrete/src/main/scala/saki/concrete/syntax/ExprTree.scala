@@ -109,6 +109,9 @@ enum ExprTree(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] with
     case Sigma(param, codomain) => CoreExpr.Sigma(param.map(_.emit), codomain.emit)
 
     case CodeBlock(statements) => {
+      if (statements.isEmpty) {
+        return CoreExpr.Primitive(Literal.unit)
+      }
       val returnValue = statements.last match {
         case Statement.Let(_, _, _) => CoreExpr.Primitive(Literal.unit)
         case Statement.Expression(expr) => expr.emit

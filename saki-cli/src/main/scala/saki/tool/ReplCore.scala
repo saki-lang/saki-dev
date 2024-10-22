@@ -58,7 +58,7 @@ private class ReplCore {
 
     } catch {
       // Not seems to be a definition, evaluate it as an expression
-      case _: SyntaxError => {
+      case _: SyntaxError.ParsingError => {
         try {
           val listener = ErrorListener(source)
           val parser = parseSource(source, listener)
