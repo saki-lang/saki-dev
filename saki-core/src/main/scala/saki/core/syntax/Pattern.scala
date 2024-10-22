@@ -84,7 +84,7 @@ extension (self: Pattern[Term]) {
   
   def buildMatchBindings(`type`: Type)(
     implicit env: Environment.Typed[Value]
-  ): Map[Var.Local, Value] = self match {
+  ): Map[Var.Local, Type] = self match {
 
     case Pattern.Primitive(_) => Map.empty
     case Pattern.Bind(binding) => Map(binding -> `type`)

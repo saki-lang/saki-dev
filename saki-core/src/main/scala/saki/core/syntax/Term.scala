@@ -148,8 +148,16 @@ enum Term extends RuntimeEntity[Type] {
 
     case InductiveVariant(inductive, _, _) => inductive.eval
 
-    case Match(_, clauses) => {
-      val clausesType: Seq[Value] = clauses.map(_.body.infer)
+    case Match(scrutinees, clauses) => {
+      val scrutineesType = scrutinees.map(_.infer)
+      val clausesType: Seq[Value] = clauses.map { clause =>
+        val bindings: Seq[(Var.Local, Typed[Value])] = scrutineesType.zip(clause.patterns).flatMap {
+          (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee)
+        }.map {
+          case (param, ty) => (param, Typed[Value](Value.variable(param), ty))
+        }
+        env.withLocals(bindings.toMap) { implicit env => clause.body.infer(env) }
+      }
       if clausesType.tail.forall(_ unify clausesType.head) then clausesType.head
       else TypeNotMatch.raise("Clauses have different types")
       clausesType.head
