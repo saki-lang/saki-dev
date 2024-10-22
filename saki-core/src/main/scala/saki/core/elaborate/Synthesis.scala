@@ -79,12 +79,12 @@ object Synthesis:
       }
       // This is a method call
       // `obj.method`
-      case _ => {
+      case (term, ty) => {
         given SourceSpan = expr.span
         val method: (Function[Term] | Overloaded[Term]) = env.getDefinitionByName(member) match {
           case Some(definition: (Function[Term] | Overloaded[Term])) => definition
           case _ => MethodNotFound.raise(expr.span) {
-            s"Method not found: $member"
+            s"Method not found $member for value $term of type $ty"
           }
         }
         Expr.Apply(Expr.Variable(method.ident), Argument(obj)).synth(env)
@@ -127,7 +127,7 @@ object Synthesis:
           }
         }
 
-        case Value.Universe => fn match {
+        case Value.Universe => fn.normalize match {
           case Term.Pi(piParam, codomain) => {
             val (argTerm, argType) = argExpr.value.synth(env).unpack
             if !(piParam.`type`.eval <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
@@ -143,7 +143,7 @@ object Synthesis:
           }
         }
 
-        case _ => TypeNotMatch.raise(fnExpr.span) {
+        case fn => TypeNotMatch.raise(fnExpr.span) {
           s"Expected a function, found: $fn"
         }
       }

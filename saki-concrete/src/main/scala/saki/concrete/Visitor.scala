@@ -233,18 +233,18 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
 
   override def visitExprAtom(ctx: ExprAtomContext): ExprTree = ctx.atom.visit
 
-  override def visitExprCall(ctx: ExprCallContext): ExprTree.FunctionCall = {
+  override def visitExprCall(ctx: ExprCallContext): ExprTree.Apply = {
     given ParserRuleContext = ctx
     val func = ctx.func.visit
     val args = ctx.argList.args.asScala.map { arg => Argument(arg.visit, ApplyMode.Explicit) }
-    ExprTree.FunctionCall(func, args)
+    ExprTree.Apply(func, args)
   }
 
-  override def visitExprImplicitCall(ctx: ExprImplicitCallContext): ExprTree.FunctionCall = {
+  override def visitExprImplicitCall(ctx: ExprImplicitCallContext): ExprTree.Apply = {
     given ParserRuleContext = ctx
     val func = ctx.func.visit
     val args = ctx.argList.args.asScala.map { arg => Argument(arg.visit, ApplyMode.Implicit) }
-    ExprTree.FunctionCall(func, args)
+    ExprTree.Apply(func, args)
   }
 
   override def visitExprParen(ctx: ExprParenContext): ExprTree = ctx.value.visit
@@ -291,17 +291,20 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       Param(Var.Local(ident), ty)
     }
     val lambdaBody = ExprTree.CodeBlock(ctx.body.statements.asScala.map(_.visit))
-    ExprTree.FunctionCall(func, Seq(Argument(lambda(lambdaParams, lambdaBody, returnType), ApplyMode.Explicit)))
+    ExprTree.Apply(func, Seq(Argument(lambda(lambdaParams, lambdaBody, returnType), ApplyMode.Explicit)))
   }
 
-  override def visitExprElimination(ctx: ExprEliminationContext): ExprTree.Elimination = {
+  override def visitExprElimination(ctx: ExprEliminationContext): ExprTree = {
     given ParserRuleContext = ctx
     val subject = ctx.subject.visit
     val member = ctx.member.getText
-    if ctx.implicitArgList != null then {
-      UnsupportedFeature.raise(ctx.span) { "Implicit arguments in elimination is not supported yet" }
+    if ctx.implicitArgList == null then {
+      ExprTree.Elimination(subject, member)
+    } else {
+      // Implicit arguments should be applied to member, returns an application
+      val implicitArgs = ctx.implicitArgList.args.asScala.map { arg => Argument(arg.visit, ApplyMode.Implicit) }
+      ExprTree.Apply(ExprTree.Apply(ExprTree.Variable(member), implicitArgs), Seq(Argument(subject)))
     }
-    ExprTree.Elimination(subject, member)
   }
 
   override def visitExprSpine(ctx: ExprSpineContext): ExprTree = visitSpine(ctx)
@@ -349,15 +352,15 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     def visitSpineParserExpr(expr: SpineParser.Expr): ExprTree = expr match {
       case SpineParser.Expr.Atom(atom) => atom.asInstanceOf[ExprTree]
       case SpineParser.Expr.UnaryExpr(op, expr) => {
-        ExprTree.FunctionCall(ExprTree.Variable(op.symbol), Seq(Argument(visitSpineParserExpr(expr))))
+        ExprTree.Apply(ExprTree.Variable(op.symbol), Seq(Argument(visitSpineParserExpr(expr))))
       }
       case SpineParser.Expr.BinaryExpr(op, lhs, rhs) => {
-        ExprTree.FunctionCall(ExprTree.Variable(op.symbol), Seq(Argument(visitSpineParserExpr(lhs)), Argument(visitSpineParserExpr(rhs))))
+        ExprTree.Apply(ExprTree.Variable(op.symbol), Seq(Argument(visitSpineParserExpr(lhs)), Argument(visitSpineParserExpr(rhs))))
       }
     }
 
     val spine = spineExprs.map(visitSpineParserExpr)
-    ExprTree.FunctionCall(spine.head, spine.tail.map(Argument(_, ApplyMode.Explicit)))
+    ExprTree.Apply(spine.head, spine.tail.map(Argument(_, ApplyMode.Explicit)))
   }
 
   override def visitExprIf(ctx: ExprIfContext): ExprTree = {

@@ -37,7 +37,7 @@ enum ExprTree(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] with
     member: String,
   )(implicit ctx: ParserRuleContext)
 
-  case FunctionCall(
+  case Apply(
     function: ExprTree,
     arguments: Seq[Argument[ExprTree]],
   )(implicit ctx: ParserRuleContext)
@@ -163,7 +163,7 @@ enum ExprTree(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] with
 
     case Elimination(value, member) => CoreExpr.Elimination(value.emit, member)
 
-    case FunctionCall(function, arguments) => {
+    case Apply(function, arguments) => {
       val args = arguments.map { case Argument(arg, mode) => Argument(arg.emit, mode) }
       args.foldLeft(function.emit) { case (fn, arg) => CoreExpr.Apply(fn, arg) }
     }

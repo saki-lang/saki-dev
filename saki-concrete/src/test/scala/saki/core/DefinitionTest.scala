@@ -538,4 +538,99 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     compileModule(code)
   }
 
+  test("nbe") {
+    val code = {
+      """
+        type Option[A: 'Type] = inductive {
+            None
+            Some(A)
+        }
+
+        def unwrap[A: 'Type](option: Option[A]): A = match option {
+            case Option[A]::Some(value) => value
+            case Option[A]::None => panic("Unwrapping a none option type")
+        }
+
+        type Expr = inductive {
+            Var(String)
+            // Π(x : A). B
+            Pi(String, Expr, Expr)
+            // λ(x : A). t
+            Lambda(String, Expr, Expr)
+            // f a
+            Apply(Expr, Expr)
+            Type(Int)
+        }
+
+        type Value = inductive {
+            Neutral(NeutralValue)
+            Type(Int)
+            Lambda(Value, Value -> Value)
+            Pi(Value, Value -> Value)
+        }
+
+        type Type = Value
+
+        type NeutralValue = inductive {
+            Var(String)
+            Apply(NeutralValue, Value)
+        }
+
+        def toValue(neutral: NeutralValue): Value = Value::Neutral(neutral)
+
+        type TypedValue = record {
+            value: Value
+            ty: Type
+        }
+
+        type Env = inductive {
+            Empty
+            Cons(String, TypedValue, Env)
+        }
+
+        def add(env: Env, name: String, value: Value, ty: Type): Env = {
+            let typedValue = TypedValue '{
+                value = value
+                ty = ty
+            }
+            Env::Cons(name, typedValue, env)
+        }
+
+        def get(env: Env, name: String): Option[TypedValue] = {
+            match env {
+                case Env::Empty => Option[TypedValue]::None
+                case Env::Cons(name', value, env') => {
+                    if name' == name then Option[TypedValue]::Some(value)
+                    else env'.get(name)
+                }
+            }
+        }
+
+        def contains(env: Env, name: String): Bool = match env {
+            case Env::Empty => false
+            case Env::Cons(name', _, env') => name' == name || env'.contains(name)
+        }
+
+        def freshIdentFrom(env: Env, cnt: Int): String = {
+            let ident = "$" ++ cnt.toString
+            if !env.contains(ident) then ident
+            else env.freshIdentFrom(cnt + 1)
+        }
+
+        def freshIdent(env: Env): String = env.freshIdentFrom(0)
+
+        def evaluate(env: Env, expr: Expr): Value = match expr {
+            case Expr::Var(name) => env.get(name).unwrap[TypedValue].value
+            case Expr::Type(univ) => Value::Type(univ)
+            case Expr::Apply(fn, arg) => match env.evaluate(fn) {
+                case Value::Lambda(_, fn) => fn(env.evaluate(arg))
+                case Value::Neutral(neutral) => NeutralValue::Apply(neutral, env.evaluate(arg)).toValue
+                case _ => panic("Invald type: not a function")
+            }
+        }
+      """
+    }
+    compileModule(code)
+  }
+
 }
