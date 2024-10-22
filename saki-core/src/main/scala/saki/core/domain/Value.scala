@@ -167,14 +167,14 @@ enum Value extends RuntimeEntity[Type] {
       }
     }
 
-    // Record subtyping: all fields in `that` must be present in `this` and be subtypes
+    // Record subtyping: all fields in `this` must be present in `that` and be subtypes
     case (Record(fields1), Record(fields2)) => {
-      fields2.forall { case (name, value2) => fields1.get(name).exists(_ <:< value2) }
+      fields1.forall { case (name, value1) => fields2.get(name).exists(value1 <:< _) }
     }
 
     // RecordType subtyping: all fields in `that` must be present in `this` and be subtypes
     case (RecordType(fields1), RecordType(fields2)) => {
-      fields2.forall { case (name, ty2) => fields1.get(name).exists(_ <:< ty2) }
+      fields1.forall { case (name, ty1) => fields2.get(name).exists(ty1 <:< _) }
     }
 
     // Inductive type subtyping: inductive types must match and arguments must be subtypes

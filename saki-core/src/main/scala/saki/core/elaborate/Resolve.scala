@@ -21,6 +21,9 @@ object Resolve {
     @targetName("add")
     def +(variable: Var): Context = copy(variableMap = variableMap + (variable.name -> variable))
 
+    @targetName("remove")
+    def -(variable: Var): Context = copy(variableMap = variableMap - variable.name)
+
     def ref(variable: Var.Defined[?, ?]): Context = {
       val updatedDependencies = currentDefinition match {
         case Some(definition) => dependencyGraph.addEdge(definition.name, variable.name)
@@ -213,14 +216,17 @@ object Resolve {
     val resolvedDefinition: Definition[Expr] = definition match {
 
       case DefinedFunction(ident, params, resultType, _, body) => {
-        val (resolvedParams, ctxWithParam) = resolveParams(params)
         // register the function name to global context
         global += ident
         // add the function name to the context for recursive calls
-        ctxWithParam.withDefinition(ident) { implicit ctx =>
-          // TODO: return type cannot call itself, add a check or remove the ident from the context
-          val (resolvedResultType, signatureCtx) = resultType.resolve(ctx)
-          val (resolvedBody, bodyCtx) = body.get.resolve(signatureCtx)
+        global.withDefinition(ident) { implicit ctx =>
+          // Return type or param type cannot call itself,
+          //  thus we remove it from the context and add it back after
+          //  finished resolving the params and return type
+          val (resolvedParams, ctxWithParam) = resolveParams(params, ctx - ident)
+          val (resolvedResultType, signatureCtx) = resultType.resolve(ctxWithParam)
+          // Resolve the body of the function, add the self identifier back to the context
+          val (resolvedBody, bodyCtx) = body.get.resolve(signatureCtx + ident)
           val isRecursive = bodyCtx.dependencyGraph.isInCycle(ident.name)
           // update the global context with the dependency graph
           global = global.copy(dependencyGraph = bodyCtx.dependencyGraph)

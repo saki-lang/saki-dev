@@ -38,4 +38,23 @@ class RecordTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     module.eval("bandMember.birth.month") should be (module.eval("5"))
     module.eval("bandMember.birth.day") should be (module.eval("27"))
   }
+
+  test("record subtyping") {
+    val code = {
+      """
+        type A = record {
+            a: Int
+        }
+
+        type B = record {
+            a: Int
+            b: Int
+        }
+
+        def f(x: A): Int = x.a
+        def g(x: B): Int = f(x)
+      """
+    }
+    compileModule(code)
+  }
 }

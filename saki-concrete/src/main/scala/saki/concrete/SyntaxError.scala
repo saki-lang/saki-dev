@@ -17,7 +17,9 @@ enum SyntaxError extends Exception with Error {
   case InvalidOperator(override val info: String, override val span: SourceSpan)
   case InvalidSymbol(override val info: String, override val span: SourceSpan)
   case InvalidDeclaration(override val info: String, override val span: SourceSpan)
+  case MissingReturnType(override val info: String, override val span: SourceSpan)
   case ParsingError(override val info: String, override val span: SourceSpan, cause: RecognitionException)
+  case SpineParsingError(override val info: String, override val span: SourceSpan)
 }
 
 extension (context: ParserRuleContext) {

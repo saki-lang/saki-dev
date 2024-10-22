@@ -128,6 +128,12 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       case ident: DefIdentStringContext => ident.string.getText
     }
 
+    if ctx.returnType == null then {
+      ctx.raiseError(SyntaxError.MissingReturnType.apply) {
+        "Return type of a definition must be explicitly specified"
+      }
+    }
+
     val returnType = ctx.returnType.visit
 
     visitDefinitionBody(ident, implicitParams, explicitParams, returnType, ctx.body)
@@ -327,7 +333,13 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       case atom: AtomContext => Token.Atom[ExprTree](atom.visit)
     }
 
-    val spineExprs = SpineParser.parseExpressions(tokens, this.binaryOperators)
+    val spineExprs = try {
+      SpineParser.parseExpressions(tokens, this.binaryOperators)
+    } catch {
+      case err: Throwable => ctx.raiseError(SyntaxError.SpineParsingError.apply) {
+        s"Failed to parse expression spine: ${err.getMessage}"
+      }
+    }
 
     given ParserRuleContext = ctx
 

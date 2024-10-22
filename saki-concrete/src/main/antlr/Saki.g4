@@ -91,7 +91,7 @@ block
 
 definition
     :   'def' ident=definitionIdentifier ('[' implicitParamList=paramList ']')?
-          ('(' explicitParamList=paramList ')')? ':' returnType=expr '=' NL* body=definitionBody    # defGeneral
+          ('(' explicitParamList=paramList ')')? (':' returnType=expr)? '=' NL* body=definitionBody    # defGeneral
     |   'type' ident=Identifier ('[' implicitParamList=paramList ']')?
           ('(' explicitParamList=paramList ')')? '=' NL* body=definitionBody            # defType
     ;
