@@ -22,9 +22,9 @@ class RecordTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             birth: Date
         }
 
-        def bandMember: Person = Person ^{
+        def bandMember: Person = Person '{
             name = "Soyo Nagasaki"
-            birth = Date ^{
+            birth = Date '{
                 year = 2004
                 month = 5
                 day = 27

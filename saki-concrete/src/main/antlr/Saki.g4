@@ -40,7 +40,7 @@ expr
     |   <assoc=right> '∀' '[' param=Identifier ':' domain=expr ']' '->' codomain=expr               # exprImplicitPiType
     |   <assoc=right> '∃' '(' param=Identifier ':' domain=expr ')' '->' codomain=expr               # exprSigmaType
     |   'record' (':' super=expr)? '{' NL* fields+=identTypePair (NL+ fields+=identTypePair)* NL* '}' # exprRecordType
-    |   recordType=expr '^' '{' NL* fields+=fieldAssignment (NL+ fields+=fieldAssignment)* NL* '}'  # exprRecord
+    |   recordType=expr '\'' '{' NL* fields+=fieldAssignment (NL+ fields+=fieldAssignment)* NL* '}'  # exprRecord
     ;
 
 blockExpr
@@ -57,17 +57,17 @@ matchCase
     ;
 
 matchClause
-    :   pattern (':' type=expr)?    # matchClauseSingle
+    :   pattern (':' type=expr)?                        # matchClauseSingle
     |   '(' NL* patternList NL* ')' (':' type=expr)?    # matchClauseTuple
     ;
 
 pattern
-    :   literal             # patternLiteral
-    |   '`' value=expr '`'  # patternValue
-    |   ident=Identifier    # patternVariable
+    :   literal                         # patternLiteral
+    |   '`' value=expr '`'              # patternValue
+    |   ident=(Identifier|WildCard)     # patternVariable
     |   inductive=expr '::' constructor=Identifier ('(' NL* consPatternList=patternList NL* ')')?   # patternConstructor
     |   '(' NL* patternList NL* ')'                                                                 # patternTuple
-    |   record=expr '@' '{' NL* (fields+=patternRecordField (',' NL* fields+=patternRecordField)* ','?)? NL* '}' # patternRecord
+    |   record=expr '\'' '{' NL* (fields+=patternRecordField (',' NL* fields+=patternRecordField)* ','?)? NL* '}' # patternRecord
     ;
 
 patternList
@@ -80,10 +80,10 @@ patternRecordField
 
 statement
     // Definition
-    :   expr                                                                    # statementExpr
-    |   blockExpr                                                               # statementBlock
-    |   'let' name=Identifier (':' type=expr)? '=' NL* value=blockExpr          # statementLet
-    |   'instance' ':' type=expr '=' NL* value=blockExpr                        # statementInstance
+    :   expr                                                                        # statementExpr
+    |   blockExpr                                                                   # statementBlock
+    |   'let' name=(WildCard|Identifier) (':' type=expr)? '=' NL* value=blockExpr   # statementLet
+    |   'instance' ':' type=expr '=' NL* value=blockExpr                            # statementInstance
     ;
 
 block
@@ -92,25 +92,26 @@ block
 
 definition
     :   'def' ident=definitionIdentifier ('[' implicitParamList=paramList ']')?
-          ('(' explicitParamList=paramList ')')? (':' returnType=expr)? '=' NL* body=definitionBody    # defGeneral
+          ('(' explicitParamList=paramList ')')? (':' returnType=expr)? '=' NL* body=definitionBody     # defGeneral
     |   'type' ident=Identifier ('[' implicitParamList=paramList ']')?
-          ('(' explicitParamList=paramList ')')? '=' NL* body=definitionBody            # defType
+          ('(' explicitParamList=paramList ')')? '=' NL* body=definitionBody                            # defType
     ;
 
 definitionIdentifier
-    :   string=Identifier            # defIdentString
-    |   '(' operator=OptSymbol ')'  # defIdentOperator
+    :   string=Identifier               # defIdentString
+    |   '(' operator=OptSymbol ')'      # defIdentOperator
     ;
 
 definitionBody
-    :   blockExpr                                                            # defBodyExpr
+    :   blockExpr   # defBodyExpr
     |   'inductive' ('(' NL* inductiveParams+=Identifier (',' NL* inductiveParams+=Identifier)* ','? NL* ')')?
             NL* '{' NL* (constructors+=inductiveCons (NL+ constructors+=inductiveCons)*)? NL* '}' # defBodyInductive
     ;
 
 inductiveCons
-    :   isFlat='flat'? ident=Identifier ':' type=expr                                                          # inductiveConsType
-    |   isFlat='flat'? ident=Identifier ('(' NL* (elements+=inductiveTupleElement (',' NL* elements+=inductiveTupleElement)* ','?)? NL* ')')?    # inductiveConsTuple
+    :   isFlat='flat'? ident=Identifier ':' type=expr   # inductiveConsType
+    |   isFlat='flat'? ident=Identifier
+            ('(' NL* (elements+=inductiveTupleElement (',' NL* elements+=inductiveTupleElement)* ','?)? NL* ')')?   # inductiveConsTuple
     ;
 
 inductiveTupleElement
@@ -188,6 +189,7 @@ PiSymbol: '∀' | 'Π';
 SigmaSymbol: '∃' | 'Σ';
 
 Identifier: ValueIdent | TypeIdent | ContractIdent;
+WildCard: '_';
 
 // Whitespaces
 Whitespace: [ \t\r]+ -> channel(HIDDEN);
