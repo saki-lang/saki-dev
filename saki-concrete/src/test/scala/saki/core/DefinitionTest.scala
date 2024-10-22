@@ -209,32 +209,32 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
   test("mutual recursive") {
     val code = {
       """
-          type Nat = inductive {
-              Zero
-              Succ(Nat)
-          }
+        type Nat = inductive {
+            Zero
+            Succ(Nat)
+        }
 
-          def isEven(n: Nat): Bool = match n {
-              case Nat::Zero => true
-              case Nat::Succ(n') => isOdd(n')
-          }
+        def isEven(n: Nat): Bool = match n {
+            case Nat::Zero => true
+            case Nat::Succ(n') => isOdd(n')
+        }
 
-          def isOdd(n: Nat): Bool = match n {
-              case Nat::Zero => false
-              case Nat::Succ(n') => isEven(n')
-          }
+        def isOdd(n: Nat): Bool = match n {
+            case Nat::Zero => false
+            case Nat::Succ(n') => isEven(n')
+        }
 
-          def n0: Nat = Nat::Zero
-          def n1: Nat = Nat::Succ(n0)
-          def n2: Nat = Nat::Succ(n1)
-          def n3: Nat = Nat::Succ(n2)
-          def n4: Nat = Nat::Succ(n3)
-          def n5: Nat = Nat::Succ(n4)
-          def n6: Nat = Nat::Succ(n5)
-          def n7: Nat = Nat::Succ(n6)
-          def n8: Nat = Nat::Succ(n7)
-          def n9: Nat = Nat::Succ(n8)
-        """
+        def n0: Nat = Nat::Zero
+        def n1: Nat = Nat::Succ(n0)
+        def n2: Nat = Nat::Succ(n1)
+        def n3: Nat = Nat::Succ(n2)
+        def n4: Nat = Nat::Succ(n3)
+        def n5: Nat = Nat::Succ(n4)
+        def n6: Nat = Nat::Succ(n5)
+        def n7: Nat = Nat::Succ(n6)
+        def n8: Nat = Nat::Succ(n7)
+        def n9: Nat = Nat::Succ(n8)
+      """
     }
     val module = compileModule(code)
 

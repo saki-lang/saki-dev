@@ -1,12 +1,12 @@
 package saki.core
 
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
-import saki.concrete.{ErrorListener, Visitor}
+import saki.concrete.Visitor
+import saki.core.catchError
 import saki.core.context.Environment
 import saki.core.domain.{NeutralValue, Type, Value}
+import saki.core.elaborate.Resolve
 import saki.core.syntax.{Module, Var}
-import saki.core.catchError
-import saki.core.elaborate.{Resolve, Synthesis}
 import saki.grammar.{SakiLexer, SakiParser}
 import saki.prelude.Prelude
 

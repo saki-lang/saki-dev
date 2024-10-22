@@ -4,6 +4,8 @@ import org.antlr.v4.runtime.ParserRuleContext
 import saki.concrete.span
 import saki.core.{Entity, LiteralType, Param, Expr as CoreExpr}
 import saki.core.syntax.*
+import saki.error.CoreErrorKind
+import saki.error.CoreErrorKind.UnsupportedFeature
 import saki.util.SourceSpan
 
 import scala.collection.Seq
@@ -98,7 +100,13 @@ enum ExprTree(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] with
 
     case Lambda(paramExpr, bodyExpr, returnTypeExpr) => {
       // TODO: optional-param lambda
-      val param: Param[CoreExpr] = paramExpr.map(param => param.map(_.emit).get)
+      val param: Param[CoreExpr] = paramExpr.map { param =>
+        param.map(_.emit).getOrElse {
+            UnsupportedFeature.raise(ctx.span) {
+              "Optional typed parameter in lambda is not supported"
+            }
+        }
+      }
       val body: CoreExpr = bodyExpr.emit
       val returnType: Option[CoreExpr] = returnTypeExpr.map(_.emit)
       CoreExpr.Lambda(param, body, returnType)

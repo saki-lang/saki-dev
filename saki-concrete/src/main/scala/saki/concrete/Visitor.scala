@@ -282,7 +282,10 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
     given ParserRuleContext = ctx
     val func = ctx.func.visit
     val returnType = Option(ctx.returnType).map(_.visit)
-    val lambdaParams = ctx.lambdaParamList.params.asScala.map { param =>
+    val params = if ctx.lambdaParamList == null then Seq.empty else {
+      ctx.lambdaParamList.params.asScala
+    }
+    val lambdaParams = params.map { param =>
       val ident = param.ident.getText
       val ty = Option(param.`type`).map(_.visit)
       Param(Var.Local(ident), ty)

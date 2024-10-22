@@ -40,7 +40,7 @@ private class ReplCore {
       val definitions = entities.collect { case defn: Definition => defn }.map(_.emit)
       val evaluations = entities.collect { case eval: Evaluation => eval }
 
-      catchError(source) { _ =>
+      catchError(source, path = None, doPrint = false) { _ =>
         val (newContext, newEnv) = definitions.foldLeft((resolveContext, environment)) {
           case ((resolvingContext, env), definition) => {
             val (resolved, newCtx) = definition.resolve(resolvingContext)
@@ -92,7 +92,7 @@ private class ReplCore {
           }
         } catch {
           case error: Error => printError(source, error)
-          case error: Throwable => throw error // println(s"Error: ${error.getMessage}")
+          case error: Throwable => throw error
         }
       }
       case error: Error => printError(source, error)

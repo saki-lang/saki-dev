@@ -8,16 +8,20 @@ import saki.core.syntax.Module
 import saki.error.Error
 import saki.grammar.{SakiLexer, SakiParser}
 
-def catchError[R](source: String, path: Option[String] = None)(action: ErrorListener => R): R = {
+def catchError[R](source: String, path: Option[String] = None, doPrint: Boolean = true)(
+  action: ErrorListener => R
+): R = {
   val errorListener = ErrorListener(source)
   try action(errorListener) catch {
     case error: Error => {
       error.infoSpans.headOption match {
         case Some(span, info) => {
           val spanLength = span.end - span.start + 1
-          ReadEvalPrintLoop.printError(source, path.getOrElse(""), error.message, info, span.start, spanLength)
+          if doPrint then {
+            ReadEvalPrintLoop.printError(source, path.getOrElse(""), error.message, info, span.start, spanLength)
+          }
         }
-        case None => println(s"Error: ${error.message}")
+        case None => if doPrint then println(s"Error: ${error.message}")
       }
       // Rethrow the original Error after showing it
       throw error
