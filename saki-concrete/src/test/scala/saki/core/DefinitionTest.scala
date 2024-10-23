@@ -334,6 +334,18 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     compileModule(code)
   }
 
+  test("operator declaration") {
+    val code = {
+      """
+        operator binary # left-assoc
+        def (#)(a b: Int): Int = a + b
+        def add(a b: Int): Int = a # b
+      """
+    }
+    val module = compileModule(code)
+    module.eval("add 114 514") should be (module.eval("628"))
+  }
+
   test("rbtree") {
     val code = {
       """

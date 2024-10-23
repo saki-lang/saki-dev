@@ -17,7 +17,7 @@ import scala.jdk.CollectionConverters.*
 
 class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
 
-  private var symbols: ScopedMap[String, Operator | String] = {
+  private var symbols: Map[String, Operator | String] = {
     ScopedMap(Prelude.operators.map(op => op.symbol -> op).toMap[String, Operator | String])
   }
 
@@ -61,16 +61,9 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
           s"Operator redeclaration: ${symbol}"
         }
       }
-      this.symbols + (symbol -> operator)
+      this.symbols += (symbol -> operator)
     }
-    case _ => this.symbols + (symbol -> symbol)
-  }
-
-  private def withInScope[T](block: => T): T = {
-    this.symbols = this.symbols.enter
-    val result = block
-    this.symbols = this.symbols.exit
-    result
+    case _ => this.symbols += (symbol -> symbol)
   }
 
   override def visitProgram(ctx: ProgramContext): Seq[Definition | Evaluation] = {
