@@ -112,6 +112,10 @@ trait Symbol[T <: Entity] {
   def kind: SymbolKind
 }
 
+trait NaiveSymbol[T <: Entity] extends Symbol[T] with FnLike[T] {
+  def resultType(implicit ev: EntityFactory[T, T]): T
+}
+
 enum SymbolKind {
   case Function
   case Inductive
@@ -122,9 +126,9 @@ sealed trait Definition[T <: Entity] extends Symbol[T] {
 }
 
 // Too young, too simple, sometimes naive
-sealed trait NaiveDefinition[T <: Entity] extends Definition[T] with FnLike[T] {
+sealed trait NaiveDefinition[T <: Entity] extends Definition[T] with NaiveSymbol[T] {
 
-  def resultType(implicit ev: EntityFactory[T, T]): T
+  override def resultType(implicit ev: EntityFactory[T, T]): T
 
   def signature(implicit ev: EntityFactory[T, T]): Signature[T] = Signature(params, resultType)
 
@@ -192,7 +196,7 @@ case class NativeFunction[T <: Entity](
 }
 
 trait OverloadedSymbol[
-  T <: Entity, Self <: Symbol[T], OverloadedType <: Symbol[T]
+  T <: Entity, Self <: Symbol[T], OverloadedType <: Symbol[T] & FnLike[T]
 ] extends Symbol[T] {
   def overloads: Seq[OverloadedType]
   def merge(other: OverloadedType | Self): Self
@@ -283,7 +287,7 @@ case class NaiveDeclaration[T <: Entity, Def[E <: Entity] <: NaiveDefinition[E]]
   override val params: Seq[Param[T]],
   resultType: T,
   override val kind: SymbolKind,
-) extends Declaration[T, Def] with FnLike[T] {
+) extends Declaration[T, Def] with NaiveSymbol[T] {
 
   def signature: Signature[T] = Signature(params, resultType)
 
@@ -291,6 +295,8 @@ case class NaiveDeclaration[T <: Entity, Def[E <: Entity] <: NaiveDefinition[E]]
     case SymbolKind.Function => factory.functionInvoke(Var.Defined(ident.name), signature.paramToVars)
     case SymbolKind.Inductive => factory.inductiveType(Var.Defined(ident.name), signature.paramToVars)
   }
+
+  override def resultType(implicit ev: EntityFactory[T, T]): T = resultType
 }
 
 case class OverloadedDeclaration[T <: Entity](

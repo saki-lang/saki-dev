@@ -317,6 +317,35 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     compileModule(code)
   }
 
+  test("overloaded mutual recursive with other modules") {
+    val code = {
+      """
+        type Expr = inductive {
+            Var(String)
+            Type(Int)
+            Pi(String, Expr, Expr)
+            Lambda(String, Expr, Expr)
+            Apply(Expr, Expr)
+        }
+
+        def toString(expr: Expr): String = match expr {
+            case Expr::Var(ident) => ident
+            case Expr::Type(level) => "Type_" ++ level.toString
+            case Expr::Pi(ident, ty, codomain) => "(" ++ ident ++ " : " ++ ty.toString ++ ")" ++ "→" ++ codomain.toString
+            case Expr::Lambda(ident, ty, body) => "λ(" ++ ident ++ " : " ++ ty.toString ++ ")" ++ "→" ++ body.toString
+            case Expr::Apply(fn, arg) => fn.toAtomicString ++ arg.toAtomicString
+        }
+
+        def toAtomicString(expr: Expr): String = match expr {
+            case Expr::Var(ident) => ident
+            case Expr::Type(level) => "Type_" ++ level.toString
+            case _ => "(" ++ expr.toString ++ ")"
+        }
+      """
+    }
+    compileModule(code)
+  }
+
   test("eq refl") {
     val code = {
       """

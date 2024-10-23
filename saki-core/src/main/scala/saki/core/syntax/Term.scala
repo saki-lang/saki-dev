@@ -128,9 +128,11 @@ enum Term extends RuntimeEntity[Type] {
       }
     }
 
-    case FunctionInvoke(fn, args) => env.definitions(fn) match {
+    case FunctionInvoke(fn, args) => env.getSymbol(fn).get match {
       case fn: Function[Term] => fn.resultType.eval
+      case decl: NaiveDeclaration[Term, ?] => decl.resultType.eval
       case overloaded: Overloaded[Term] => Term.OverloadInvoke(overloaded.ident, args).infer
+      case overloaded: OverloadedDeclaration[Term] => Term.OverloadInvoke(overloaded.ident, args).infer 
       case _: Inductive[Term] => Value.Universe
     }
 
@@ -309,7 +311,7 @@ enum Term extends RuntimeEntity[Type] {
     }
 
     case invoke: OverloadInvoke => {
-      Term.functionInvoke(invoke.getOverload.ident, invoke.args).eval(doEvalFunction)
+      Term.functionInvoke(invoke.getOverload.ident.asInstanceOf, invoke.args).eval(doEvalFunction)
     }
 
     case InductiveType(indRef, argTerms) => {
@@ -625,9 +627,9 @@ private sealed trait OverloadInvokeExt {
    * @param env The environment
    * @return The most suitable eigenstate of the overloaded function body
    */
-  def getOverload(implicit env: Environment.Typed[Value]): Function[Term] = {
+  def getOverload(implicit env: Environment.Typed[Value]): NaiveSymbol[Term] = {
     
-    val fn = env.definitions(this.fn).asInstanceOf[Overloaded[Term]]
+    val fn = env.getSymbol(this.fn).get.asInstanceOf[OverloadedSymbol[Term, ?, ? <: NaiveSymbol[Term]]]
 
     // Filter out the candidate overloads that fit the argument types
     val candidateOverloads = fn.overloads.filter { overload =>
@@ -651,7 +653,7 @@ private sealed trait OverloadInvokeExt {
 
     // Iterate through each parameter position, eliminating branches that are not
     // the most specific at that position
-    var remainingOverloads: Seq[Function[Term]] = candidateOverloads
+    var remainingOverloads = candidateOverloads
     val numParams = remainingOverloads.head.params.length
 
     for (i <- 0 until numParams if remainingOverloads.size > 1) {
