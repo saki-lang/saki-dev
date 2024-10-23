@@ -8,7 +8,7 @@ object PrimitiveType extends PreludeDefinitionSet {
     ident = Var.Defined(ident),
     params = Seq.empty,
     resultType = Term.Universe,
-    nativeImpl = (_: ArgList[Value]) => value
+    nativeImpl = (_: ArgList[Value], _) => value
   )
 
   override lazy val definitions: Seq[NativeFunction[Term]] = Seq(

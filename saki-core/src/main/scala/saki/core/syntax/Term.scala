@@ -180,7 +180,7 @@ enum Term extends RuntimeEntity[Type] {
 
       case Value.Pi(paramType, codomain) => {
         val argType = arg.infer
-        if !(argType unify paramType) then TypeNotMatch.raise {
+        if !(paramType <:< argType) then TypeNotMatch.raise {
           s"Expected argument type: ${paramType.readBack}, but got: ${argType.readBack}"
         }
         // To obtain the concrete return type, feed the concrete argument to the codomain closure
@@ -634,7 +634,7 @@ private sealed trait OverloadInvokeExt {
       val params = overload.params
       if params.size != this.args.size then false
       else params.zip(this.args).forall {
-        (param, arg) => arg.infer <:< param.`type`.eval
+        (param, arg) => param.`type`.eval <:< arg.infer
       }
     }
 

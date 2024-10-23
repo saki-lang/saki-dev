@@ -1,6 +1,7 @@
 package saki.core.syntax
 
 import saki.core.{Entity, EntityFactory}
+import saki.core.context.Environment
 import saki.core.domain.Value
 import saki.util.LateInit
 
@@ -175,7 +176,7 @@ case class NativeFunction[T <: Entity](
   override val params: ParamList[T],
   override val resultType: T,
   override val isRecursive: Boolean = false,
-  nativeImpl: ArgList[Value] => Value,
+  nativeImpl: (ArgList[Value], Environment.Typed[Value]) => Value,
 ) extends Function[T] {
 
   ident.definition := this
@@ -184,9 +185,9 @@ case class NativeFunction[T <: Entity](
 
   override def resultType(implicit ev: EntityFactory[T, T]): T = resultType
 
-  def invoke(args: ArgList[Value]): Value = {
+  def invoke(args: ArgList[Value])(implicit env: Environment.Typed[Value]): Value = {
     assert(args.length == params.length)
-    nativeImpl(args)
+    nativeImpl(args, env)
   }
 }
 

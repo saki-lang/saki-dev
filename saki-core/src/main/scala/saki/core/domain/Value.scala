@@ -133,6 +133,8 @@ enum Value extends RuntimeEntity[Type] {
     implicit env: Environment.Typed[Value]
   ): Boolean = (this, that) match {
 
+    case (PrimitiveType(LiteralType.AnyType), _) => true
+
     // Universe levels are considered cumulative
     case (Universe, Universe) => true
 
@@ -196,6 +198,10 @@ enum Value extends RuntimeEntity[Type] {
 
     // Case where both types are equal: the LUB is the type itself
     case (t1, t2) if t1 == t2 => t1
+
+    // If one of the types is Any, the LUB is Any
+    case (_, PrimitiveType(LiteralType.AnyType)) => PrimitiveType(LiteralType.AnyType)
+    case (PrimitiveType(LiteralType.AnyType), _) => PrimitiveType(LiteralType.AnyType)
 
     // If one of the types is Nothing, the LUB is the other type
     case (t1, PrimitiveType(LiteralType.NothingType)) => t1
@@ -363,7 +369,7 @@ private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] 
     }
 
     if candidateStates.isEmpty then NoSuchOverloading.raise {
-      s"No overloading found for argument with type: ${argType.readBack}"
+      s"No overloading found for argument ${arg.readBack} with type: ${argType.readBack}"
     }
 
     if candidateStates.size == 1 then {

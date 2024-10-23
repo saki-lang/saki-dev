@@ -14,7 +14,7 @@ object PrimitiveFloat extends PreludeDefinitionSet {
     ident = Var.Defined(ident),
     params = Seq("a" @: FloatType.toTerm, "b" @: FloatType.toTerm),
     resultType = FloatType.toTerm,
-    nativeImpl = (args: ArgList[Value]) => {
+    nativeImpl = (args: ArgList[Value], _) => {
       val a: Value = args(0).value
       val b: Value = args(1).value
       (a, b) match {
@@ -28,7 +28,7 @@ object PrimitiveFloat extends PreludeDefinitionSet {
     ident = Var.Defined(ident),
     params = Seq("a" @: FloatType.toTerm),
     resultType = FloatType.toTerm,
-    nativeImpl = (args: ArgList[Value]) => {
+    nativeImpl = (args: ArgList[Value], _) => {
       val a: Value = args(0).value
       a match {
         case Value.Primitive(FloatValue(a)) => Value.Primitive(FloatValue(fn(a)))
@@ -41,7 +41,7 @@ object PrimitiveFloat extends PreludeDefinitionSet {
     ident = Var.Defined(ident),
     params = Seq("a" @: FloatType.toTerm, "b" @: FloatType.toTerm),
     resultType = BoolType.toTerm,
-    nativeImpl = (args: ArgList[Value]) => {
+    nativeImpl = (args: ArgList[Value], _) => {
       val a: Value = args(0).value
       val b: Value = args(1).value
       (a, b) match {
@@ -63,8 +63,6 @@ object PrimitiveFloat extends PreludeDefinitionSet {
     binaryFunction("max", _.max(_)),
     binaryFunction("min", _.min(_)),
 
-    binaryBoolFunction("==", _ == _),
-    binaryBoolFunction("!=", _ != _),
     binaryBoolFunction("<", _ < _),
     binaryBoolFunction(">", _ > _),
     binaryBoolFunction("<=", _ <= _),
@@ -92,7 +90,7 @@ object PrimitiveFloat extends PreludeDefinitionSet {
       ident = Var.Defined("round"),
       params = Seq("a" @: FloatType.toTerm),
       resultType = FloatType.toTerm,
-      nativeImpl = (args: ArgList[Value]) => {
+      nativeImpl = (args: ArgList[Value], _) => {
         val a: Value = args(0).value
         a match {
           case Value.Primitive(FloatValue(a)) => Value.Primitive(IntValue(Math.round(a)))
@@ -106,7 +104,7 @@ object PrimitiveFloat extends PreludeDefinitionSet {
       ident = Var.Defined("toString"),
       params = Seq("a" @: FloatType.toTerm),
       resultType = StringType.toTerm,
-      nativeImpl = (args: ArgList[Value]) => {
+      nativeImpl = (args: ArgList[Value], _) => {
         val str: Value = args(0).value
         str match {
           case Value.Primitive(FloatValue(str)) => Value.Primitive(StringValue(str.toString))

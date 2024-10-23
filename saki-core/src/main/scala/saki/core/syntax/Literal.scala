@@ -41,6 +41,7 @@ object Literal {
 
 enum LiteralType {
 
+  case AnyType
   case NothingType
   case UnitType
   case BoolType
@@ -50,6 +51,7 @@ enum LiteralType {
   case StringType
 
   override def toString: String = this match {
+    case AnyType => "Any"
     case NothingType => "Nothing"
     case UnitType => "Unit"
     case BoolType => "Bool"

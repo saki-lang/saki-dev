@@ -314,7 +314,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
         }
       """
     }
-    val module = compileModule(code)
+    compileModule(code)
   }
 
   test("eq refl") {
@@ -576,49 +576,49 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             None
             Some(A)
         }
-
+        
         def unwrap[A: 'Type](option: Option[A]): A = match option {
-            case Option[A]::Some(value) => value
             case Option[A]::None => panic("Unwrapping a none option type")
+            case Option[A]::Some(value) => value
         }
-
+        
         type Expr = inductive {
             Var(String)
-            // Π(x : A). B
+            Type(Int)
+            // \pi (x : A). B
             Pi(String, Expr, Expr)
-            // λ(x : A). t
+            // \lamda (x : A). t
             Lambda(String, Expr, Expr)
             // f a
             Apply(Expr, Expr)
-            Type(Int)
         }
-
+        
         type Value = inductive {
             Neutral(NeutralValue)
             Type(Int)
             Lambda(Value, Value -> Value)
             Pi(Value, Value -> Value)
         }
-
+        
         type Type = Value
-
+        
         type NeutralValue = inductive {
             Var(String)
             Apply(NeutralValue, Value)
         }
-
+        
         def toValue(neutral: NeutralValue): Value = Value::Neutral(neutral)
-
+        
         type TypedValue = record {
             value: Value
             ty: Type
         }
-
+        
         type Env = inductive {
             Empty
             Cons(String, TypedValue, Env)
         }
-
+        
         def add(env: Env, name: String, value: Value, ty: Type): Env = {
             let typedValue = TypedValue '{
                 value = value
@@ -626,7 +626,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             }
             Env::Cons(name, typedValue, env)
         }
-
+        
         def get(env: Env, name: String): Option[TypedValue] = {
             match env {
                 case Env::Empty => Option[TypedValue]::None
@@ -636,20 +636,20 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
                 }
             }
         }
-
+        
         def contains(env: Env, name: String): Bool = match env {
             case Env::Empty => false
             case Env::Cons(name', _, env') => name' == name || env'.contains(name)
         }
-
+        
         def freshIdentFrom(env: Env, cnt: Int): String = {
             let ident = "$" ++ cnt.toString
             if !env.contains(ident) then ident
             else env.freshIdentFrom(cnt + 1)
         }
-
+        
         def freshIdent(env: Env): String = env.freshIdentFrom(0)
-
+        
         def evaluate(env: Env, expr: Expr): Value = match expr {
             case Expr::Var(name) => env.get(name).unwrap[TypedValue].value
             case Expr::Type(univ) => Value::Type(univ)
@@ -657,6 +657,68 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
                 case Value::Lambda(_, fn) => fn(env.evaluate(arg))
                 case Value::Neutral(neutral) => NeutralValue::Apply(neutral, env.evaluate(arg)).toValue
                 case _ => panic("Invald type: not a function")
+            }
+        }
+        
+        def readBack(neutral: NeutralValue, env: Env): Expr = match neutral {
+            case NeutralValue::Var(name) => Expr::Var(name)
+            case NeutralValue::Apply(fn, arg) => Expr::Apply(fn.readBack(env), arg.readBack(env))
+        } 
+        
+        def readBack(value: Value, env: Env): Expr = match value {
+            case Value::Neutral(neutral) => neutral.readBack(env)
+            case Value::Type(univ) => Expr::Type(univ)
+            case Value::Lambda(paramType, fn) => {
+                let paramIdent: String = env.freshIdent
+                let paramTypeTerm = paramType.readBack(env)
+                let variable: Value = NeutralValue::Var(paramIdent).toValue
+                let updatedEnv = env.add(paramIdent, variable, env.evaluate(paramTypeTerm))
+                Expr::Lambda(
+                    paramIdent, paramTypeTerm,
+                    fn(NeutralValue::Var(paramIdent).toValue).readBack(updatedEnv)
+                )
+            }
+            case Value::Pi(paramType, fn) => {
+                let paramIdent: String = env.freshIdent
+                let paramTypeTerm = paramType.readBack(env)
+                let variable: Value = NeutralValue::Var(paramIdent).toValue
+                let updatedEnv = env.add(paramIdent, variable, env.evaluate(paramTypeTerm))
+                Expr::Pi(
+                    paramIdent, paramTypeTerm,
+                    fn(NeutralValue::Var(paramIdent).toValue).readBack(updatedEnv)
+                )
+            }
+        }
+        
+        def universeLevel(ty: Type): Int = match ty {
+            case Value::Type(univ) => univ
+            case _ => panic("Failed to unwrap universe level: not a type")
+        }
+        
+        def infer(env: Env, expr: Expr): Value = match expr {
+            case Expr::Var(name) => env.get(name).unwrap[TypedValue].ty
+            case Expr::Type(univ) => Value::Type(univ)
+            case Expr::Lambda(paramIdent, paramTypeExpr, bodyExpr) => {
+                let paramLevel = env.infer(paramTypeExpr).universeLevel
+                let paramType: Type = env.evaluate(paramTypeExpr)
+                let variable: Value = NeutralValue::Var(paramIdent).toValue
+                let bodyEnv = env.add(paramIdent, variable, paramType)
+                let returnType: Type = bodyEnv.infer(bodyExpr)
+                let returnTypeExpr: Expr = returnType.readBack(bodyEnv)
+                Value::Pi(
+                    paramType, 
+                    (arg: Value) => {
+                        let argType = env.infer(arg.readBack(bodyEnv))
+                        bodyEnv.add(paramIdent, arg, argType).evaluate(bodyExpr)
+                    }
+                ) 
+            }
+            case Expr::Pi(paramIdent, paramTypeExpr, returnTypeExpr) => {
+                let paramLevel = env.infer(paramTypeExpr).universeLevel
+                let paramType: Type = env.evaluate(paramTypeExpr)
+                let variable: Value = NeutralValue::Var(paramIdent).toValue
+                let returnTypeLevel = env.add(paramIdent, variable, paramType).infer(returnTypeExpr).universeLevel
+                Value::Type(max paramLevel returnTypeLevel)
             }
         }
       """

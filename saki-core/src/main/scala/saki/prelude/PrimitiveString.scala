@@ -13,7 +13,7 @@ object PrimitiveString extends PreludeDefinitionSet {
     ident = Var.Defined(ident),
     params = Seq("a" @: StringType.toTerm, "b" @: StringType.toTerm),
     resultType = StringType.toTerm,
-    nativeImpl = (args: ArgList[Value]) => {
+    nativeImpl = (args: ArgList[Value], _) => {
       val a: Value = args(0).value
       val b: Value = args(1).value
       (a, b) match {
@@ -27,7 +27,7 @@ object PrimitiveString extends PreludeDefinitionSet {
     ident = Var.Defined(ident),
     params = Seq("a" @: StringType.toTerm),
     resultType = StringType.toTerm,
-    nativeImpl = (args: ArgList[Value]) => {
+    nativeImpl = (args: ArgList[Value], _) => {
       val a: Value = args(0).value
       a match {
         case Value.Primitive(StringValue(a)) => Value.Primitive(StringValue(fn(a)))
@@ -40,7 +40,7 @@ object PrimitiveString extends PreludeDefinitionSet {
     ident = Var.Defined(ident),
     params = Seq("a" @: StringType.toTerm, "b" @: StringType.toTerm),
     resultType = BoolType.toTerm,
-    nativeImpl = (args: ArgList[Value]) => {
+    nativeImpl = (args: ArgList[Value], _) => {
       val a: Value = args(0).value
       val b: Value = args(1).value
       (a, b) match {
@@ -54,7 +54,7 @@ object PrimitiveString extends PreludeDefinitionSet {
     ident = Var.Defined(ident),
     params = Seq("a" @: StringType.toTerm),
     resultType = BoolType.toTerm,
-    nativeImpl = (args: ArgList[Value]) => {
+    nativeImpl = (args: ArgList[Value], _) => {
       val a: Value = args(0).value
       a match {
         case Value.Primitive(StringValue(a)) => Value.Primitive(BoolValue(fn(a)))
@@ -67,7 +67,7 @@ object PrimitiveString extends PreludeDefinitionSet {
     ident = Var.Defined("length"),
     params = Seq("str" @: StringType.toTerm),
     resultType = IntType.toTerm,
-    nativeImpl = (args: ArgList[Value]) => {
+    nativeImpl = (args: ArgList[Value], _) => {
       val a: Value = args(0).value
       a match {
         case Value.Primitive(StringValue(a)) => Value.Primitive(IntValue(a.length))
@@ -80,7 +80,7 @@ object PrimitiveString extends PreludeDefinitionSet {
     ident = Var.Defined("parseInt"),
     params = Seq("intString" @: StringType.toTerm),
     resultType = IntType.toTerm,
-    nativeImpl = (args: ArgList[Value]) => {
+    nativeImpl = (args: ArgList[Value], _) => {
       val a: Value = args(0).value
       a match {
         case Value.Primitive(StringValue(a)) => Value.Primitive(IntValue(BigInt(a)))
@@ -93,7 +93,7 @@ object PrimitiveString extends PreludeDefinitionSet {
     ident = Var.Defined("parseFloat"),
     params = Seq("floatString" @: StringType.toTerm),
     resultType = FloatType.toTerm,
-    nativeImpl = (args: ArgList[Value]) => {
+    nativeImpl = (args: ArgList[Value], _) => {
       val a: Value = args(0).value
       a match {
         case Value.Primitive(StringValue(a)) => Value.Primitive(FloatValue(a.toDouble))
@@ -106,7 +106,7 @@ object PrimitiveString extends PreludeDefinitionSet {
     ident = Var.Defined("repeat"),
     params = Seq("str" @: StringType.toTerm, "n" @: IntType.toTerm),
     resultType = StringType.toTerm,
-    nativeImpl = (args: ArgList[Value]) => {
+    nativeImpl = (args: ArgList[Value], _) => {
       val str: Value = args(0).value
       val n: Value = args(1).value
       (str, n) match {
@@ -124,7 +124,6 @@ object PrimitiveString extends PreludeDefinitionSet {
     unaryBoolFunction("isEmpty", _.isEmpty),
     unaryBoolFunction("nonEmpty", _.nonEmpty),
     binaryFunction("++", _ + _),
-    binaryBoolFunction("==", _ == _),
     length,
     parseInt,
     parseFloat,

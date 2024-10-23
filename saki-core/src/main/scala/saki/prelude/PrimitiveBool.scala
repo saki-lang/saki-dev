@@ -13,7 +13,7 @@ object PrimitiveBool extends PreludeDefinitionSet {
     ident = Var.Defined(ident),
     params = Seq("a" @: BoolType.toTerm, "b" @: BoolType.toTerm),
     resultType = BoolType.toTerm,
-    nativeImpl = (args: ArgList[Value]) => {
+    nativeImpl = (args: ArgList[Value], _) => {
       val a: Value = args(0).value
       val b: Value = args(1).value
       (a, b) match {
@@ -27,7 +27,7 @@ object PrimitiveBool extends PreludeDefinitionSet {
     ident = Var.Defined(ident),
     params = Seq("a" @: BoolType.toTerm),
     resultType = BoolType.toTerm,
-    nativeImpl = (args: ArgList[Value]) => {
+    nativeImpl = (args: ArgList[Value], _) => {
       val a: Value = args(0).value
       a match {
         case Value.Primitive(BoolValue(a)) => Value.Primitive(BoolValue(fn(a)))
