@@ -116,7 +116,9 @@ enum SymbolKind {
   case Inductive
 }
 
-sealed trait Definition[T <: Entity] extends Symbol[T]
+sealed trait Definition[T <: Entity] extends Symbol[T] {
+  def toDeclaration(implicit ev: EntityFactory[T, T]): Declaration[T, ?]
+}
 
 // Too young, too simple, sometimes naive
 sealed trait NaiveDefinition[T <: Entity] extends Definition[T] with FnLike[T] {
@@ -132,10 +134,18 @@ sealed trait NaiveDefinition[T <: Entity] extends Definition[T] with FnLike[T] {
 }
 
 trait Function[T <: Entity] extends NaiveDefinition[T] {
+  
   override def ident: Var.Defined[T, Function]
+  
   def isRecursive: Boolean
+  
   def resultType: T
+  
   override def kind: SymbolKind = SymbolKind.Function
+  
+  override def toDeclaration(implicit ev: EntityFactory[T, T]): NaiveDeclaration[T, Function] = {
+    NaiveDeclaration(ident, params, resultType, kind)
+  } 
 }
 
 case class DefinedFunction[T <: Entity](
@@ -206,6 +216,10 @@ case class Overloaded[T <: Entity](
       case overloaded: Overloaded[T] => Overloaded(ident, overloads ++ overloaded.overloads)
     }
   }
+
+  override def toDeclaration(implicit ev: EntityFactory[T, T]): OverloadedDeclaration[T] = {
+    OverloadedDeclaration(ident, overloads.map(_.toDeclaration))
+  }
 }
 
 object Overloaded {
@@ -243,6 +257,10 @@ case class Inductive[T <: Entity](
   def getConstructor(name: String): Option[Constructor[T]] = {
     constructors.find(_.ident == name)
   }
+
+  override def toDeclaration(implicit ev: EntityFactory[T, T]): Declaration[T, Inductive] = {
+    NaiveDeclaration(ident, params, resultType, kind)
+  }
 }
 
 case class Constructor[T <: Entity](
@@ -276,17 +294,17 @@ case class NaiveDeclaration[T <: Entity, Def[E <: Entity] <: NaiveDefinition[E]]
 
 case class OverloadedDeclaration[T <: Entity](
   override val ident: Var.Defined[T, Overloaded],
-  overloads: Seq[Declaration[T, Function]],
+  overloads: Seq[NaiveDeclaration[T, Function]],
 ) extends Declaration[T, Overloaded] with OverloadedSymbol[
-  T, OverloadedDeclaration[T], Declaration[T, Function]
+  T, OverloadedDeclaration[T], NaiveDeclaration[T, Function]
 ] {
   override def kind: SymbolKind = SymbolKind.Function
 
-  override def merge(other: OverloadedDeclaration[T] | Declaration[T, Function]): OverloadedDeclaration[T] = {
+  override def merge(other: OverloadedDeclaration[T] | NaiveDeclaration[T, Function]): OverloadedDeclaration[T] = {
     assert(other.ident == this.ident)
     val ident: Var.Defined[T, Overloaded] = Var.Defined(this.ident.name)
     other match {
-      case function: Declaration[T, Function] @unchecked => OverloadedDeclaration(ident, overloads :+ function)
+      case function: NaiveDeclaration[T, Function] @unchecked => OverloadedDeclaration(ident, overloads :+ function)
       case overloaded: OverloadedDeclaration[T] => OverloadedDeclaration(ident, overloads ++ overloaded.overloads)
     }
   }
@@ -296,16 +314,16 @@ case class OverloadedDeclaration[T <: Entity](
 
 object OverloadedDeclaration {
   def merge[T <: Entity](
-    lhs: OverloadedDeclaration[T] | Declaration[T, Function],
-    rhs: OverloadedDeclaration[T] | Declaration[T, Function],
+    lhs: OverloadedDeclaration[T] | NaiveDeclaration[T, Function],
+    rhs: OverloadedDeclaration[T] | NaiveDeclaration[T, Function],
   ): OverloadedDeclaration[T] = {
     (lhs, rhs) match {
-      case (lhs: Declaration[T, Function] @unchecked, rhs: Declaration[T, Function] @unchecked)  => {
+      case (lhs: NaiveDeclaration[T, Function] @unchecked, rhs: NaiveDeclaration[T, Function] @unchecked)  => {
         val ident: Var.Defined[T, Overloaded] = Var.Defined(lhs.ident.name)
         OverloadedDeclaration(ident, Seq(lhs, rhs))
       }
-      case (lhs: OverloadedDeclaration[T], rhs: Declaration[T, Function] @unchecked) => lhs.merge(rhs)
-      case (lhs: Declaration[T, Function] @unchecked, rhs: OverloadedDeclaration[T]) =>  rhs.merge(lhs)
+      case (lhs: OverloadedDeclaration[T], rhs: NaiveDeclaration[T, Function] @unchecked) => lhs.merge(rhs)
+      case (lhs: NaiveDeclaration[T, Function] @unchecked, rhs: OverloadedDeclaration[T]) =>  rhs.merge(lhs)
       case (lhs: OverloadedDeclaration[T], rhs: OverloadedDeclaration[T]) => lhs.merge(rhs)
     }
   }

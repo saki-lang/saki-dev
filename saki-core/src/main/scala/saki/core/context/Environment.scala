@@ -79,10 +79,17 @@ case class TypedEnvironment[T <: Entity] private (
   }
 
   def getSymbol(ident: Var.Defined[Term, ?]): Option[Symbol[Term]] = {
-    definitions.get(ident) match {
-      case Some(symbol: Symbol[Term]) => Some(symbol)
-      case _ => declarations.get(ident)
-    }
+    // The precedence of declarations is higher than definitions
+    // since we need to make sure the mutual recursive overloading
+    // of the same function can be resolved correctly
+    declarations.get(ident).orElse(definitions.get(ident))
+  }
+
+  def getSymbolByName(name: String): Option[Symbol[Term]] = {
+    declarations.collectFirst {
+      // The precedence of declarations is higher than definitions, same as `getSymbol`
+      case (ident, symbol: Symbol[Term]) if ident.name == name => symbol
+    }.orElse(this.getDefinitionByName(name))
   }
 
   override def getValue(local: Var.Local): Option[T] = locals.get(local).map(_.value)

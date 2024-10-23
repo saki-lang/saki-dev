@@ -286,6 +286,54 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     compileModule(code)
   }
 
+  test("overloaded mutual recursive") {
+    val code = {
+      """
+        type Value = inductive {
+            Neutral(NeutralValue)
+            Type(Int)
+        }
+
+        type NeutralValue = inductive {
+            Var(String)
+            Apply(NeutralValue, Value)
+        }
+
+        // Overloading for `NeutralValue`
+        def toString(neutral: NeutralValue): String = match neutral {
+            case NeutralValue::Var(name) => name
+            // Here `fn` is a `NeutralValue` and `arg` is a `Value`
+            // Thus, the `toString` functions we are calling here are two different overloadings
+            case NeutralValue::Apply(fn, arg) => "app(" ++ fn.toString ++ ", " ++ arg.toString ++ ")"
+        }
+
+        // Overloading for `Value`
+        def toString(value: Value): String = match value {
+            case Value::Neutral(neutral) => neutral.toString
+            case Value::Type(univ) => univ.toString
+        }
+      """
+    }
+    val module = compileModule(code)
+  }
+
+  test("eq refl") {
+    val code = {
+      """
+        def eq(A: 'Type, a b: A): 'Type = ∀(P: A -> 'Type) -> P(a) -> P(b)
+
+        def refl(A: 'Type, a: A): eq(A, a, a) = {
+            (P: A -> 'Type, pa: P(a)) => pa
+        }
+
+        def symmetry(A: 'Type, a b: A, e: eq(A, a, b)): eq(A, b, a) = {
+            e((b: A) => eq(A, b, a), refl(A, a))
+        }
+      """
+    }
+    compileModule(code)
+  }
+
   test("rbtree") {
     val code = {
       """
@@ -519,23 +567,6 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     module.eval("myTree.successor(1)") should be (module.eval("Option(Int)::Some(2)"))
     module.eval("myTree.successor(3)") should be (module.eval("Option(Int)::Some(4)"))
     module.eval("myTree.successor(4)") should be (module.eval("Option(Int)::Some(5)"))
-  }
-
-  test("eq refl") {
-    val code = {
-      """
-        def eq(A: 'Type, a b: A): 'Type = ∀(P: A -> 'Type) -> P(a) -> P(b)
-
-        def refl(A: 'Type, a: A): eq(A, a, a) = {
-            (P: A -> 'Type, pa: P(a)) => pa
-        }
-
-        def symmetry(A: 'Type, a b: A, e: eq(A, a, b)): eq(A, b, a) = {
-            e((b: A) => eq(A, b, a), refl(A, a))
-        }
-      """
-    }
-    compileModule(code)
   }
 
   test("nbe") {

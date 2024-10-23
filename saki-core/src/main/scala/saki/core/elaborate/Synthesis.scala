@@ -48,13 +48,10 @@ object Synthesis:
 
     case Expr.Variable(ref) => ref match {
       // Converting a definition reference to a lambda, enabling curry-style function application
-      case definitionVar: Var.Defined[Term@unchecked, ?] => env.getDefinition(definitionVar) match {
-        case Some(definition) => synthSymbol(definition)
-        case None => env.declarations.get(definitionVar) match {
-          case Some(declaration) => synthSymbol(declaration)
-          case None => UnresolvedReference.raise(expr.span) {
-            s"Unresolved reference: ${definitionVar.name}"
-          }
+      case definitionVar: Var.Defined[Term@unchecked, ?] => env.getSymbol(definitionVar) match {
+        case Some(symbol) => synthSymbol(symbol)
+        case None => UnresolvedReference.raise(expr.span) {
+          s"Unresolved reference: ${definitionVar.name}"
         }
       }
       case variable: Var.Local => env.locals.get(variable) match {
@@ -81,8 +78,8 @@ object Synthesis:
       // `obj.method`
       case (term, ty) => {
         given SourceSpan = expr.span
-        val method: (Function[Term] | Overloaded[Term]) = env.getDefinitionByName(member) match {
-          case Some(definition: (Function[Term] | Overloaded[Term])) => definition
+        val method: Symbol[Term] = env.getSymbolByName(member) match {
+          case Some(definition: Symbol[Term]) => definition
           case _ => MethodNotFound.raise(expr.span) {
             s"Method not found $member for value $term of type $ty"
           }
@@ -397,6 +394,14 @@ object Synthesis:
       term = declaration.params.buildLambda(declaration.buildInvoke(Term)).normalize,
       `type` = declaration.params.buildPiType(declaration.resultType).eval,
     )
+
+    case overloaded: OverloadedDeclaration[Term] => {
+      val lambdaPaths = overloaded.overloads.map(overloaded => (overloaded.params, overloaded.buildInvoke(Term)))
+      val piPaths = overloaded.overloads.map(overloaded => (overloaded.params, overloaded.resultType))
+      val lambda = Term.overloaded(Term.OverloadedLambda.apply, lambdaPaths)
+      val pi = Term.overloaded(Term.OverloadedPi.apply, piPaths)
+      Synth(lambda, pi.eval)
+    }
 
   }
 

@@ -45,8 +45,8 @@ object Module {
       resolvedContext.dependencyGraph.stronglyConnectedComponents.reverse.map(
         // Extract the names of definitions in the strongly connected component
         // Filter out definitions that are not in the current module
-        // Overloaded functions are gathered in the same strongly connected component
-        // since they have the same name
+        // Overloaded functions in the *SAME MODULE* are gathered in the same
+        // strongly connected component since they are identified by the same name
         _.flatMap(name => definitions.filter(name == _.ident.name))
       )
     }.filter(_.nonEmpty)
@@ -81,7 +81,13 @@ object Module {
 
     // Pre-build declarations for definitions of the strongly connected component
     // Step 1. Merge overloaded functions
-    val declarations = definitions.map(synthDeclaration).groupBy(_.ident).map {
+    val declarations = definitions.map(synthDeclaration).flatMap { declaration =>
+      env.getDefinitionByName(declaration.ident.name) match {
+        // If the definition already exists in the environment, merge it with the new declaration
+        case Some(definition) => Seq(definition.toDeclaration(Term)) ++ Seq(declaration)
+        case _ => Seq(declaration)
+      }
+    }.groupBy(_.ident).map {
       case (_, decls) => if decls.size == 1 then decls.head else {
         decls.reduce { (decl1, decl2) => merge(decl1.asInstanceOf, decl2.asInstanceOf) }
       }
@@ -96,6 +102,7 @@ object Module {
     definitions.foldLeft((resolveCtx, env)) {
       case ((resolvingContext, env), definition) => {
         val (resolved, newCtx) = definition.resolve(resolvingContext)
+        // We only use the environment with declarations for synthesis with in the same strongly connected component
         val definitionSynth = resolved.synth(declEnv)
         (newCtx, env.add(definitionSynth))
       }
