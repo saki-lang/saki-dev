@@ -93,13 +93,16 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   }
 
   override def visitModuleEntityOpDecl(ctx: ModuleEntityOpDeclContext): Seq[Definition] = {
-    unimplemented("TODO") // TODO
+    ctx.operatorDeclaration match {
+      case ctx: UnaryOperatorContext => visitUnaryOperator(ctx)
+      case ctx: BinaryOperatorContext => visitBinaryOperator(ctx)
+    }
     Seq.empty
   }
 
   override def visitModuleEntityDef(ctx: ModuleEntityDefContext): Seq[Definition] = ctx.definition.visit
 
-  override def visitModuleEntityEval(ctx: ModuleEntityEvalContext): Evaluation = Evaluation(ctx.expr.visit)
+  override def visitModuleEntityEval(ctx: ModuleEntityEvalContext): Evaluation = Evaluation(ctx.blockExpr.visit)
 
   // Definition
 

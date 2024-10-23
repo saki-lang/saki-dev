@@ -8,39 +8,39 @@ program
 
 moduleEntity
     :   definition                                                              # moduleEntityDef
-    |   'impl' ('[' paramList ']')? type=expr
+    |   'impl' ('[' paramList ']')? type=expr NL*
             '{' NL* (defs+=definition (NL+ defs+=definition)*)? NL* '}'         # moduleEntityImpl
     |   operatorDeclaration                                                     # moduleEntityOpDecl
-    |   'eval' value=expr                                                       # moduleEntityEval
+    |   'eval' value=blockExpr                                                  # moduleEntityEval
     ;
 
 expr
     // Value
-    :   value=atom                                                              # exprAtom
-    |   func=expr '(' NL* argList NL* ')'                                       # exprCall
-    |   func=expr '[' NL* argList NL* ']'                                       # exprImplicitCall
-    |   subject=expr '.' member=Identifier ('[' implicitArgList=argList ']')?   # exprElimination
-    |   inductive=expr '::' constructor=Identifier                              # exprConstructor
-    |   lhs=expr rhs=atom                                                       # exprSpine
-    |   lhs=expr op=OptSymbol rhs=expr                                          # exprSpineInfixOp
-    |   lhs=expr op=OptSymbol                                                   # exprSpinePostfixOp
-    |   op=OptSymbol rhs=expr                                                   # exprSpinePrefixOp
-    |   '(' value=blockExpr ')'                                                 # exprParen
-    |   '\'(' elements+=expr ',' NL* elements+=expr ')'                         # exprTuple
-    |   '^(' types+=expr ',' NL* types+=expr ')'                                # exprTupleType
-    |   '(' lambdaParamList=paramList ')' (':' returnType=expr)? '=>' body=blockExpr                # exprLambda
-    |   func=expr ('|' lambdaParamList=untypedParamList '|' (':' returnType=expr)?)? body=block     # exprCallWithLambda
+    :   value=atom                                                                                      # exprAtom
+    |   func=expr '(' NL* argList NL* ')'                                                               # exprCall
+    |   func=expr '[' NL* argList NL* ']'                                                               # exprImplicitCall
+    |   subject=expr NL* '.' member=Identifier ('[' implicitArgList=argList ']')?                       # exprElimination
+    |   inductive=expr '::' constructor=Identifier                                                      # exprConstructor
+    |   lhs=expr rhs=atom                                                                               # exprSpine
+    |   lhs=expr op=OptSymbol rhs=expr                                                                  # exprSpineInfixOp
+    |   lhs=expr op=OptSymbol                                                                           # exprSpinePostfixOp
+    |   op=OptSymbol rhs=expr                                                                           # exprSpinePrefixOp
+    |   '(' value=blockExpr ')'                                                                         # exprParen
+    |   '\'(' elements+=expr ',' NL* elements+=expr ')'                                                 # exprTuple
+    |   '^(' types+=expr ',' NL* types+=expr ')'                                                        # exprTupleType
+    |   '(' lambdaParamList=paramList ')' (':' returnType=expr)? '=>' body=blockExpr                    # exprLambda
+    |   func=expr ('|' lambdaParamList=untypedParamList '|' (':' returnType=expr)?)? body=block         # exprCallWithLambda
     // Control
-    |   'if' NL* cond=blockExpr NL* 'then' NL* then=blockExpr NL* 'else' NL* else=blockExpr         # exprIf
-    |   'match' value=expr '{' NL* cases+=matchCase (NL+ cases+=matchCase)* NL* '}'                 # exprMatch
+    |   'if' NL* cond=blockExpr NL* 'then' NL* then=blockExpr NL* 'else' NL* else=blockExpr             # exprIf
+    |   'match' value=expr '{' NL* cases+=matchCase (NL+ cases+=matchCase)* NL* '}'                     # exprMatch
     // Types
-    |   <assoc=right> domain=expr '->' codomain=expr                                                # exprArrowType
-    |   <assoc=right> '[' domain=expr ']' '->' codomain=expr                                        # exprImplicitArrowType
-    |   <assoc=right> '∀' '(' param=Identifier ':' domain=expr ')' '->' codomain=expr               # exprPiType
-    |   <assoc=right> '∀' '[' param=Identifier ':' domain=expr ']' '->' codomain=expr               # exprImplicitPiType
-    |   <assoc=right> '∃' '(' param=Identifier ':' domain=expr ')' '->' codomain=expr               # exprSigmaType
-    |   'record' (':' super=expr)? '{' NL* fields+=identTypePair (NL+ fields+=identTypePair)* NL* '}' # exprRecordType
-    |   recordType=expr '\'' '{' NL* fields+=fieldAssignment (NL+ fields+=fieldAssignment)* NL* '}'  # exprRecord
+    |   <assoc=right> domain=expr '->' codomain=expr                                                    # exprArrowType
+    |   <assoc=right> '[' domain=expr ']' '->' codomain=expr                                            # exprImplicitArrowType
+    |   <assoc=right> '∀' '(' param=Identifier ':' domain=expr ')' '->' codomain=expr                   # exprPiType
+    |   <assoc=right> '∀' '[' param=Identifier ':' domain=expr ']' '->' codomain=expr                   # exprImplicitPiType
+    |   <assoc=right> '∃' '(' param=Identifier ':' domain=expr ')' '->' codomain=expr                   # exprSigmaType
+    |   'record' (':' super=expr)? '{' NL* fields+=identTypePair (NL+ fields+=identTypePair)* NL* '}'   # exprRecordType
+    |   recordType=expr '\'' '{' NL* fields+=fieldAssignment (NL+ fields+=fieldAssignment)* NL* '}'     # exprRecord
     ;
 
 blockExpr
