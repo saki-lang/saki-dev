@@ -266,7 +266,10 @@ enum Term extends RuntimeEntity[Type] {
 
       val function: Function[Term] = env.getSymbol(fnRef).get match {
         case function: Function[Term] => function
-        case _: Overloaded[Term] => fnRef.definition.get
+        case overloaded: Overloaded[Term] => fnRef.definition.toOption match {
+          case Some(function) => function
+          case None => Term.OverloadInvoke(overloaded.ident, argTerms).getOverload.asInstanceOf[Function[Term]]
+        }
         case _: Declaration[Term, Function] @unchecked => {
           // If the function is a pre-declared function, keep it as a neutral value
           return Value.functionInvoke(fnRef, argTerms.map(_.eval(doEvalFunction)))
@@ -334,7 +337,9 @@ enum Term extends RuntimeEntity[Type] {
         // Try to match the scrutinees with the clauses
         clauses.tryMatch(scrutineesValue).getOrElse {
           // If all scrutinees are final and no match is found, raise an error
-          MatchNotExhaustive.raise("Match is not exhaustive")
+          MatchNotExhaustive.raise {
+            s"Match is not exhaustive for scrutinee: ${scrutineesValue.map(_.readBack).mkString(", ")}"
+          }
         }
       } else {
         // Otherwise (at least one scrutinee contains neutral value), keep the match as a neutral value
