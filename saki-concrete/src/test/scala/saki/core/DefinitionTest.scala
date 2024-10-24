@@ -363,6 +363,69 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     compileModule(code)
   }
 
+  test("proof: n + 0 = n") {
+    val code = {
+      """
+        def Eq(A: 'Type, a b: A): 'Type = ∀(P: A -> 'Type) -> P(a) -> P(b)
+
+        def refl(A: 'Type, a: A): Eq(A, a, a) = {
+            (P: A -> 'Type, pa: P(a)) => pa
+        }
+
+        def symmetry(A: 'Type, a b: A, eqab: Eq(A, a, b)): Eq(A, b, a) = {
+            eqab((b': A) => Eq(A, b', a), refl(A, a))
+        }
+
+        type Nat = inductive {
+            Zero
+            Succ(Nat)
+        }
+
+        def plus(a b : Nat): Nat = match a {
+            case Nat::Zero => b
+            case Nat::Succ(a') => Nat::Succ(plus(a', b))
+        }
+
+        def induction(
+            P: Nat -> 'Type,
+            base: P(Nat::Zero),
+            induce: ∀(n: Nat) -> P(n) -> P(Nat::Succ(n)),
+            nat: Nat,
+        ): P(nat) = match nat {
+            case Nat::Zero => base
+            case Nat::Succ(n') => induce(n', induction(P, base, induce, n'))
+        }
+
+        def inductionReduce(
+            a b: Nat,
+            eqba: Eq(Nat, b, a),
+            P: Nat -> 'Type,
+            pa: P(a),
+        ): P(b) = {
+            let eqab = symmetry(Nat, b, a, eqba)
+            eqab(P, pa)
+        }
+
+        def theoremPlusZero: ∀(n: Nat) -> Eq(Nat, plus n Nat::Zero, n) = {
+          (n: Nat) => induction(
+            (n': Nat) => Eq(Nat, plus n' Nat::Zero, n'),
+            refl(Nat, Nat::Zero),
+            (n': Nat, IHn: Eq(Nat, plus n' Nat::Zero, n')) => {
+              inductionReduce(
+                n',
+                plus n' Nat::Zero,
+                IHn,
+                (n'': Nat) => Eq(Nat, Nat::Succ(n''), Nat::Succ(n')),
+                refl(Nat, Nat::Succ(n'))
+              )
+            }
+          )
+        }
+      """
+    }
+    val module = compileModule(code)
+  }
+
   test("operator declaration") {
     val code = {
       """

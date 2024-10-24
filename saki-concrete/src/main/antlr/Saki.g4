@@ -8,7 +8,7 @@ program
 
 moduleEntity
     :   definition                                                              # moduleEntityDef
-    |   'impl' ('[' paramList ']')? type=expr NL*
+    |   'impl' ('[' NL* paramList NL* ']')? type=expr NL*
             '{' NL* (defs+=definition (NL+ defs+=definition)*)? NL* '}'         # moduleEntityImpl
     |   operatorDeclaration                                                     # moduleEntityOpDecl
     |   'eval' value=blockExpr                                                  # moduleEntityEval
@@ -28,7 +28,7 @@ expr
     |   '(' value=blockExpr ')'                                                                         # exprParen
     |   '\'(' elements+=expr ',' NL* elements+=expr ')'                                                 # exprTuple
     |   '^(' types+=expr ',' NL* types+=expr ')'                                                        # exprTupleType
-    |   '(' lambdaParamList=paramList ')' (':' returnType=expr)? '=>' body=blockExpr                    # exprLambda
+    |   '(' NL* lambdaParamList=paramList NL* ')' (':' returnType=expr)? '=>' body=blockExpr            # exprLambda
     |   func=expr ('|' lambdaParamList=untypedParamList '|' (':' returnType=expr)?)? body=block         # exprCallWithLambda
     // Control
     |   'if' NL* cond=blockExpr NL* 'then' NL* then=blockExpr NL* 'else' NL* else=blockExpr             # exprIf
@@ -36,9 +36,9 @@ expr
     // Types
     |   <assoc=right> domain=expr '->' codomain=expr                                                    # exprArrowType
     |   <assoc=right> '[' domain=expr ']' '->' codomain=expr                                            # exprImplicitArrowType
-    |   <assoc=right> '∀' '(' param=Identifier ':' domain=expr ')' '->' codomain=expr                   # exprPiType
-    |   <assoc=right> '∀' '[' param=Identifier ':' domain=expr ']' '->' codomain=expr                   # exprImplicitPiType
-    |   <assoc=right> '∃' '(' param=Identifier ':' domain=expr ')' '->' codomain=expr                   # exprSigmaType
+    |   <assoc=right> '∀' '(' NL* param=Identifier ':' domain=expr NL* ')' '->' codomain=expr           # exprPiType
+    |   <assoc=right> '∀' '[' NL* param=Identifier ':' domain=expr NL* ']' '->' codomain=expr           # exprImplicitPiType
+    |   <assoc=right> '∃' '(' NL* param=Identifier ':' domain=expr NL* ')' '->' codomain=expr           # exprSigmaType
     |   'record' (':' super=expr)? '{' NL* fields+=identTypePair (NL+ fields+=identTypePair)* NL* '}'   # exprRecordType
     |   recordType=expr '\'' '{' NL* fields+=fieldAssignment (NL+ fields+=fieldAssignment)* NL* '}'     # exprRecord
     ;
@@ -91,10 +91,10 @@ block
     ;
 
 definition
-    :   'def' ident=definitionIdentifier ('[' implicitParamList=paramList ']')?
-          ('(' explicitParamList=paramList ')')? (':' returnType=expr)? '=' NL* body=definitionBody     # defGeneral
-    |   'type' ident=Identifier ('[' implicitParamList=paramList ']')?
-          ('(' explicitParamList=paramList ')')? '=' NL* body=definitionBody                            # defType
+    :   'def' ident=definitionIdentifier ('[' NL* implicitParamList=paramList NL* ']')?
+          ('(' NL* explicitParamList=paramList NL* ')')? (':' returnType=expr)? '=' NL* body=definitionBody # defGeneral
+    |   'type' ident=Identifier ('[' NL* implicitParamList=paramList NL* ']')?
+          ('(' NL* explicitParamList=paramList NL* ')')? '=' NL* body=definitionBody                        # defType
     ;
 
 definitionIdentifier
@@ -132,7 +132,7 @@ operatorPrecedence
     ;
 
 paramList
-    :   (params+=identTypePair (',' params+=identTypePair)* ','?)?
+    :   (params+=identTypePair (',' NL* params+=identTypePair)* ','?)?
     ;
 
 untypedParamList

@@ -175,14 +175,14 @@ object Synthesis:
 
     case Expr.Match(scrutinees, clauses) => {
       val scrutineesSynth: Seq[Synth] = scrutinees.map(_.synth)
-      val clausesSynth: Seq[(Clause[Term], Term)] = clauses.map { clause =>
+      val clausesSynth: Seq[(Clause[Term], Type)] = clauses.map { clause =>
         synthClause(clause, scrutineesSynth)
       }
-      val clauseBodyTypeTerms: Seq[Term] = clausesSynth.map(_._2)
+      val clauseBodyTypeTerms: Seq[Term] = clausesSynth.map(_._2.readBack)
       if clauseBodyTypeTerms.isEmpty then {
         SizeNotMatch.raise(expr.span) { "Expected at least one clause" }
       }
-      val clauseBodyTypes: Seq[Value] = clauseBodyTypeTerms.map(_.eval)
+      val clauseBodyTypes: Seq[Value] = clausesSynth.map(_._2)
       val leastUpperBoundType: Type = clauseBodyTypes.reduce((a, b) => a leastUpperBound b)
       Synth(
         term = Term.Match(scrutineesSynth.map(_.term), clausesSynth.map(_._1)),
@@ -271,7 +271,7 @@ object Synthesis:
 
   def synthClause(clause: Clause[Expr], scrutinees: Seq[Synth])(
     implicit env: Environment.Typed[Value]
-  ): (Clause[Term], Term) = {
+  ): (Clause[Term], Type) = {
     val patterns = clause.patterns.map(pattern => pattern.map(_.synth.term))
     val map = patterns.zip(scrutinees).foldLeft(Map.empty: Map[Var.Local, Term]) {
       case (subst, (pattern, param)) => {
@@ -279,7 +279,8 @@ object Synthesis:
       }
     }.map { case (k, v) => k -> Typed[Value](Value.variable(k), v.eval) }
     val (body, ty) = env.withLocals[Synth](map) { clause.body.synth }.unpack
-    (Clause(patterns, body), ty.readBack)
+    // TODO: FIXME: check whether the type contains the value of the scrutinee
+    (Clause(patterns, body), ty)
   }
 
   extension (definition: Definition[Expr]) {

@@ -1,0 +1,28 @@
+type ℕ = inductive {
+    Zero
+    Succ(ℕ)
+}
+
+def plus(a b : ℕ): ℕ = match a {
+    case ℕ::Zero => b
+    case ℕ::Succ(a') => ℕ::Succ(plus(a', b))
+}
+
+def fib(n : ℕ): ℕ = match n {
+    case ℕ::Zero => ℕ::Zero
+    case ℕ::Succ(ℕ::Zero) => ℕ::Succ(ℕ::Zero)
+    case ℕ::Succ(ℕ::Succ(n')) => plus(fib(n'), fib(ℕ::Succ(n')))
+}
+
+def toPeano(n: ℤ): ℕ = {
+    if n == 0 then ℕ::Zero
+    else ℕ::Succ(toPeano(n - 1))
+}
+
+def toInt(n: ℕ): ℤ = match n {
+    case ℕ::Zero => 0
+    case ℕ::Succ(n') => toInt(n') + 1
+}
+
+eval "The 7th fibonacci number is " ++ (fib(7.toPeano).toInt.toString)
+eval "The 12-th fibonacci number is " ++ (fib(12.toPeano).toInt.toString)
