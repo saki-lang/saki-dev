@@ -37,7 +37,7 @@ enum Definition(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreDefiniti
     case Function(name, paramsExpr, resultType, body) => {
       val params = paramsExpr.map(param => param.map(_.emit))
       val ident: Var.Defined[Expr, CoreFunction] = Var.Defined(name)
-      DefinedFunction(ident, params, resultType.emit, true, LateInit(body.emit))
+      DefinedFunction(ident, params, resultType.emit, Set.empty, LateInit(body.emit))
     }
 
     case Inductive(name, paramsExpr, constructorsExpr) => {

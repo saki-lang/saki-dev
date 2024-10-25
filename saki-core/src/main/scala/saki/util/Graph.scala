@@ -151,7 +151,6 @@ class Graph[T](
     Graph(isDirected, combinedAdjacencyList)
   }
 
-
   /**
    * Computes the Strongly Connected Components (SCCs) of the graph using Kosaraju's Algorithm.
    *

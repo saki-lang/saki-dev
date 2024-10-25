@@ -175,16 +175,16 @@ object Synthesis:
 
     case Expr.Match(scrutinees, clauses) => {
       // **Principle of Type Uniformity**
-      // 
-      //  In a pattern-matching expression, we have a scrutinee (i.e., the value being matched) 
-      //  and multiple clauses (patterns and corresponding expressions). Each clause represents 
+      //
+      //  In a pattern-matching expression, we have a scrutinee (i.e., the value being matched)
+      //  and multiple clauses (patterns and corresponding expressions). Each clause represents
       //  a potential match, and the principle of type uniformity requires that:
-      // 
+      //
       //    1. All clauses must yield the same type, regardless of which pattern successfully matches.
       //
-      //    2. The resulting type of the entire match expression must be well-formed and identical 
+      //    2. The resulting type of the entire match expression must be well-formed and identical
       //       for each possible path through the pattern.
-      // 
+      //
       // e.g. The type of following match expression should be `P(n)`, but not `P(Nat::Zero) | P(Nat::Succ(n'))`
       // ```
       //  match n {
@@ -317,7 +317,7 @@ object Synthesis:
     implicit env: Environment.Typed[Value]
   ): Definition[Term] = definition match {
 
-    case DefinedFunction(ident, paramExprs, resultTypeExpr, isRecursive, pristineBody) => {
+    case DefinedFunction(ident, paramExprs, resultTypeExpr, dependencies, pristineBody) => {
       val (params, envParams) = synthParams(paramExprs)
       val (resultType, _) = resultTypeExpr.synth(envParams).unpack
       // Try to obtain the declaration of the function from the environment
@@ -325,7 +325,13 @@ object Synthesis:
         case Some(decl) => Var.Defined[Term, Function](decl.ident.name)
         case _ => Var.Defined[Term, Function](ident.name)
       }
-      val function = DefinedFunction[Term](defVar, params, resultType, isRecursive)
+      val updatedDependencies: Set[Var.Defined[Term, Function]] = dependencies.map { dependency =>
+        env.getSymbolByName(dependency.name) match {
+          case Some(symbol) => symbol.ident.asInstanceOf[Var.Defined[Term, Function]]
+          case None => Var.Defined[Term, Function](dependency.name)
+        }
+      }
+      val function = DefinedFunction[Term](defVar, params, resultType, updatedDependencies)
       function.body := envParams.withCurrentDefinition(function.ident) {
         implicit env => pristineBody.get.elaborate(resultType)(env)
       }

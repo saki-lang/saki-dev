@@ -282,33 +282,43 @@ enum Term extends RuntimeEntity[Type] {
         }
       }
 
+      lazy val argsValue: Seq[Value] = argTerms.map(_.eval(doEvalFunction))
+      // TODO: this need to be optimized
+      lazy val allArgumentsFinal = argsValue.forall(_.readBack.isFinal(Set.empty))
+      lazy val argVarList: Seq[(Var.Local, Typed[Value])] = function.arguments(argsValue).map {
+        (param, arg) => (param.ident, Typed[Value](arg, param.`type`.eval(doEvalFunction)))
+      }
+
+      lazy val evaluatedFunctionBody: Value = function match {
+        case fn: DefinedFunction[Term] => {
+          env.withLocals(argVarList.toMap) { implicit env => fn.body.get.eval(doEvalFunction)(env) }
+        }
+        case fn: NativeFunction[Term] => {
+          // Only evaluate the native function if all arguments are final
+          if allArgumentsFinal then {
+            // TODO: arguments apply mode
+            fn.invoke(argVarList.map { (_, typed) => Argument(typed.value) })
+          } else {
+            Value.functionInvoke(fn.ident, argsValue)
+          }
+        }
+      }
+
       env.currentDefinition match {
         case Some(current) if current.name == fnRef.name => {
           // Recursive call, keep it a neutral value
           Value.functionInvoke(function.ident, argTerms.map(_.eval(doEvalFunction)))
         }
-        case None | Some(_) => {
-          val argsValue: Seq[Value] = argTerms.map(_.eval(doEvalFunction))
-          // TODO: this need to be optimized
-          val allArgumentsFinal = argsValue.forall(_.readBack.isFinal(Set.empty))
-          lazy val argVarList: Seq[(Var.Local, Typed[Value])] = function.arguments(argsValue).map {
-            (param, arg) => (param.ident, Typed[Value](arg, param.`type`.eval(doEvalFunction)))
+        case Some(current: Var.Defined[Term, Function] @unchecked) => {
+          if !function.dependencies.contains(current) || allArgumentsFinal then {
+            evaluatedFunctionBody
+          } else {
+            Value.functionInvoke(function.ident, argsValue)
           }
+        }
+        case None | Some(_) => {
           if !function.isRecursive || allArgumentsFinal then {
-            function match {
-              case fn: DefinedFunction[Term] => {
-                env.withLocals(argVarList.toMap) { implicit env => fn.body.get.eval(doEvalFunction)(env) }
-              }
-              case fn: NativeFunction[Term] => {
-                // Only evaluate the native function if all arguments are final
-                if allArgumentsFinal then {
-                  // TODO: arguments apply mode
-                  fn.invoke(argVarList.map { (_, typed) => Argument(typed.value) })
-                } else {
-                  Value.functionInvoke(fn.ident, argsValue)
-                }
-              }
-            }
+            evaluatedFunctionBody
           } else {
             Value.functionInvoke(function.ident, argsValue)
           }

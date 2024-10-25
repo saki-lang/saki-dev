@@ -227,10 +227,10 @@ object Resolve {
           val (resolvedResultType, signatureCtx) = resultType.resolve(ctxWithParam)
           // Resolve the body of the function, add the self identifier back to the context
           val (resolvedBody, bodyCtx) = body.get.resolve(signatureCtx + ident)
-          val isRecursive = bodyCtx.dependencyGraph.isInCycle(ident.name)
+          val dependencies: Set[Var.Defined[Expr, Function]] = bodyCtx.dependencyGraph.reachableSet(ident.name).map(Var.Defined(_))
           // update the global context with the dependency graph
           global = global.copy(dependencyGraph = bodyCtx.dependencyGraph)
-          DefinedFunction[Expr](Var.Defined(ident.name), resolvedParams, resolvedResultType, isRecursive, LateInit(resolvedBody))
+          DefinedFunction[Expr](Var.Defined(ident.name), resolvedParams, resolvedResultType, dependencies, LateInit(resolvedBody))
         }
       }
 

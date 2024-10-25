@@ -139,6 +139,8 @@ sealed trait NaiveDefinition[T <: Entity] extends Definition[T] with NaiveSymbol
 }
 
 trait Function[T <: Entity] extends NaiveDefinition[T] {
+
+  def dependencies: Set[Var.Defined[T, Function]]
   
   override def ident: Var.Defined[T, Function]
   
@@ -160,11 +162,13 @@ case class DefinedFunction[T <: Entity](
   // Mark this function as a recursive or mutual recursive function
   // When a function is a recursive function, its invocation will not be evaluated instantly
   // unless all its arguments are pure values
-  override val isRecursive: Boolean,
+  override val dependencies: Set[Var.Defined[T, Function]] = Set.empty,
   body: LateInit[T] = LateInit[T](),
 ) extends Function[T] {
 
   ident.definition := this
+
+  override def isRecursive: Boolean = dependencies.contains(ident)
 
   override def resultType(implicit ev: EntityFactory[T, T]): T = resultType
 
@@ -193,6 +197,8 @@ case class NativeFunction[T <: Entity](
     assert(args.length == params.length)
     nativeImpl(args, env)
   }
+
+  override def dependencies: Set[Var.Defined[T, Function]] = Set.empty
 }
 
 trait OverloadedSymbol[
