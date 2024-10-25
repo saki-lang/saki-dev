@@ -174,15 +174,33 @@ object Synthesis:
     }
 
     case Expr.Match(scrutinees, clauses) => {
+      // **Principle of Type Uniformity**
+      // 
+      //  In a pattern-matching expression, we have a scrutinee (i.e., the value being matched) 
+      //  and multiple clauses (patterns and corresponding expressions). Each clause represents 
+      //  a potential match, and the principle of type uniformity requires that:
+      // 
+      //    1. All clauses must yield the same type, regardless of which pattern successfully matches.
+      //
+      //    2. The resulting type of the entire match expression must be well-formed and identical 
+      //       for each possible path through the pattern.
+      // 
+      // e.g. The type of following match expression should be `P(n)`, but not `P(Nat::Zero) | P(Nat::Succ(n'))`
+      // ```
+      //  match n {
+      //    case Nat::Zero => ? : P(Nat::Zero)
+      //    case Nat::Succ(n') => ? : P(Nat::Succ(n'))
+      //  }
+      // ```
       val scrutineesSynth: Seq[Synth] = scrutinees.map(_.synth)
-      val clausesSynth: Seq[(Clause[Term], Type)] = clauses.map { clause =>
+      val clausesSynth: Seq[ClauseSynth] = clauses.map { clause =>
         synthClause(clause, scrutineesSynth)
       }
-      val clauseBodyTypeTerms: Seq[Term] = clausesSynth.map(_._2.readBack)
+      val clauseBodyTypeTerms: Seq[Term] = clausesSynth.map(_.substitutedType)
       if clauseBodyTypeTerms.isEmpty then {
         SizeNotMatch.raise(expr.span) { "Expected at least one clause" }
       }
-      val clauseBodyTypes: Seq[Value] = clausesSynth.map(_._2)
+      val clauseBodyTypes: Seq[Value] = clauseBodyTypeTerms.map(_.eval)
       val leastUpperBoundType: Type = clauseBodyTypes.reduce((a, b) => a leastUpperBound b)
       Synth(
         term = Term.Match(scrutineesSynth.map(_.term), clausesSynth.map(_._1)),
@@ -269,9 +287,14 @@ object Synthesis:
     )
   }
 
+  case class ClauseSynth(clause: Clause[Term], substitutedType: Term, normalizedType: Type) {
+    def unpack: (Clause[Term], Term, Type) = (clause, substitutedType, normalizedType)
+    def unapply: (Clause[Term], Term, Type) = unpack
+  }
+
   def synthClause(clause: Clause[Expr], scrutinees: Seq[Synth])(
     implicit env: Environment.Typed[Value]
-  ): (Clause[Term], Type) = {
+  ): ClauseSynth = {
     val patterns = clause.patterns.map(pattern => pattern.map(_.synth.term))
     val map = patterns.zip(scrutinees).foldLeft(Map.empty: Map[Var.Local, Term]) {
       case (subst, (pattern, param)) => {
@@ -280,7 +303,10 @@ object Synthesis:
     }.map { case (k, v) => k -> Typed[Value](Value.variable(k), v.eval) }
     val (body, ty) = env.withLocals[Synth](map) { clause.body.synth }.unpack
     // TODO: FIXME: check whether the type contains the value of the scrutinee
-    (Clause(patterns, body), ty)
+    val substitutedType = patterns.zip(scrutinees).foldLeft(ty.readBack) {
+      case (ty, (pattern, scrutinee)) => ty.substitute(pattern.toTerm, scrutinee.term)
+    }
+    ClauseSynth(Clause(patterns, body), substitutedType, ty)
   }
 
   extension (definition: Definition[Expr]) {

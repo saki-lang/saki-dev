@@ -189,6 +189,31 @@ extension (self: Pattern[Term]) {
     }
     case _ => None
   }
+
+  def toTerm(implicit env: Environment.Typed[Value]): Term = self match {
+    case Pattern.Primitive(value) => Term.Primitive(value)
+    case Pattern.Bind(binding) => Term.Variable(binding)
+    case Pattern.Variant(inductiveTerm, constructorIdent, patterns) => {
+      val inductiveType = inductiveTerm.eval match {
+        case inductive: Value.InductiveType => inductive
+        case ty => TypeNotMatch.raise(s"Expected inductive type, but got: ${ty.readBack}")
+      }
+      val inductive = inductiveType.inductive.definition.get
+      val constructor = inductive.getConstructor(constructorIdent) match {
+        case Some(constructor) => constructor
+        case None => ConstructorNotFound.raise {
+          s"Constructor $constructorIdent not found in ${inductive.ident}"
+        }
+      }
+      val args = patterns.map(_.toTerm)
+      Term.InductiveVariant(inductiveType.readBack, constructor, args)
+    }
+    case Pattern.Typed(pattern, _) => pattern.toTerm
+    case Pattern.Record(fields) => {
+      val fieldValues = fields.map((name, pattern) => (name, pattern.toTerm))
+      Term.Record(fieldValues.toMap)
+    }
+  }
 }
 
 object Pattern {

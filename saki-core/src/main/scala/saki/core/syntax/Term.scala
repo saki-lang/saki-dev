@@ -256,7 +256,10 @@ enum Term extends RuntimeEntity[Type] {
 
     case PrimitiveType(ty) => Value.PrimitiveType(ty)
 
-    case Variable(variable) => env.getValue(variable).get
+    case Variable(variable) => env.getValue(variable) match {
+      case Some(value) => value
+      case None => Value.variable(variable)
+    }
 
     case FunctionInvoke(fnRef, argTerms) => {
 
@@ -437,6 +440,70 @@ enum Term extends RuntimeEntity[Type] {
     }
     case Projection(record, _) => record.isFinal
   }
+
+  /**
+   * Substitute a term with another term based on the semantics, 
+   * taking into account an implicit environment for type and value resolution.
+   * @param from The term to replace.
+   * @param to The term to substitute with.
+   * @param env The environment containing type and value bindings.
+   * @return The new term with substitutions made, considering semantics.
+   */
+  def substitute(from: Term, to: Term)(implicit env: Environment.Typed[Value]): Term = this match {
+    case `from` if this unify from => to
+    case Universe => Universe
+    case Primitive(_) => this
+    case PrimitiveType(_) => this
+    case Variable(variable) => env.getTyped(variable) match {
+      case Some(typed) if typed.value.readBack unify from => to
+      case _ => this
+    }
+    case FunctionInvoke(fn, args) => FunctionInvoke(fn, args.map(_.substitute(from, to)))
+    case OverloadInvoke(fn, args) => OverloadInvoke(fn, args.map(_.substitute(from, to)))
+    case InductiveType(inductive, args) => InductiveType(inductive, args.map(_.substitute(from, to)))
+    case InductiveVariant(inductive, constructor, args) => {
+      InductiveVariant(inductive.substitute(from, to), constructor, args.map(_.substitute(from, to)))
+    }
+    case Pi(param, codomain) => {
+      val newParam = param.map(_.substitute(from, to))
+      val newCodomain = codomain.substitute(from, to)
+      if (newParam.`type` unify from) Pi(newParam, codomain) else Pi(newParam, newCodomain)
+    }
+    case OverloadedPi(states) => OverloadedPi(states.view.mapValues(_.substitute(from, to)).toMap)
+    case Sigma(param, codomain) => {
+      val newParam = param.map(_.substitute(from, to))
+      val newCodomain = codomain.substitute(from, to)
+      if newParam.`type` unify from then Sigma(newParam, codomain)
+      else Sigma(newParam, newCodomain)
+    }
+    case Record(fields) => Record(fields.view.mapValues(_.substitute(from, to)).toMap)
+    case RecordType(fields) => RecordType(fields.view.mapValues(_.substitute(from, to)).toMap)
+    case Apply(fn, arg) => Apply(fn.substitute(from, to), arg.substitute(from, to))
+    case Lambda(param, body) => {
+      val newParam = param.map(_.substitute(from, to))
+      if (newParam.`type` unify from) Lambda(newParam, body) else Lambda(newParam, body.substitute(from, to))
+    }
+    case OverloadedLambda(states) => OverloadedLambda(states.view.mapValues(_.substitute(from, to)).toMap)
+    case Projection(record, field) => Projection(record.substitute(from, to), field)
+    case Match(scrutinees, clauses) => {
+      val newScrutinees = scrutinees.map(_.substitute(from, to))
+      val newClauses = clauses.map { clause =>
+        val bindings: Seq[(Var.Local, Typed[Value])] = scrutinees.zip(clause.patterns).flatMap {
+          (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee.infer)
+        }.map {
+          case (param, ty) => (param, Typed[Value](Value.variable(param), ty))
+        }
+        val body = env.withLocals(bindings.toMap) { implicit env =>
+          clause.body.substitute(from, to)
+        }
+        Clause(clause.patterns.map(_.map(_.substitute(from, to))), body)
+      }
+      Match(newScrutinees, newClauses)
+    }
+  }
+
+  infix def unify(that: Term)(implicit env: Environment.Typed[Value]): Boolean = this.eval unify that.eval
+
 }
 
 extension (params: ParamList[Term]) {
