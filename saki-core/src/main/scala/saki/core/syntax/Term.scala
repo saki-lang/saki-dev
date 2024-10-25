@@ -309,13 +309,13 @@ enum Term extends RuntimeEntity[Type] {
           // Recursive call, keep it a neutral value
           Value.functionInvoke(function.ident, argTerms.map(_.eval(doEvalFunction)))
         }
-        case Some(current: Var.Defined[Term, Function] @unchecked) => {
-          if !function.dependencies.contains(current) || allArgumentsFinal then {
-            evaluatedFunctionBody
-          } else {
-            Value.functionInvoke(function.ident, argsValue)
-          }
-        }
+//        case Some(current: Var.Defined[Term, Function] @unchecked) => {
+//          if !function.dependencies.contains(current) || allArgumentsFinal then {
+//            evaluatedFunctionBody
+//          } else {
+//            Value.functionInvoke(function.ident, argsValue)
+//          }
+//        }
         case None | Some(_) => {
           if !function.isRecursive || allArgumentsFinal then {
             evaluatedFunctionBody

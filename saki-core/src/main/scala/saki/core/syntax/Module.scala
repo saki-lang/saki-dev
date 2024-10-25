@@ -8,6 +8,7 @@ import saki.core.elaborate.Synthesis.{synth, synthDeclaration}
 import saki.core.syntax.Module.EvalResult
 import saki.core.syntax.OverloadedDeclaration.merge
 import saki.prelude.Prelude
+import saki.util.Graph
 
 import scala.collection.Seq
 
@@ -62,7 +63,7 @@ object Module {
         } else {
           // Otherwise, the definitions in the strongly connected component
           // are mutually recursive, so we need to resolve them together
-          synthStronglyConnectedDefinitions(definitions)(env)
+          synthStronglyConnectedDefinitions(definitions, resolvingContext.dependencyGraph)(env)
         }
       }
     }
@@ -70,7 +71,10 @@ object Module {
     Module(finalEnv.definitions.values.toSet)
   }
 
-  private def synthStronglyConnectedDefinitions(definitions: Set[Definition[Expr]])(
+  private def synthStronglyConnectedDefinitions(
+    definitions: Set[Definition[Expr]],
+    dependencyGraph: Graph[String],
+  )(
     implicit env: Environment.Typed[Value]
   ): (Resolve.Context, Environment.Typed[Value]) = {
     // TODO: In a same strongly connected component, the dependency order of the
@@ -98,7 +102,10 @@ object Module {
     }
     // Step 3. Resolve and synthesis definitions with the pre-built declarations
     val variables = declEnv.definitions.keys ++ declEnv.declarations.keys
-    val resolveCtx = Resolve.Context(variableMap = variables.map(variable => variable.name -> variable).toMap)
+    val resolveCtx = Resolve.Context(
+      variableMap = variables.map(variable => variable.name -> variable).toMap,
+      dependencyGraph = dependencyGraph,
+    )
     definitions.foldLeft((resolveCtx, env)) {
       case ((resolvingContext, env), definition) => {
         val (resolved, newCtx) = definition.resolve(resolvingContext)

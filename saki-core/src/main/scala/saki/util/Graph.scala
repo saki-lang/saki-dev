@@ -132,7 +132,9 @@ class Graph[T](
         }
       }
     }
-    dfs(node, Set.empty[T])
+    neighbors(node).foldLeft(Set.empty[T]) {
+      (acc, neighbor) => dfs(neighbor, Set.empty) ++ acc
+    }
   }
 
   /**

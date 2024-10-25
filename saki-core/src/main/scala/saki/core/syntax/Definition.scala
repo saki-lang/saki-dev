@@ -168,7 +168,7 @@ case class DefinedFunction[T <: Entity](
 
   ident.definition := this
 
-  override def isRecursive: Boolean = dependencies.contains(ident)
+  override lazy val isRecursive: Boolean = dependencies.contains(ident)
 
   override def resultType(implicit ev: EntityFactory[T, T]): T = resultType
 
