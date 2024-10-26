@@ -98,7 +98,7 @@ case class TypedEnvironment[T <: Entity] private (
 
   def contains(definition: Var.Defined[?, ?]): Boolean = definitions.contains(Var.Defined(definition.name))
 
-  def withCurrentDefinition[R](definition: Var.Defined[Term, ?])(action: TypedEnvironment[T] => R): R = {
+  def defineFunction[R](definition: Var.Defined[Term, ?])(action: TypedEnvironment[T] => R): R = {
     action(TypedEnvironment[T](
       definitions = definitions + (definition -> definition.definition.get),
       currentDefinition = Some(definition),
@@ -107,8 +107,17 @@ case class TypedEnvironment[T <: Entity] private (
     ))
   }
 
+  def invokeFunction[R](definition: Var.Defined[Term, ?])(action: TypedEnvironment[T] => R): R = {
+    action(TypedEnvironment[T](
+      definitions = definitions,
+      currentDefinition = Some(definition),
+      declarations = declarations,
+      locals = locals,
+    ))
+  }
+
   def withLocal[R](ident: Var.Local, value: T, `type`: T)(action: TypedEnvironment[T] => R): R = {
-    action(add(ident, value, `type`))
+    action(this.add(ident, value, `type`))
   }
 
   def withLocal[R](ident: Var.Local, value: Typed[T])(action: TypedEnvironment[T] => R): R = {
@@ -116,7 +125,7 @@ case class TypedEnvironment[T <: Entity] private (
   }
 
   def withLocals[R](locals: Map[Var.Local, Typed[T]])(action: TypedEnvironment[T] => R): R = {
-    action(addAll(locals))
+    action(this.addAll(locals))
   }
 }
 

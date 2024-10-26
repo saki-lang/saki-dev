@@ -2,6 +2,7 @@ package saki.core.syntax
 
 import saki.core.context.{Environment, Typed}
 import saki.core.domain.{NeutralValue, Type, Value}
+import saki.core.domain.neutralClosure
 import saki.core.{RuntimeEntity, RuntimeEntityFactory}
 import saki.util.unreachable
 import saki.error.CoreErrorKind.*
@@ -99,7 +100,10 @@ enum Term extends RuntimeEntity[Type] {
 
   def normalize(
     implicit env: Environment.Typed[Value]
-  ): Term = this.eval.readBack
+  ): Term = {
+    val evalResult = this.eval
+    evalResult.readBack
+  }
 
   /**
    * Infer the type of the term
@@ -114,19 +118,7 @@ enum Term extends RuntimeEntity[Type] {
 
     case PrimitiveType(_) => Value.Universe
 
-    case Variable(variable) => env.getTyped(variable) match {
-      case Some(typed) => typed.`type`
-      case None => {
-        import Value.Neutral
-        // If the variable binding is not found in the environment, it might be a neutral value.
-        // Try iterating the locals to find the typed neutral value and return its type.
-        env.locals.collectFirst {
-          case (_, Typed(Neutral(NeutralValue.Variable(neutral)), ty)) if neutral == variable => ty
-        }.getOrElse {
-          VariableNotFound.raise(s"Variable not found: ${variable.name}")
-        }
-      }
-    }
+    case Variable(variable) => env.getTyped(variable).get.`type`
 
     case FunctionInvoke(fn, args) => env.getSymbol(fn).get match {
       case fn: Function[Term] => fn.resultType.eval
@@ -160,10 +152,7 @@ enum Term extends RuntimeEntity[Type] {
         }
         env.withLocals(bindings.toMap) { implicit env => clause.body.infer(env) }
       }
-      // TODO: compute the most general type of all clauses (all clauses are subtypes of the most general type)
-      if clausesType.tail.forall(_ unify clausesType.head) then clausesType.head
-      else TypeNotMatch.raise("Clauses have different types")
-      clausesType.head
+      clausesType.reduce((a, b) => a leastUpperBound b)
     }
 
     case Pi(_, _) => Value.Universe
@@ -218,21 +207,13 @@ enum Term extends RuntimeEntity[Type] {
 
     // Lambda returns a dependent function type
     case Lambda(param, body) => {
-      val paramType = param.`type`.eval
-      def closure(arg: Value): Value = {
-        val argVar = Typed[Value](arg, paramType)
-        env.withLocal(param.ident, argVar) { implicit env => body.infer(env) }
-      }
-      Value.Pi(paramType, closure)
+      val typedParam = param.map(_.eval)
+      Value.Pi(typedParam.`type`, neutralClosure(typedParam, implicit env => body.infer, env))
     }
 
     case OverloadedLambda(states) => Value.OverloadedPi(states.map { (param, body) =>
-      val paramType = param.`type`.eval
-      def closure(arg: Value): Value = {
-        val argVar = Typed[Value](arg, paramType)
-        env.withLocal(param.ident, argVar) { implicit env => body.infer(env) }
-      }
-      (paramType, closure)
+      val typedParam = param.map(_.eval)
+      (typedParam.`type`, neutralClosure(typedParam, implicit env => body.infer, env))
     })
 
     case Projection(record, field) => record.infer match {
@@ -255,10 +236,10 @@ enum Term extends RuntimeEntity[Type] {
     case Primitive(value) => Value.Primitive(value)
 
     case PrimitiveType(ty) => Value.PrimitiveType(ty)
-
+    
     case Variable(variable) => env.getValue(variable) match {
       case Some(value) => value
-      case None => Value.variable(variable)
+      case None => throw new NoSuchElementException(s"Variable $variable not found in the environment")
     }
 
     case FunctionInvoke(fnRef, argTerms) => {
@@ -291,7 +272,11 @@ enum Term extends RuntimeEntity[Type] {
 
       lazy val evaluatedFunctionBody: Value = function match {
         case fn: DefinedFunction[Term] => {
-          env.withLocals(argVarList.toMap) { implicit env => fn.body.get.eval(doEvalFunction)(env) }
+          env.invokeFunction(fn.ident) { implicit env =>
+            env.withLocals(argVarList.toMap) {
+              implicit env => fn.body.get.eval(doEvalFunction)
+            }
+          }
         }
         case fn: NativeFunction[Term] => {
           // Only evaluate the native function if all arguments are final
@@ -305,12 +290,8 @@ enum Term extends RuntimeEntity[Type] {
       }
 
       env.currentDefinition match {
-        case Some(current) if current.name == fnRef.name => {
-          // Recursive call, keep it a neutral value
-          Value.functionInvoke(function.ident, argTerms.map(_.eval(doEvalFunction)))
-        }
 //        case Some(current: Var.Defined[Term, Function] @unchecked) => {
-//          if !function.dependencies.contains(current) || allArgumentsFinal then {
+//          if !function.isRecursive || !function.dependencies.contains(current) || allArgumentsFinal then {
 //            evaluatedFunctionBody
 //          } else {
 //            Value.functionInvoke(function.ident, argsValue)
@@ -388,9 +369,8 @@ enum Term extends RuntimeEntity[Type] {
     case Apply(fn, arg) => fn.eval(doEvalFunction) match {
 
       case Value.Lambda(paramType, bodyClosure) => {
-        val argType = arg.infer
-        if !(paramType <:< argType) then TypeNotMatch.raise {
-          s"Expected argument type: ${paramType.readBack}, but got: ${argType.readBack}"
+        if !(paramType <:< arg.infer) then TypeNotMatch.raise {
+          s"Expected argument type: ${paramType.readBack}, but got: ${arg.infer.readBack}"
         }
         bodyClosure(arg.eval(doEvalFunction))
       }
@@ -583,13 +563,9 @@ object Term extends RuntimeEntityFactory[Term] {
    */
   private[core] def evalParameterized(param: Param[Term], term: Term, doEvalFunction: Boolean)(
     implicit env: Environment.Typed[Value]
-  ): (Type, Value => Value) = {
-    val paramType = param.`type`.eval(doEvalFunction)
-    def closure(arg: Value): Value = {
-      val argVar = Typed[Value](arg, paramType)
-      env.withLocal(param.ident, argVar) { implicit env => term.eval(doEvalFunction) }
-    }
-    (paramType, closure)
+  ): (Type, (Value | Var.Local) => Value) = {
+    val typedParam = param.map(_.eval(doEvalFunction))
+    (typedParam.`type`, neutralClosure(typedParam, implicit env => term.eval(doEvalFunction), env))
   }
 
 }
@@ -598,7 +574,7 @@ private sealed trait LambdaLikeTerm {
   def param: Param[Term]
   def body: Term
 
-  def eval(constructor: (Type, Value => Value) => Value, doEvalFunction: Boolean)(
+  def eval(constructor: (Type, (Value | Var.Local)  => Value) => Value, doEvalFunction: Boolean)(
     implicit env: Environment.Typed[Value]
   ): Value = {
     val (paramType, closure) = Term.evalParameterized(param, body, doEvalFunction)

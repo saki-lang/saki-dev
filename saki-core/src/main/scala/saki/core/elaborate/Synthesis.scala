@@ -2,7 +2,7 @@ package saki.core.elaborate
 
 import saki.core.Param
 import saki.core.context.{Environment, Typed}
-import saki.core.domain.{Type, Value}
+import saki.core.domain.{Type, Value, neutralClosure}
 import saki.core.syntax.{*, given}
 import saki.util.{unreachable, SourceSpan}
 import saki.error.CoreErrorKind.*
@@ -236,17 +236,16 @@ object Synthesis:
           case None => bodyType
         }
 
-        // Closure for the Pi type
-        def piTypeClosure(arg: Value): Value = {
-          val argVar: Typed[Value] = Typed[Value](arg, paramTypeValue)
-          env.withLocal(param.ident, argVar) {
-            implicit env => returnTypeValue.readBack(env).eval(env)
-          }
-        }
-
         Synth(
           term = Term.Lambda(Param(paramIdent, paramType), bodyTerm),
-          `type` = Value.Pi(paramTypeValue, piTypeClosure),
+          `type` = Value.Pi(
+            paramTypeValue,
+            neutralClosure(
+              Param(paramIdent, paramTypeValue),
+              implicit env => returnTypeValue.readBack.eval,
+              env
+            )
+          )
         )
 
       }
@@ -296,15 +295,24 @@ object Synthesis:
     implicit env: Environment.Typed[Value]
   ): ClauseSynth = {
     val patterns = clause.patterns.map(pattern => pattern.map(_.synth.term))
-    val map = patterns.zip(scrutinees).foldLeft(Map.empty: Map[Var.Local, Term]) {
-      case (subst, (pattern, param)) => {
-        subst ++ pattern.buildMatchBindings(param.`type`).map((variable, ty) => variable -> ty.readBack)
+    // TODO: Check whether bindings of all patterns are consistent
+    //  e.g. This is not allowed:
+    //  match x {
+    //    case Foo::Bar(a) | Foo::Baz(b) => foo(a, b)
+    //  }
+    val patternsBinding: Seq[Map[Var.Local, Typed[Value]]] = patterns.zip(scrutinees).map {
+      (pattern, scrutinee) => pattern.buildMatchBindings(scrutinee.`type`)
+    }.map { bindings =>
+      bindings.map { case (k, v) => k -> Typed[Value](Value.variable(k), v) }
+    }
+    val bindings = patternsBinding.foldLeft(Map.empty[Var.Local, Typed[Value]]) {
+      (acc, bindings) => acc ++ bindings
+    }
+    val (body, ty) = env.withLocals[Synth](bindings) { clause.body.synth }.unpack
+    val substitutedType = patterns.zip(scrutinees).zip(patternsBinding).foldLeft(ty.readBack) {
+      case (ty, ((pattern, scrutinee), binding)) => env.withLocals(binding) {
+        ty.substitute(pattern.toTerm, scrutinee.term)
       }
-    }.map { case (k, v) => k -> Typed[Value](Value.variable(k), v.eval) }
-    val (body, ty) = env.withLocals[Synth](map) { clause.body.synth }.unpack
-    // TODO: FIXME: check whether the type contains the value of the scrutinee
-    val substitutedType = patterns.zip(scrutinees).foldLeft(ty.readBack) {
-      case (ty, (pattern, scrutinee)) => ty.substitute(pattern.toTerm, scrutinee.term)
     }
     ClauseSynth(Clause(patterns, body), substitutedType, ty)
   }
@@ -332,7 +340,7 @@ object Synthesis:
         }
       }
       val function = DefinedFunction[Term](defVar, params, resultType, updatedDependencies)
-      function.body := envParams.withCurrentDefinition(function.ident) {
+      function.body := envParams.defineFunction(function.ident) {
         implicit env => pristineBody.get.elaborate(resultType)(env)
       }
       function
@@ -349,7 +357,7 @@ object Synthesis:
       val inductiveDefinition: Inductive[Term] = Inductive(defVar, params, constructors)
       // To support recursive inductive types, we need to add the inductive type to the context
       // before synthesizing the constructors
-      envParams.withCurrentDefinition[Inductive[Term]](inductiveDefinition.ident) { implicit env =>
+      envParams.defineFunction[Inductive[Term]](inductiveDefinition.ident) { implicit env =>
         constructors ++= inductiveExpr.constructors.map { constructor =>
           val constructorParams: ArrayBuffer[Param[Term]] = ArrayBuffer.empty
           val constructorDefinition: Constructor[Term] = {
@@ -411,7 +419,7 @@ object Synthesis:
   ): Synth = decl match {
 
     case definition: NaiveDefinition[Term] => Synth(
-      term = definition.params.buildLambda(definition.buildInvoke(Term)).normalize,
+      term = definition.params.buildLambda(definition.buildInvoke(Term)),
       `type` = definition.params.buildPiType(definition.resultType).eval,
     )
     
@@ -424,7 +432,7 @@ object Synthesis:
     }
 
     case declaration: NaiveDeclaration[Term, ?] => Synth(
-      term = declaration.params.buildLambda(declaration.buildInvoke(Term)).normalize,
+      term = declaration.params.buildLambda(declaration.buildInvoke(Term)),
       `type` = declaration.params.buildPiType(declaration.resultType).eval,
     )
 

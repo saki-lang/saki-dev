@@ -20,15 +20,15 @@ enum Value extends RuntimeEntity[Type] {
 
   case Neutral(value: NeutralValue)
 
-  case Pi(paramType: Type, closure: Value => Value)
+  case Pi(paramType: Type, closure: (Value | Var.Local) => Value)
 
   case OverloadedPi(
     states: Map[Type, Value => Value]
   ) extends Value with OverloadedLambdaLike[OverloadedPi]
 
-  case Sigma(paramType: Type, closure: Value => Value)
+  case Sigma(paramType: Type, closure: (Value | Var.Local) => Value)
 
-  case Lambda(paramType: Type, body: Value => Value)
+  case Lambda(paramType: Type, body: (Value | Var.Local) => Value)
 
   case OverloadedLambda(
     states: Map[Type, Value => Value]
@@ -148,8 +148,8 @@ enum Value extends RuntimeEntity[Type] {
     // Function type (Pi type) subtyping: Covariant in return type, contravariant in parameter type
     case (Pi(paramType1, closure1), Pi(paramType2, closure2)) => {
       paramType2 <:< paramType1 && {
-        val param = Value.variable(env.uniqueVariable)
-        closure1(param) <:< closure2(param)
+        val paramIdent = env.uniqueVariable
+        closure1(paramIdent) <:< closure2(paramIdent)
       }
     }
 
@@ -322,13 +322,12 @@ object Value extends RuntimeEntityFactory[Value] {
    *         2. The body of the lambda term
    * @see [[Term.evalParameterized]]
    */
-  private[core] def readBackClosure(paramType: Type, closure: Value => Value)(
+  private[core] def readBackClosure(paramType: Type, closure: (Value | Var.Local) => Value)(
     implicit env: Environment.Typed[Value]
   ): (Param[Term], Term) = {
     val paramIdent = env.uniqueVariable
-    val param = Value.variable(paramIdent)
-    val term = env.withLocal(paramIdent, param, paramType) {
-      implicit env => closure(Value.variable(paramIdent)).readBack
+    val term = env.withLocal(paramIdent, Value.variable(paramIdent), paramType) {
+      implicit env => closure(paramIdent).readBack(env)
     }
     (Param(paramIdent, paramType.readBack), term)
   }
@@ -390,3 +389,25 @@ private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] 
   }
 }
 
+def neutralClosure(
+  param: Param[Value],
+  action: Environment.Typed[Value] => Value,
+  env: Environment.Typed[Value],
+)(arg: Value | Var.Local): Value = {
+  val paramType = param.`type`
+  val argVar = arg match {
+    case value: Value => Typed[Value](value, paramType)
+    case local: Var.Local => Typed[Value](Value.variable(local), paramType)
+  }
+  // When it is in a read-back phase, the argument is a new-generated variable
+  // and is not in the environment. We should add it to the environment for
+  // future type inference.
+  val envWithArg: Environment.Typed[Value] = arg match {
+    // It should be a read-back, add the argument to the environment
+    case local: Var.Local => env.add(local, Value.variable(local), paramType)
+    // TODO: this is a workaround for the current implementation (arg is a parameter without a value)
+    case Value.Neutral(NeutralValue.Variable(local)) if !env.contains(local) => env.add(local, Value.variable(local), paramType)
+    case _ => env
+  }
+  envWithArg.withLocal(param.ident, argVar) { implicit env => action(env) }
+}
