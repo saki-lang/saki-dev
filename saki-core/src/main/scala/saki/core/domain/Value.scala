@@ -376,10 +376,10 @@ object Value extends RuntimeEntityFactory[Value] {
   ): (Param[Term], Term) = {
     val paramIdent = env.uniqueVariable
     val paramVariable = Value.variable(paramIdent, paramType)
-    val term = env.withLocal(paramIdent, paramVariable, paramType) {
-      implicit env => closure(paramVariable).readBack(env)
+    env.withLocal(paramIdent, paramVariable, paramType) { implicit env =>
+      val term = closure(paramVariable).readBack(env)
+      (Param(paramIdent, paramType.readBack), term)
     }
-    (Param(paramIdent, paramType.readBack), term)
   }
 
   extension (self: InductiveType) {
@@ -400,10 +400,10 @@ private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] 
     states.map { (paramType, closure) =>
       val paramIdent = env.uniqueVariable
       val param = Value.variable(paramIdent, paramType)
-      val body = env.withLocal(paramIdent, param, paramType) {
-        closure(param).readBack
+      env.withLocal(paramIdent, param, paramType) { implicit env =>
+        val body = closure(param).readBack
+        (Param(paramIdent, paramType.readBack), body)
       }
-      (Param(paramIdent, paramType.readBack), body)
     }
   }
 
