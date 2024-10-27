@@ -49,6 +49,8 @@ enum Value extends RuntimeEntity[Type] {
     args: Seq[Value],
   )
 
+  override def eval(implicit env: Environment.Typed[Value]): Value = this
+
   override def infer(implicit env: Environment.Typed[Value]): Type = this match {
     case Neutral(NeutralValue.Variable(_, ty)) => ty
     case _ => this.readBack.infer
@@ -94,6 +96,30 @@ enum Value extends RuntimeEntity[Type] {
     case InductiveVariant(inductive, constructor, args) => {
       Term.inductiveVariant(inductive.readBack, constructor, args.map(_.readBack))
     }
+  }
+
+  def isFinal(variables: Set[Var.Local] = Set.empty)(
+    implicit env: Environment.Typed[Value]
+  ): Boolean = this match {
+    case Neutral(_) => false
+    case Pi(ty, closure) => {
+      val paramIdent = env.uniqueVariable
+      closure(Value.variable(paramIdent, ty)).isFinal(variables + paramIdent)
+    }
+    case Sigma(ty, closure) => {
+      val paramIdent = env.uniqueVariable
+      closure(Value.variable(paramIdent, ty)).isFinal(variables + paramIdent)
+    }
+    case Lambda(ty, closure) => {
+      val paramIdent = env.uniqueVariable
+      closure(Value.variable(paramIdent, ty)).isFinal(variables + paramIdent)
+    }
+    case overloaded: OverloadedLambdaLike[?] => overloaded.isStatesFinal(variables)
+    case Record(fields) => fields.valuesIterator.forall(_.isFinal(variables))
+    case RecordType(fields) => fields.valuesIterator.forall(_.isFinal(variables))
+    case InductiveType(_, args) => args.forall(_.isFinal(variables))
+    case InductiveVariant(inductiveType, _, args) => inductiveType.isFinal(variables) && args.forall(_.isFinal(variables))
+    case _ => true
   }
 
   infix def unify(that: Type)(implicit env: Environment.Typed[Value]): Boolean = (this, that) match {
@@ -303,7 +329,9 @@ enum Value extends RuntimeEntity[Type] {
   }
 
   @deprecatedOverriding("For debugging purposes only, don't call it in production code")
-  override def toString: String = this.readBack(Environment.Typed.empty).toString
+  override def toString: String = try this.readBack(Environment.Typed.empty).toString catch {
+    case _: Throwable => super.toString
+  }
 }
 
 object Value extends RuntimeEntityFactory[Value] {
@@ -379,6 +407,14 @@ private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] 
     }
   }
 
+  def isStatesFinal(variables: Set[Var.Local])(implicit env: Environment.Typed[Value]): Boolean = {
+    states.forall { (paramType, closure) =>
+      val paramIdent = env.uniqueVariable
+      val param = Value.variable(paramIdent, paramType)
+      closure(param).isFinal(variables + paramIdent)
+    }
+  }
+
   def applyArgument(
     arg: Value, argType: Type,
     constructor: Map[Type, Value => Value] => S,
@@ -411,27 +447,8 @@ private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] 
   }
 }
 
-def neutralClosure(
-  param: Param[Value],
-  action: Environment.Typed[Value] => Value,
-  env: Environment.Typed[Value],
-)(arg: Value): Value = {
-  val paramType = param.`type`
-  val argVar = Typed[Value](arg, paramType)
-//  // When the argument is a neutral variable and is not in the environment,
-//  // we should add it to the environment for future type inference.
-//  val envWithArg: Environment.Typed[Value] = arg match {
-//    // TODO: this is a workaround for the current implementation (arg is a parameter without a value)
-//    case Value.Neutral(NeutralValue.Variable(local, _)) if (
-//      // It is not in the environment or it is in the environment but with a different type
-//      env.get(local).isEmpty || env.get(local).contains(Value.variable(local, paramType))
-//    ) => env.add(local, Value.variable(local, paramType), paramType)
-//    case Value.Neutral(NeutralValue.Variable(local, _)) if env.get(local).exists(_.infer(env) != paramType) => {
-//      TypeNotMatch.raise {
-//        s"Expected type ${paramType.readBack(env)}, but got ${env.get(local).get.infer(env).readBack(env)}"
-//      }
-//    }
-//    case _ => env
-//  }
-  env.withLocal(param.ident, argVar) { implicit env => action(env) }
+private[core] def neutralClosure(
+  param: Param[Value], action: Environment.Typed[Value] => Value, env: Environment.Typed[Value],
+)(arg: Value): Value = env.withLocal(param.ident, Typed[Value](arg, param.`type`)) {
+  implicit env => action(env)
 }

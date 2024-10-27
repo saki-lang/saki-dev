@@ -80,7 +80,7 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
 
 }
 
-extension (self: Pattern[Term]) {
+extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
   
   def buildMatchBindings(`type`: Type)(
     implicit env: Environment.Typed[Value]

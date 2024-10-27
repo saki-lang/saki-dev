@@ -1,7 +1,7 @@
 package saki.core.domain
 
-import saki.core.context.Environment
-import saki.core.syntax.{Clause, Function, Term, Var}
+import saki.core.context.{Environment, Typed}
+import saki.core.syntax.{buildMatchBindings, Clause, Function, Term, Var}
 
 import scala.annotation.targetName
 import scala.collection.Seq
@@ -28,11 +28,24 @@ enum NeutralValue {
   def infer(implicit env: Environment.Typed[Value]): Type = this.readBack.infer
 
   def readBack(implicit env: Environment.Typed[Value]): Term = this match {
-    case Variable(ident, _) => Term.Variable(ident)
+    case Variable(ident, ty) => Term.Variable(ident, Some(ty))
     case Apply(fn, arg) => Term.Apply(fn.readBack, arg.readBack)
     case Projection(record, field) => Term.Projection(record.readBack, field)
     case FunctionInvoke(fnRef, args) => Term.FunctionInvoke(fnRef, args.map(_.readBack))
-    case Match(scrutinees, clauses) => Term.Match(scrutinees.map(_.readBack), clauses.map(_.map(_.readBack)))
+    case Match(scrutinees, clauses) => {
+      // TODO: May be we don't need to build the match bindings here
+      val termClauses = clauses.map { clause =>
+        // Bind the pattern variables to the scrutinee values
+        val bindings: Seq[(Var.Local, Typed[Value])] = scrutinees.zip(clause.patterns).flatMap {
+          (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee.infer)
+        }.map {
+          case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
+        }
+        val bodyTerm = env.withLocals(bindings.toMap) { implicit env => clause.body.readBack }
+        Clause(clause.patterns.map(_.map(_.readBack)), bodyTerm)
+      }
+      Term.Match(scrutinees.map(_.readBack), termClauses)
+    }
   }
 
   infix def unify(that: NeutralValue)(

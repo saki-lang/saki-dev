@@ -14,7 +14,7 @@ enum Term extends RuntimeEntity[Type] {
   case Universe
   case Primitive(value: Literal)
   case PrimitiveType(`type`: LiteralType)
-  case Variable(variable: Var.Local)
+  case Variable(variable: Var.Local, `type`: Option[Type] = None)
   case FunctionInvoke(fn: Var.Defined[Term, Function], args: Seq[Term])
   case OverloadInvoke(
     fn: Var.Defined[Term, Overloaded], args: Seq[Term]
@@ -70,7 +70,7 @@ enum Term extends RuntimeEntity[Type] {
     case Universe => s"'Type"
     case Primitive(value) => value.toString
     case PrimitiveType(ty) => ty.toString
-    case Variable(variable) => variable.name
+    case Variable(variable, _) => variable.name
     case FunctionInvoke(fn, args) => s"${fn.name}(${args.mkString(", ")})"
     case OverloadInvoke(fn, args) => s"${fn.name}(${args.mkString(", ")})"
     case InductiveType(inductive, args) => {
@@ -118,7 +118,10 @@ enum Term extends RuntimeEntity[Type] {
 
     case PrimitiveType(_) => Value.Universe
 
-    case Variable(variable) => env.getTyped(variable).get.`type`
+    case Variable(variable, ty) => ty match {
+      case Some(ty) => ty.readBack.eval
+      case None => env.getTyped(variable).get.`type`
+    }
 
     case FunctionInvoke(fn, args) => env.getSymbol(fn).get match {
       case fn: Function[Term] => fn.resultType.eval
@@ -238,15 +241,18 @@ enum Term extends RuntimeEntity[Type] {
 
     case PrimitiveType(ty) => Value.PrimitiveType(ty)
     
-    case Variable(variable) => env.getValue(variable) match {
+    case Variable(variable, _) => env.getValue(variable) match {
       case Some(value) => value
       case None => throw new NoSuchElementException(s"Variable $variable not found in the environment")
+      // case None => Value.variable(variable, this.infer)
     }
 
     case FunctionInvoke(fnRef, argTerms) => {
 
+      lazy val argsValue: Seq[Value] = argTerms.map(_.eval(doEvalFunction))
+
       if !doEvalFunction then {
-        return Value.functionInvoke(fnRef, argTerms.map(_.eval(doEvalFunction)))
+        return Value.functionInvoke(fnRef, argsValue)
       }
 
       val function: Function[Term] = env.getSymbol(fnRef).get match {
@@ -257,16 +263,14 @@ enum Term extends RuntimeEntity[Type] {
         }
         case _: Declaration[Term, Function] @unchecked => {
           // If the function is a pre-declared function, keep it as a neutral value
-          return Value.functionInvoke(fnRef, argTerms.map(_.eval(doEvalFunction)))
+          return Value.functionInvoke(fnRef, argsValue)
         }
         case _ => DefinitionNotMatch.raise {
           s"Expected function, but got: ${fnRef.name}"
         }
       }
 
-      lazy val argsValue: Seq[Value] = argTerms.map(_.eval(doEvalFunction))
-      // TODO: this need to be optimized
-      lazy val allArgumentsFinal = argsValue.forall(_.readBack.isFinal(Set.empty))
+      lazy val allArgumentsFinal = argsValue.forall(_.isFinal(Set.empty))
       lazy val argVarList: Seq[(Var.Local, Typed[Value])] = function.arguments(argsValue).map {
         (param, arg) => (param.ident, Typed[Value](arg, param.`type`.eval(doEvalFunction)))
       }
@@ -275,7 +279,7 @@ enum Term extends RuntimeEntity[Type] {
         case fn: DefinedFunction[Term] => {
           env.invokeFunction(fn.ident) { implicit env =>
             env.withLocals(argVarList.toMap) {
-              implicit env => fn.body.get.eval(doEvalFunction)
+              implicit env => fn.body.get.eval(doEvalFunction)(env)
             }
           }
         }
@@ -291,13 +295,13 @@ enum Term extends RuntimeEntity[Type] {
       }
 
       env.currentDefinition match {
-        case Some(current: Var.Defined[Term, Function] @unchecked) => {
-          if !function.isRecursive || !function.dependencies.contains(current) || allArgumentsFinal then {
-            evaluatedFunctionBody
-          } else {
-            Value.functionInvoke(function.ident, argsValue)
-          }
-        }
+//        case Some(current: Var.Defined[Term, Function] @unchecked) => {
+//          if !function.isRecursive || !function.dependencies.contains(current) || allArgumentsFinal then {
+//            evaluatedFunctionBody
+//          } else {
+//            Value.functionInvoke(function.ident, argsValue)
+//          }
+//        }
         case None | Some(_) => {
           if !function.isRecursive || allArgumentsFinal then {
             evaluatedFunctionBody
@@ -328,7 +332,7 @@ enum Term extends RuntimeEntity[Type] {
     case Match(scrutinees, clauses) => {
       val scrutineesValue = scrutinees.map(_.eval(doEvalFunction))
       // If all scrutinees are final, try to match the clauses
-      if scrutineesValue.forall(_.readBack.isFinal(Set.empty)) then {
+      if scrutineesValue.forall(_.isFinal(Set.empty)) then {
         // Try to match the scrutinees with the clauses
         clauses.tryMatch(scrutineesValue).getOrElse {
           // If all scrutinees are final and no match is found, raise an error
@@ -409,29 +413,6 @@ enum Term extends RuntimeEntity[Type] {
     }
   }
 
-  def isFinal(implicit localVars: Set[Var.Local]): Boolean = this match {
-    case Variable(variable) => localVars.contains(variable)
-    case Universe | Primitive(_) | PrimitiveType(_) => true
-    case FunctionInvoke(_, args) => args.forall(_.isFinal)
-    case OverloadInvoke(_, args) => args.forall(_.isFinal)
-    case InductiveType(_, args) => args.forall(_.isFinal)
-    case InductiveVariant(inductive, _, args) => inductive.isFinal && args.forall(_.isFinal)
-    case Match(scrutinees, clauses) => scrutinees.forall(_.isFinal) && clauses.forall(_.forall(_.isFinal))
-    case Pi(param, codomain) => param.`type`.isFinal && codomain.isFinal
-    case OverloadedPi(states) => states.forall {
-      (param, body) => param.`type`.isFinal && body.isFinal(localVars + param.ident)
-    }
-    case Sigma(param, codomain) => param.`type`.isFinal && codomain.isFinal
-    case Record(fields) => fields.values.forall(_.isFinal)
-    case RecordType(fields) => fields.values.forall(_.isFinal)
-    case Apply(fn, arg) => fn.isFinal && arg.isFinal
-    case Lambda(param, body) => body.isFinal(localVars + param.ident)
-    case OverloadedLambda(states) => states.forall {
-      (param, body) => param.`type`.isFinal && body.isFinal(localVars + param.ident)
-    }
-    case Projection(record, _) => record.isFinal
-  }
-
   /**
    * Substitute a term with another term based on the semantics, 
    * taking into account an implicit environment for type and value resolution.
@@ -445,7 +426,7 @@ enum Term extends RuntimeEntity[Type] {
     case Universe => Universe
     case Primitive(_) => this
     case PrimitiveType(_) => this
-    case Variable(variable) => env.getTyped(variable) match {
+    case Variable(variable, _) => env.getTyped(variable) match {
       case Some(typed) if typed.value.readBack unify from => to
       case _ => this
     }

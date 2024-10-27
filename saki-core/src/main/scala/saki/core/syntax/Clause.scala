@@ -2,7 +2,7 @@ package saki.core.syntax
 
 import saki.core.Entity
 import saki.core.context.{Environment, Typed}
-import saki.core.domain.{Type, Value}
+import saki.core.domain.Value
 
 import scala.collection.Seq
 

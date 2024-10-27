@@ -112,8 +112,7 @@ case class TypedEnvironment[T <: Entity] private (
       definitions = definitions,
       currentDefinition = Some(definition),
       declarations = declarations,
-      // TODO: should we clear the locals?
-      locals = Map.empty, // Clear locals when invoking a global function
+      locals = locals,
     ))
   }
 

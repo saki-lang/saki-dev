@@ -9,9 +9,8 @@ import scala.collection.Seq
 trait Entity
 
 trait RuntimeEntity[IT <: Entity] extends Entity {
-  def infer(
-    implicit env: Environment.Typed[Value]
-  ): IT
+  def infer(implicit env: Environment.Typed[Value]): IT
+  def eval(implicit env: Environment.Typed[Value]): Value
 }
 
 trait EntityFactory[T <: Entity, D <: Entity] {
