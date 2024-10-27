@@ -20,15 +20,15 @@ enum Value extends RuntimeEntity[Type] {
 
   case Neutral(value: NeutralValue)
 
-  case Pi(paramType: Type, closure: (Value | Var.Local) => Value)
+  case Pi(paramType: Type, closure: Value => Value)
 
   case OverloadedPi(
     states: Map[Type, Value => Value]
   ) extends Value with OverloadedLambdaLike[OverloadedPi]
 
-  case Sigma(paramType: Type, closure: (Value | Var.Local) => Value)
+  case Sigma(paramType: Type, closure: Value => Value)
 
-  case Lambda(paramType: Type, body: (Value | Var.Local) => Value)
+  case Lambda(paramType: Type, body: Value => Value)
 
   case OverloadedLambda(
     states: Map[Type, Value => Value]
@@ -92,7 +92,7 @@ enum Value extends RuntimeEntity[Type] {
       Term.inductiveVariant(inductive.readBack, constructor, args.map(_.readBack))
     }
   }
-  
+
   infix def unify(that: Type)(implicit env: Environment.Typed[Value]): Boolean = (this, that) match {
     case (Universe, Universe) => true
     case (Primitive(value1), Primitive(value2)) => value1 == value2
@@ -112,18 +112,18 @@ enum Value extends RuntimeEntity[Type] {
     }
     case (Record(fields1), Record(fields2)) => {
       fields1.size == fields2.size &&
-      fields1.forall { case (name, value1) => fields2.get(name).exists(value1.unify) }
+        fields1.forall { case (name, value1) => fields2.get(name).exists(value1.unify) }
     }
     case (RecordType(fields1), RecordType(fields2)) => {
       fields1.size == fields2.size &&
-      fields1.forall { case (name, ty1) => fields2.get(name).exists(ty1.unify) }
+        fields1.forall { case (name, ty1) => fields2.get(name).exists(ty1.unify) }
     }
     case (InductiveType(inductive1, args1), InductiveType(inductive2, args2)) => {
       inductive1 == inductive2 && args1.zip(args2).forall((arg1, arg2) => arg1 unify arg2)
     }
     case (InductiveVariant(inductive1, constructor1, args1), InductiveVariant(inductive2, constructor2, args2)) => {
       (inductive1 unify inductive2) && constructor1 == constructor2 &&
-      (args1.zip(args2).forall((arg1, arg2) => arg1 unify arg2))
+        (args1.zip(args2).forall((arg1, arg2) => arg1 unify arg2))
     }
     case _ => false
   }
@@ -148,16 +148,16 @@ enum Value extends RuntimeEntity[Type] {
     // Function type (Pi type) subtyping: Covariant in return type, contravariant in parameter type
     case (Pi(paramType1, closure1), Pi(paramType2, closure2)) => {
       paramType2 <:< paramType1 && {
-        val paramIdent = env.uniqueVariable
-        closure1(paramIdent) <:< closure2(paramIdent)
+        val paramVariable = Value.variable(env.uniqueVariable)
+        closure1(paramVariable) <:< closure2(paramVariable)
       }
     }
 
     // Sigma type subtyping: Covariant in both parameter type and dependent type
     case (Sigma(paramType1, closure1), Sigma(paramType2, closure2)) => {
       paramType1 <:< paramType2 && {
-        val param = Value.variable(env.uniqueVariable)
-        closure1(param) <:< closure2(param)
+        val paramVariable = Value.variable(env.uniqueVariable)
+        closure1(paramVariable) <:< closure2(paramVariable)
       }
     }
 
@@ -187,7 +187,7 @@ enum Value extends RuntimeEntity[Type] {
     // Inductive variant subtyping: constructors must match, and arguments must be subtypes
     case (InductiveVariant(inductive1, cons1, args1), InductiveVariant(inductive2, cons2, args2)) => {
       (inductive1 <:< inductive2) && cons1 == cons2 &&
-      args1.zip(args2).forall { case (arg1, arg2) => arg1 <:< arg2 }
+        args1.zip(args2).forall { case (arg1, arg2) => arg1 <:< arg2 }
     }
 
     // Default case: no subtyping relationship
@@ -220,7 +220,7 @@ enum Value extends RuntimeEntity[Type] {
 
     // LUB for Pi types: contravariant parameter type, covariant return type
     case (Value.Pi(paramType1, closure1), Value.Pi(paramType2, closure2)) => {
-      val paramLub = paramType2 leastUpperBound paramType1  // Contravariant parameter type
+      val paramLub = paramType2 leastUpperBound paramType1 // Contravariant parameter type
       val param = Value.variable(env.uniqueVariable)
       val returnLub = closure1(param) leastUpperBound closure2(param) // Covariant return type
       Value.Pi(paramLub, _ => returnLub)
@@ -270,7 +270,7 @@ enum Value extends RuntimeEntity[Type] {
     case (
       Value.InductiveVariant(ind1, cons1, args1),
       Value.InductiveVariant(ind2, cons2, args2),
-    ) if (ind1 unify ind2) && cons1.ident == cons2.ident => {
+      ) if (ind1 unify ind2) && cons1.ident == cons2.ident => {
       val lubArgs = args1.zip(args2).map { case (arg1, arg2) => arg1 leastUpperBound arg2 }
       Value.InductiveVariant(ind1, cons1, lubArgs)
     }
@@ -316,18 +316,19 @@ object Value extends RuntimeEntityFactory[Value] {
    * Read back a closure to a lambda term with a parameter
    *
    * @param paramType The type of the parameter
-   * @param closure The closure to read back
-   * @param env The environment to use for reading back
+   * @param closure   The closure to read back
+   * @param env       The environment to use for reading back
    * @return 1. The parameter of the lambda term
    *         2. The body of the lambda term
    * @see [[Term.evalParameterized]]
    */
-  private[core] def readBackClosure(paramType: Type, closure: (Value | Var.Local) => Value)(
+  private[core] def readBackClosure(paramType: Type, closure: Value => Value)(
     implicit env: Environment.Typed[Value]
   ): (Param[Term], Term) = {
     val paramIdent = env.uniqueVariable
+    val paramVariable = Value.variable(paramIdent)
     val term = env.withLocal(paramIdent, Value.variable(paramIdent), paramType) {
-      implicit env => closure(paramIdent).readBack(env)
+      implicit env => closure(paramVariable).readBack(env)
     }
     (Param(paramIdent, paramType.readBack), term)
   }
@@ -393,20 +394,22 @@ def neutralClosure(
   param: Param[Value],
   action: Environment.Typed[Value] => Value,
   env: Environment.Typed[Value],
-)(arg: Value | Var.Local): Value = {
+)(arg: Value): Value = {
   val paramType = param.`type`
-  val argVar = arg match {
-    case value: Value => Typed[Value](value, paramType)
-    case local: Var.Local => Typed[Value](Value.variable(local), paramType)
-  }
-  // When it is in a read-back phase, the argument is a new-generated variable
-  // and is not in the environment. We should add it to the environment for
-  // future type inference.
+  val argVar = Typed[Value](arg, paramType)
+  // When the argument is a neutral variable and is not in the environment,
+  // we should add it to the environment for future type inference.
   val envWithArg: Environment.Typed[Value] = arg match {
-    // It should be a read-back, add the argument to the environment
-    case local: Var.Local => env.add(local, Value.variable(local), paramType)
     // TODO: this is a workaround for the current implementation (arg is a parameter without a value)
-    case Value.Neutral(NeutralValue.Variable(local)) if !env.contains(local) => env.add(local, Value.variable(local), paramType)
+    case Value.Neutral(NeutralValue.Variable(local)) if (
+      // It is not in the environment or it is in the environment but with a different type
+      env.get(local).isEmpty || env.get(local).contains(Value.variable(local))
+    ) => env.add(local, Value.variable(local), paramType)
+    case Value.Neutral(NeutralValue.Variable(local)) if env.get(local).exists(_.infer(env) != paramType) => {
+      TypeNotMatch.raise {
+        s"Expected type ${paramType.readBack(env)}, but got ${env.get(local).get.infer(env).readBack(env)}"
+      }
+    }
     case _ => env
   }
   envWithArg.withLocal(param.ident, argVar) { implicit env => action(env) }

@@ -290,13 +290,13 @@ enum Term extends RuntimeEntity[Type] {
       }
 
       env.currentDefinition match {
-//        case Some(current: Var.Defined[Term, Function] @unchecked) => {
-//          if !function.isRecursive || !function.dependencies.contains(current) || allArgumentsFinal then {
-//            evaluatedFunctionBody
-//          } else {
-//            Value.functionInvoke(function.ident, argsValue)
-//          }
-//        }
+        case Some(current: Var.Defined[Term, Function] @unchecked) => {
+          if !function.isRecursive || !function.dependencies.contains(current) || allArgumentsFinal then {
+            evaluatedFunctionBody
+          } else {
+            Value.functionInvoke(function.ident, argsValue)
+          }
+        }
         case None | Some(_) => {
           if !function.isRecursive || allArgumentsFinal then {
             evaluatedFunctionBody
@@ -563,7 +563,7 @@ object Term extends RuntimeEntityFactory[Term] {
    */
   private[core] def evalParameterized(param: Param[Term], term: Term, doEvalFunction: Boolean)(
     implicit env: Environment.Typed[Value]
-  ): (Type, (Value | Var.Local) => Value) = {
+  ): (Type, Value => Value) = {
     val typedParam = param.map(_.eval(doEvalFunction))
     (typedParam.`type`, neutralClosure(typedParam, implicit env => term.eval(doEvalFunction), env))
   }
@@ -574,7 +574,7 @@ private sealed trait LambdaLikeTerm {
   def param: Param[Term]
   def body: Term
 
-  def eval(constructor: (Type, (Value | Var.Local)  => Value) => Value, doEvalFunction: Boolean)(
+  def eval(constructor: (Type, Value  => Value) => Value, doEvalFunction: Boolean)(
     implicit env: Environment.Typed[Value]
   ): Value = {
     val (paramType, closure) = Term.evalParameterized(param, body, doEvalFunction)
