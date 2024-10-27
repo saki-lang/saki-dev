@@ -101,7 +101,7 @@ enum Value extends RuntimeEntity[Type] {
   def isFinal(variables: Set[Var.Local] = Set.empty)(
     implicit env: Environment.Typed[Value]
   ): Boolean = this match {
-    case Neutral(_) => false
+    case Neutral(neutral) => neutral.isFinal(variables)
     case Pi(ty, closure) => {
       val paramIdent = env.uniqueVariable
       closure(Value.variable(paramIdent, ty)).isFinal(variables + paramIdent)
@@ -228,7 +228,7 @@ enum Value extends RuntimeEntity[Type] {
     // Inductive variant subtyping: constructors must match, and arguments must be subtypes
     case (InductiveVariant(inductive1, cons1, args1), InductiveVariant(inductive2, cons2, args2)) => {
       (inductive1 <:< inductive2) && cons1 == cons2 &&
-        args1.zip(args2).forall { case (arg1, arg2) => arg1 <:< arg2 }
+      args1.zip(args2).forall { case (arg1, arg2) => arg1 <:< arg2 }
     }
 
     // Default case: no subtyping relationship
@@ -317,7 +317,7 @@ enum Value extends RuntimeEntity[Type] {
     case (
       Value.InductiveVariant(ind1, cons1, args1),
       Value.InductiveVariant(ind2, cons2, args2),
-      ) if (ind1 unify ind2) && cons1.ident == cons2.ident => {
+    ) if (ind1 unify ind2) && cons1.ident == cons2.ident => {
       val lubArgs = args1.zip(args2).map { case (arg1, arg2) => arg1 leastUpperBound arg2 }
       Value.InductiveVariant(ind1, cons1, lubArgs)
     }

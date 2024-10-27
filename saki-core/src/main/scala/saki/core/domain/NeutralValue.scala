@@ -48,6 +48,20 @@ enum NeutralValue {
     }
   }
 
+  def isFinal(variables: Set[Var.Local] = Set.empty)(
+    implicit env: Environment.Typed[Value]
+  ): Boolean = this match {
+    case Variable(ident, _) => variables.contains(ident)
+    case Apply(fn, arg) => fn.isFinal(variables) && arg.isFinal(variables)
+    case Projection(record, _) => record.isFinal(variables)
+    case FunctionInvoke(_, args) => args.forall(_.isFinal(variables))
+    case Match(scrutinees, clauses) => {
+      scrutinees.forall(_.isFinal(variables)) && clauses.forall { clause =>
+        clause.patterns.forall(_.forall(_.isFinal(variables))) && clause.body.isFinal(variables)
+      }
+    }
+  }
+
   infix def unify(that: NeutralValue)(
     implicit env: Environment.Typed[Value]
   ): Boolean = (this, that) match {
