@@ -79,7 +79,7 @@ trait SakiTestExt {
   }
 
   def synthExpr(code: String): (Term, Value) = catchError(code.strip) {
-    _ => parseExpr(code).synth.unpack
+    _ => parseExpr(code).synth.normalize.unpack
   }
 
   def synthCodeBlock(code: String): (Term, Type) = {

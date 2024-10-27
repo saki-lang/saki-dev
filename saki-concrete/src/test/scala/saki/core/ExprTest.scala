@@ -17,13 +17,13 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
 
   test("synth lambda") {
     val (term, ty) = synthExpr("(x: Int) => x")
-    term should be (Term.Lambda(Param(!"x", IntType.term), Term.Variable(!"x")))
+    term should be (Term.Lambda(Param(!"x", IntType.term), Term.Variable(!"x")).normalize)
     ty.readBack should be (Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType)).readBack)
   }
 
   test("synth lambda with explicit type") {
     val (term, ty) = synthExpr("(x: Int): Int => x")
-    term should be (Term.Lambda(Param(!"x", IntType.term), Term.Variable(!"x")))
+    term should be (Term.Lambda(Param(!"x", IntType.term), Term.Variable(!"x")).normalize)
     ty.readBack should be (Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType)).readBack)
   }
 
@@ -39,7 +39,7 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             Term.Variable(!"x")
           )
         )
-      )
+      ).normalize
     )
     ty.readBack should be (
       Value.Pi(

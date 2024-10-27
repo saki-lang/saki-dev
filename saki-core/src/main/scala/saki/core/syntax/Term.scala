@@ -14,7 +14,7 @@ enum Term extends RuntimeEntity[Type] {
   case Universe
   case Primitive(value: Literal)
   case PrimitiveType(`type`: LiteralType)
-  case Variable(variable: Var.Local, `type`: Option[Type] = None)
+  case Variable(variable: Var.Local)
   case FunctionInvoke(fn: Var.Defined[Term, Function], args: Seq[Term])
   case OverloadInvoke(
     fn: Var.Defined[Term, Overloaded], args: Seq[Term]
@@ -70,7 +70,7 @@ enum Term extends RuntimeEntity[Type] {
     case Universe => s"'Type"
     case Primitive(value) => value.toString
     case PrimitiveType(ty) => ty.toString
-    case Variable(variable, _) => variable.name
+    case Variable(variable) => variable.name
     case FunctionInvoke(fn, args) => s"${fn.name}(${args.mkString(", ")})"
     case OverloadInvoke(fn, args) => s"${fn.name}(${args.mkString(", ")})"
     case InductiveType(inductive, args) => {
@@ -118,10 +118,7 @@ enum Term extends RuntimeEntity[Type] {
 
     case PrimitiveType(_) => Value.Universe
 
-    case Variable(variable, ty) => ty match {
-      case Some(ty) => ty.readBack.eval
-      case None => env.getTyped(variable).get.`type`
-    }
+    case Variable(variable) => env.getTyped(variable).get.`type`
 
     case FunctionInvoke(fn, args) => env.getSymbol(fn).get match {
       case fn: Function[Term] => fn.resultType.eval
@@ -241,7 +238,7 @@ enum Term extends RuntimeEntity[Type] {
 
     case PrimitiveType(ty) => Value.PrimitiveType(ty)
     
-    case Variable(variable, _) => env.getValue(variable) match {
+    case Variable(variable) => env.getValue(variable) match {
       case Some(value) => value
       case None => throw new NoSuchElementException(s"Variable $variable not found in the environment")
       // case None => Value.variable(variable, this.infer)
@@ -295,13 +292,13 @@ enum Term extends RuntimeEntity[Type] {
       }
 
       env.currentDefinition match {
-//        case Some(current: Var.Defined[Term, Function] @unchecked) => {
-//          if !function.isRecursive || !function.dependencies.contains(current) || allArgumentsFinal then {
-//            evaluatedFunctionBody
-//          } else {
-//            Value.functionInvoke(function.ident, argsValue)
-//          }
-//        }
+        case Some(current: Var.Defined[Term, Function] @unchecked) => {
+          if !function.isRecursive || !function.dependencies.contains(current) || allArgumentsFinal then {
+            evaluatedFunctionBody
+          } else {
+            Value.functionInvoke(function.ident, argsValue)
+          }
+        }
         case None | Some(_) => {
           if !function.isRecursive || allArgumentsFinal then {
             evaluatedFunctionBody
@@ -426,7 +423,7 @@ enum Term extends RuntimeEntity[Type] {
     case Universe => Universe
     case Primitive(_) => this
     case PrimitiveType(_) => this
-    case Variable(variable, _) => env.getTyped(variable) match {
+    case Variable(variable) => env.getTyped(variable) match {
       case Some(typed) if typed.value.readBack unify from => to
       case _ => this
     }
