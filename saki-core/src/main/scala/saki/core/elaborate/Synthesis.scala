@@ -92,11 +92,11 @@ object Synthesis:
 
       val (fn, fnType) = fnExpr.synth.unpack
       val paramIdent = env.uniqueVariable
-      val param = Value.variable(paramIdent)
 
       fnType match {
 
         case Value.Pi(paramType, codomain) => {
+          val param = Value.variable(paramIdent, paramType)
           env.withLocal(paramIdent, param, paramType) { implicit env =>
             val (argTerm, argType) = argExpr.value.synth(env).unpack
             if !(paramType <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
@@ -119,6 +119,7 @@ object Synthesis:
             }
           )
 
+          val param = Value.variable(paramIdent, argType)
           env.withLocal(paramIdent, param, argType) { implicit env =>
             Synth(fn.apply(argTerm), eigenState)
           }
@@ -216,7 +217,7 @@ object Synthesis:
       val paramIdent = param.ident
       val (paramType, _) = param.`type`.synth.unpack
       val paramTypeValue = paramType.eval
-      val paramVariable = Value.variable(paramIdent)
+      val paramVariable = Value.variable(paramIdent, paramTypeValue)
 
       env.withLocal(paramIdent, paramVariable, paramTypeValue) { implicit env =>
 
@@ -276,12 +277,13 @@ object Synthesis:
   private def synthDependentType(param: Param[Expr], result: Expr, constructor: (Param[Term], Term) => Term)(
     implicit env: Environment.Typed[Value]
   ): Synth = {
-    val (paramType, _) = param.`type`.synth.unpack
-    val (codomain, _) = env.withLocal(param.ident, Value.variable(param.ident), paramType.eval) {
+    val (paramTypeTerm, _) = param.`type`.synth.unpack
+    val paramType = paramTypeTerm.eval
+    val (codomain, _) = env.withLocal(param.ident, Value.variable(param.ident, paramType), paramType) {
       result.synth(_).unpack
     }
     Synth(
-      term = constructor(Param(param.ident, paramType), codomain),
+      term = constructor(Param(param.ident, paramTypeTerm), codomain),
       `type` = Value.Universe,
     )
   }
@@ -303,7 +305,7 @@ object Synthesis:
     val patternsBinding: Seq[Map[Var.Local, Typed[Value]]] = patterns.zip(scrutinees).map {
       (pattern, scrutinee) => pattern.buildMatchBindings(scrutinee.`type`)
     }.map { bindings =>
-      bindings.map { case (k, v) => k -> Typed[Value](Value.variable(k), v) }
+      bindings.map { case (k, v) => k -> Typed[Value](Value.variable(k, v), v) }
     }
     val bindings = patternsBinding.foldLeft(Map.empty[Var.Local, Typed[Value]]) {
       (acc, bindings) => acc ++ bindings
@@ -404,12 +406,17 @@ object Synthesis:
    *         2. Updated environment
    */
   def synthParams(paramExprs: Seq[Param[Expr]])(
-    implicit env: Environment.Typed[Value]
+    implicit env: Environment.Typed[Value] // ^1
   ): (Seq[Param[Term]], Environment.Typed[Value]) = {
     paramExprs.foldLeft((Seq.empty[Param[Term]], env: Environment.Typed[Value])) {
-      case ((params, env), paramExpr) => {
-        val param = Param(paramExpr.ident, paramExpr.`type`.synth(env).term)
-        (params :+ param, env.add(param.ident, Value.variable(param.ident), param.`type`.eval(env)))
+      case ((params, env /* ^2 */), paramExpr) => {
+        // Notice, here `env` should be explicitly passed!
+        // Since the priority of implicit given `env` (^1) is higher
+        // than the `env` (^2) in the inner scope
+        val paramTypeTerm = paramExpr.`type`.synth(env).term
+        val paramType = paramTypeTerm.eval(env)
+        val param = Param(paramExpr.ident, paramTypeTerm)
+        (params :+ param, env.add(param.ident, Value.variable(param.ident, paramType), paramType))
       }
     }
   }

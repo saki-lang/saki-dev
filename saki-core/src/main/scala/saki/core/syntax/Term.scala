@@ -131,7 +131,8 @@ enum Term extends RuntimeEntity[Type] {
     case invoke: OverloadInvoke => {
       val func = invoke.getOverload
       val paramMap = func.params.map { param =>
-        (param.ident, Typed[Value](Value.variable(param.ident), param.`type`.eval))
+        val paramType = param.`type`.eval
+        (param.ident, Typed[Value](Value.variable(param.ident, paramType), paramType))
       }.toMap
       env.withLocals(paramMap) { implicit env => func.resultType.eval(env) }
     }
@@ -148,7 +149,7 @@ enum Term extends RuntimeEntity[Type] {
         val bindings: Seq[(Var.Local, Typed[Value])] = scrutineesType.zip(clause.patterns).flatMap {
           (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee)
         }.map {
-          case (param, ty) => (param, Typed[Value](Value.variable(param), ty))
+          case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
         }
         env.withLocals(bindings.toMap) { implicit env => clause.body.infer(env) }
       }
@@ -342,7 +343,7 @@ enum Term extends RuntimeEntity[Type] {
           val bindings: Seq[(Var.Local, Typed[Value])] = scrutineesValue.zip(clause.patterns).flatMap {
             (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee.infer)
           }.map {
-            case (param, ty) => (param, Typed[Value](Value.variable(param), ty))
+            case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
           }
           val body = env.withLocals(bindings.toMap) { implicit env =>
             clause.body.infer match {
@@ -481,7 +482,7 @@ enum Term extends RuntimeEntity[Type] {
         val bindings: Seq[(Var.Local, Typed[Value])] = scrutinees.zip(clause.patterns).flatMap {
           (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee.infer)
         }.map {
-          case (param, ty) => (param, Typed[Value](Value.variable(param), ty))
+          case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
         }
         val body = env.withLocals(bindings.toMap) { implicit env =>
           clause.body.substitute(from, to)
@@ -516,7 +517,7 @@ object Term extends RuntimeEntityFactory[Term] {
 
   override def universe: Term = Universe
 
-  override def variable(ident: Var.Local): Term = Variable(ident)
+  override def variable(ident: Var.Local, ty: Term): Term = Variable(ident)
 
   override def inductiveType(
     inductive: Var.Defined[Term, Inductive], args: Seq[Term]

@@ -22,7 +22,7 @@ trait EntityFactory[T <: Entity, D <: Entity] {
 
   def universe: T
 
-  def variable(ident: Var.Local): T
+  def variable(ident: Var.Local, ty: T): T
 
   def inductiveType(inductive: Var.Defined[D, Inductive], args: Seq[T]): T
 

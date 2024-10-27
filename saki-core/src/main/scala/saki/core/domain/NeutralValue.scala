@@ -1,14 +1,14 @@
 package saki.core.domain
 
 import saki.core.context.Environment
-import saki.core.syntax.{Clause, Function, Overloaded, Term, Var}
+import saki.core.syntax.{Clause, Function, Term, Var}
 
 import scala.annotation.targetName
 import scala.collection.Seq
 
 enum NeutralValue {
 
-  case Variable(ident: Var.Local)
+  case Variable(ident: Var.Local, `type`: Type)
 
   case Apply(fn: NeutralValue, arg: Value)
 
@@ -28,7 +28,7 @@ enum NeutralValue {
   def infer(implicit env: Environment.Typed[Value]): Type = this.readBack.infer
 
   def readBack(implicit env: Environment.Typed[Value]): Term = this match {
-    case Variable(ident) => Term.Variable(ident)
+    case Variable(ident, _) => Term.Variable(ident)
     case Apply(fn, arg) => Term.Apply(fn.readBack, arg.readBack)
     case Projection(record, field) => Term.Projection(record.readBack, field)
     case FunctionInvoke(fnRef, args) => Term.FunctionInvoke(fnRef, args.map(_.readBack))
@@ -39,7 +39,7 @@ enum NeutralValue {
     implicit env: Environment.Typed[Value]
   ): Boolean = (this, that) match {
 
-    case (Variable(ident1), Variable(ident2)) => ident1 == ident2
+    case (Variable(ident1, ty1), Variable(ident2, ty2)) => ident1 == ident2 && ty1 == ty2
     case (Apply(fn1, arg1), Apply(fn2, arg2)) => (fn1 unify fn2) && (arg1 unify arg2)
 
     case (Projection(record1, field1), Projection(record2, field2)) => {
@@ -69,7 +69,7 @@ enum NeutralValue {
   ): Boolean = (this, that) match {
 
     // Variable subtyping: variables must match
-    case (Variable(ident1), Variable(ident2)) => ident1 == ident2
+    case (Variable(ident1, ty1), Variable(ident2, ty2)) => ident1 == ident2 && ty1 <:< ty2
 
     // Application subtyping: function applications must have subtyping in both function and argument
     case (Apply(fn1, arg1), Apply(fn2, arg2)) => fn1 <:< fn2 && arg1 <:< arg2

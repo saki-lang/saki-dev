@@ -49,7 +49,10 @@ enum Value extends RuntimeEntity[Type] {
     args: Seq[Value],
   )
 
-  override def infer(implicit env: Environment.Typed[Value]): Type = this.readBack.infer
+  override def infer(implicit env: Environment.Typed[Value]): Type = this match {
+    case Neutral(NeutralValue.Variable(_, ty)) => ty
+    case _ => this.readBack.infer
+  }
 
   def readBack(implicit env: Environment.Typed[Value]): Term = this match {
 
@@ -99,16 +102,22 @@ enum Value extends RuntimeEntity[Type] {
     case (PrimitiveType(ty1), PrimitiveType(ty2)) => ty1 == ty2
     case (Neutral(value1), Neutral(value2)) => value1 unify value2
     case (Pi(paramType1, closure1), Pi(paramType2, closure2)) => {
-      val param = Value.variable(env.uniqueVariable)
-      (paramType1 unify paramType2) && (closure1(param) unify closure2(param))
+      val paramIdent = env.uniqueVariable
+      val param1 = Value.variable(paramIdent, paramType1)
+      val param2 = Value.variable(paramIdent, paramType2)
+      (paramType1 unify paramType2) && (closure1(param1) unify closure2(param2))
     }
     case (Sigma(paramType1, closure1), Sigma(paramType2, closure2)) => {
-      val param = Value.variable(env.uniqueVariable)
-      (paramType1 unify paramType2) && (closure1(param) unify closure2(param))
+      val paramIdent = env.uniqueVariable
+      val param1 = Value.variable(paramIdent, paramType1)
+      val param2 = Value.variable(paramIdent, paramType2)
+      (paramType1 unify paramType2) && (closure1(param1) unify closure2(param2))
     }
     case (Lambda(paramType1, body1), Lambda(paramType2, body2)) => {
-      val param = Value.variable(env.uniqueVariable)
-      (paramType1 unify paramType2) && (body1(param) unify body2(param))
+      val paramIdent = env.uniqueVariable
+      val param1 = Value.variable(paramIdent, paramType1)
+      val param2 = Value.variable(paramIdent, paramType2)
+      (paramType1 unify paramType2) && (body1(param1) unify body2(param2))
     }
     case (Record(fields1), Record(fields2)) => {
       fields1.size == fields2.size &&
@@ -148,24 +157,30 @@ enum Value extends RuntimeEntity[Type] {
     // Function type (Pi type) subtyping: Covariant in return type, contravariant in parameter type
     case (Pi(paramType1, closure1), Pi(paramType2, closure2)) => {
       paramType2 <:< paramType1 && {
-        val paramVariable = Value.variable(env.uniqueVariable)
-        closure1(paramVariable) <:< closure2(paramVariable)
+        val paramIdent = env.uniqueVariable
+        val param1 = Value.variable(paramIdent, paramType1)
+        val param2 = Value.variable(paramIdent, paramType2)
+        closure1(param1) <:< closure2(param2)
       }
     }
 
     // Sigma type subtyping: Covariant in both parameter type and dependent type
     case (Sigma(paramType1, closure1), Sigma(paramType2, closure2)) => {
       paramType1 <:< paramType2 && {
-        val paramVariable = Value.variable(env.uniqueVariable)
-        closure1(paramVariable) <:< closure2(paramVariable)
+        val paramIdent = env.uniqueVariable
+        val param1 = Value.variable(paramIdent, paramType1)
+        val param2 = Value.variable(paramIdent, paramType2)
+        closure1(param1) <:< closure2(param2)
       }
     }
 
     // Lambda types must match in parameter type and be subtypes in their bodies
     case (Lambda(paramType1, body1), Lambda(paramType2, body2)) => {
       paramType1 <:< paramType2 && {
-        val param = Value.variable(env.uniqueVariable)
-        body1(param) <:< body2(param)
+        val paramIdent = env.uniqueVariable
+        val param1 = Value.variable(paramIdent, paramType1)
+        val param2 = Value.variable(paramIdent, paramType2)
+        body1(param1) <:< body2(param2)
       }
     }
 
@@ -221,24 +236,30 @@ enum Value extends RuntimeEntity[Type] {
     // LUB for Pi types: contravariant parameter type, covariant return type
     case (Value.Pi(paramType1, closure1), Value.Pi(paramType2, closure2)) => {
       val paramLub = paramType2 leastUpperBound paramType1 // Contravariant parameter type
-      val param = Value.variable(env.uniqueVariable)
-      val returnLub = closure1(param) leastUpperBound closure2(param) // Covariant return type
+      val paramIdent = env.uniqueVariable
+      val param1 = Value.variable(paramIdent, paramType1)
+      val param2 = Value.variable(paramIdent, paramType2)
+      val returnLub = closure1(param1) leastUpperBound closure2(param2) // Covariant return type
       Value.Pi(paramLub, _ => returnLub)
     }
 
     // LUB for Sigma types: covariant parameter and closure type
     case (Value.Sigma(paramType1, closure1), Value.Sigma(paramType2, closure2)) => {
       val paramLub = paramType1 leastUpperBound paramType2 // Covariant parameter
-      val param = Value.variable(env.uniqueVariable)
-      val closureLub = closure1(param) leastUpperBound closure2(param) // Covariant closure
+      val paramIdent = env.uniqueVariable
+      val param1 = Value.variable(paramIdent, paramType1)
+      val param2 = Value.variable(paramIdent, paramType2)
+      val closureLub = closure1(param1) leastUpperBound closure2(param2) // Covariant closure
       Value.Sigma(paramLub, _ => closureLub)
     }
 
     // LUB for Lambda values: parameter types must match, and take the LUB of bodies
     case (Value.Lambda(paramType1, body1), Value.Lambda(paramType2, body2)) => {
       val paramLub = paramType1 leastUpperBound paramType2 // Parameters must match
-      val param = Value.variable(env.uniqueVariable)
-      val bodyLub = body1(param) leastUpperBound body2(param) // LUB of bodies
+      val paramIdent = env.uniqueVariable
+      val param1 = Value.variable(paramIdent, paramType1)
+      val param2 = Value.variable(paramIdent, paramType2)
+      val bodyLub = body1(param1) leastUpperBound body2(param2) // LUB of bodies
       Value.Lambda(paramLub, _ => bodyLub)
     }
 
@@ -293,7 +314,7 @@ object Value extends RuntimeEntityFactory[Value] {
 
   override def universe: Type = Universe
 
-  override def variable(ident: Var.Local): Value = Neutral(NeutralValue.Variable(ident))
+  override def variable(ident: Var.Local, ty: Type): Value = Neutral(NeutralValue.Variable(ident, ty))
 
   override def functionInvoke(function: Var.Defined[Term, Function], args: Seq[Type]): Type = {
     Neutral(NeutralValue.FunctionInvoke(function, args))
@@ -326,8 +347,8 @@ object Value extends RuntimeEntityFactory[Value] {
     implicit env: Environment.Typed[Value]
   ): (Param[Term], Term) = {
     val paramIdent = env.uniqueVariable
-    val paramVariable = Value.variable(paramIdent)
-    val term = env.withLocal(paramIdent, Value.variable(paramIdent), paramType) {
+    val paramVariable = Value.variable(paramIdent, paramType)
+    val term = env.withLocal(paramIdent, paramVariable, paramType) {
       implicit env => closure(paramVariable).readBack(env)
     }
     (Param(paramIdent, paramType.readBack), term)
@@ -350,7 +371,7 @@ private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] 
   def readBackStates(implicit env: Environment.Typed[Value]): Map[Param[Term], Term] = {
     states.map { (paramType, closure) =>
       val paramIdent = env.uniqueVariable
-      val param = Value.variable(paramIdent)
+      val param = Value.variable(paramIdent, paramType)
       val body = env.withLocal(paramIdent, param, paramType) {
         closure(param).readBack
       }
@@ -397,20 +418,20 @@ def neutralClosure(
 )(arg: Value): Value = {
   val paramType = param.`type`
   val argVar = Typed[Value](arg, paramType)
-  // When the argument is a neutral variable and is not in the environment,
-  // we should add it to the environment for future type inference.
-  val envWithArg: Environment.Typed[Value] = arg match {
-    // TODO: this is a workaround for the current implementation (arg is a parameter without a value)
-    case Value.Neutral(NeutralValue.Variable(local)) if (
-      // It is not in the environment or it is in the environment but with a different type
-      env.get(local).isEmpty || env.get(local).contains(Value.variable(local))
-    ) => env.add(local, Value.variable(local), paramType)
-    case Value.Neutral(NeutralValue.Variable(local)) if env.get(local).exists(_.infer(env) != paramType) => {
-      TypeNotMatch.raise {
-        s"Expected type ${paramType.readBack(env)}, but got ${env.get(local).get.infer(env).readBack(env)}"
-      }
-    }
-    case _ => env
-  }
-  envWithArg.withLocal(param.ident, argVar) { implicit env => action(env) }
+//  // When the argument is a neutral variable and is not in the environment,
+//  // we should add it to the environment for future type inference.
+//  val envWithArg: Environment.Typed[Value] = arg match {
+//    // TODO: this is a workaround for the current implementation (arg is a parameter without a value)
+//    case Value.Neutral(NeutralValue.Variable(local, _)) if (
+//      // It is not in the environment or it is in the environment but with a different type
+//      env.get(local).isEmpty || env.get(local).contains(Value.variable(local, paramType))
+//    ) => env.add(local, Value.variable(local, paramType), paramType)
+//    case Value.Neutral(NeutralValue.Variable(local, _)) if env.get(local).exists(_.infer(env) != paramType) => {
+//      TypeNotMatch.raise {
+//        s"Expected type ${paramType.readBack(env)}, but got ${env.get(local).get.infer(env).readBack(env)}"
+//      }
+//    }
+//    case _ => env
+//  }
+  env.withLocal(param.ident, argVar) { implicit env => action(env) }
 }
