@@ -98,6 +98,44 @@ enum Value extends RuntimeEntity[Type] {
     }
   }
 
+  def containsMatching(implicit env: Environment.Typed[Value]): Boolean = this match {
+    case Neutral(neutral) => neutral.containsMatching
+    case Pi(paramType, closure) => {
+      val paramIdent = env.uniqueVariable("%")
+      val variable = Value.variable(paramIdent, paramType)
+      env.withLocal(paramIdent, Typed[Value](variable, paramType)) {
+        implicit env => closure(variable).containsMatching
+      }
+    }
+    case Sigma(paramType, closure) => {
+      val paramIdent = env.uniqueVariable("%")
+      val variable = Value.variable(paramIdent, paramType)
+      env.withLocal(paramIdent, Typed[Value](variable, paramType)) {
+        implicit env => closure(variable).containsMatching
+      }
+    }
+    case Lambda(paramType, closure) => {
+      val paramIdent = env.uniqueVariable("%")
+      val variable = Value.variable(paramIdent, paramType)
+      env.withLocal(paramIdent, Typed[Value](variable, paramType)) {
+        implicit env => closure(variable).containsMatching
+      }
+    }
+    case overloaded: OverloadedLambdaLike[?] => {
+      // TODO: Structures like this should be refactored to put the variable in the environment
+      overloaded.states.forall { (paramType, closure) =>
+        val paramIdent = env.uniqueVariable("%")
+        val param = Value.variable(paramIdent, paramType)
+        closure(param).containsMatching
+      }
+    }
+    case Record(fields) => fields.valuesIterator.exists(_.containsMatching)
+    case RecordType(fields) => fields.valuesIterator.exists(_.containsMatching)
+    case InductiveType(_, args) => args.exists(_.containsMatching)
+    case InductiveVariant(_, _, args) => args.exists(_.containsMatching)
+    case _ => false
+  }
+
   def isFinal(variables: Set[Var.Local] = Set.empty)(
     implicit env: Environment.Typed[Value]
   ): Boolean = this match {
@@ -128,6 +166,7 @@ enum Value extends RuntimeEntity[Type] {
     case (PrimitiveType(ty1), PrimitiveType(ty2)) => ty1 == ty2
     case (Neutral(value1), Neutral(value2)) => value1 unify value2
     case (Pi(paramType1, closure1), Pi(paramType2, closure2)) => {
+      // TODO: Refactor this, put the variable into the environment
       val paramIdent = env.uniqueVariable("%")
       val param1 = Value.variable(paramIdent, paramType1)
       val param2 = Value.variable(paramIdent, paramType2)
@@ -411,7 +450,7 @@ private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] 
 
   def isStatesFinal(variables: Set[Var.Local])(implicit env: Environment.Typed[Value]): Boolean = {
     states.forall { (paramType, closure) =>
-      val paramIdent = env.uniqueVariable
+      val paramIdent = env.uniqueVariable("%")
       val param = Value.variable(paramIdent, paramType)
       closure(param).isFinal(variables + paramIdent)
     }

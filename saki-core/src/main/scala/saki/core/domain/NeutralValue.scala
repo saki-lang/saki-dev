@@ -50,6 +50,14 @@ enum NeutralValue {
     }
   }
 
+  def containsMatching(implicit env: Environment.Typed[Value]): Boolean = this match {
+    case Variable(_, _) => false
+    case Apply(fn, arg) => fn.containsMatching || arg.containsMatching
+    case Projection(record, _) => record.containsMatching
+    case FunctionInvoke(_, args) => args.exists(_.containsMatching)
+    case Match(_, _) => true
+  }
+
   def isFinal(variables: Set[Var.Local] = Set.empty)(
     implicit env: Environment.Typed[Value]
   ): Boolean = this match {

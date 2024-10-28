@@ -3,6 +3,7 @@ package saki.core.syntax
 import saki.core.Entity
 import saki.core.context.{Environment, Typed}
 import saki.core.domain.Value
+import saki.error.{CoreError, CoreErrorKind}
 
 import scala.collection.Seq
 
@@ -30,6 +31,7 @@ extension (clauses: Seq[Clause[Term]]) {
     //   case _ => panic("not zero")
     // }
     // ```
+    lazy val allArgsFinal = args.forall(_.isFinal(Set.empty))
     clauses.iterator.map { clause =>
       val optionalSubstMap: Option[Map[Var.Local, Value]] = {
         clause.patterns.zip(args).foldLeft(Some(Map.empty): Option[Map[Var.Local, Value]]) {
@@ -37,11 +39,15 @@ extension (clauses: Seq[Clause[Term]]) {
           case _ => None
         }
       }
-      optionalSubstMap.map { implicit substMap =>
+      optionalSubstMap.flatMap { implicit substMap =>
         val typedSubstMap = substMap.map {
           (ident, untyped) => (ident, Typed[Value](untyped, untyped.infer))
         }
-        clause.body.eval(env.addAll(typedSubstMap))
+        try Some(clause.body.eval(env.addAll(typedSubstMap))) catch {
+          // if the error is a panic and not all arguments are final, ignore it
+          case CoreError(CoreErrorKind.PanicFailure, _) if !allArgsFinal => None
+          case e: Throwable => throw e
+        }
       }
     }.collectFirst { case Some(body) => body }
   }

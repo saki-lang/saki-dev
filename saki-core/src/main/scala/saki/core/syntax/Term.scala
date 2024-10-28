@@ -304,14 +304,18 @@ enum Term extends RuntimeEntity[Type] {
       env.currentDefinition match {
         case Some(current: Var.Defined[Term, Function] @unchecked) if evalMode == EvalMode.Force => {
           if !function.isRecursive || !function.dependencies.contains(current) || allArgumentsFinal then {
-            evaluatedFunctionBody
+            if evaluatedFunctionBody.containsMatching
+            then Value.functionInvoke(fnRef, argsValue)
+            else evaluatedFunctionBody
           } else {
             Value.functionInvoke(function.ident, argsValue)
           }
         }
         case None | Some(_) => {
           if !function.isRecursive || allArgumentsFinal then {
-            evaluatedFunctionBody
+            if evaluatedFunctionBody.containsMatching
+            then Value.functionInvoke(fnRef, argsValue)
+            else evaluatedFunctionBody
           } else {
             Value.functionInvoke(function.ident, argsValue)
           }
@@ -348,23 +352,25 @@ enum Term extends RuntimeEntity[Type] {
           }
         }
       } else {
-        // Otherwise (at least one scrutinee contains neutral value), keep the match as a neutral value
-        val valueClauses = clauses.map { clause =>
-          // Bind the pattern variables to the scrutinee values
-          val bindings: Seq[(Var.Local, Typed[Value])] = scrutineesValue.zip(clause.patterns).flatMap {
-            (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee.infer)
-          }.map {
-            case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
-          }
-          val body = env.withLocals(bindings.toMap) { implicit env =>
-            clause.body.infer match {
-              case Value.PrimitiveType(LiteralType.NothingType) => clause.body.partialEval
-              case _ => clause.body.eval(evalMode)
+        clauses.tryMatch(scrutineesValue).getOrElse {
+          // Otherwise (at least one scrutinee contains neutral value), keep the match as a neutral value
+          val valueClauses = clauses.map { clause =>
+            // Bind the pattern variables to the scrutinee values
+            val bindings: Seq[(Var.Local, Typed[Value])] = scrutineesValue.zip(clause.patterns).flatMap {
+              (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee.infer)
+            }.map {
+              case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
             }
+            val body = env.withLocals(bindings.toMap) { implicit env =>
+              clause.body.infer match {
+                case Value.PrimitiveType(LiteralType.NothingType) => clause.body.partialEval
+                case _ => clause.body.eval(evalMode)
+              }
+            }
+            Clause(clause.patterns.map(_.map(_.eval(evalMode))), body)
           }
-          Clause(clause.patterns.map(_.map(_.eval(evalMode))), body)
+          Value.Neutral(NeutralValue.Match(scrutineesValue, valueClauses))
         }
-        Value.Neutral(NeutralValue.Match(scrutineesValue, valueClauses))
       }
     }
 
