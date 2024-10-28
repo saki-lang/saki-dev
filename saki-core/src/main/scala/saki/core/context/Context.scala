@@ -12,9 +12,11 @@ trait LocalContext[T <: Entity] extends Context[Var.Local, T] {
   def getValue(local: Var.Local): Option[T]
   def contains(local: Var.Local): Boolean
 
-  def uniqueVariable: Var.Local = {
+  def uniqueVariable: Var.Local = uniqueVariable("$")
+
+  def uniqueVariable(prefix: String): Var.Local = {
     // Iterator that generates names in the format "$0", "$1", ...
-    val nameIterator: Iterator[String] = Iterator.from(0).map(i => s"$$$i")
+    val nameIterator: Iterator[String] = Iterator.from(0).map(i => s"$prefix$i")
     // Find the first unique name that does not collide with any key in env
     val uniqueName = nameIterator.find(name => !this.contains(Var.Local(name))).get
     // Return a new Var.Local with the unique name

@@ -93,7 +93,7 @@ object Synthesis:
     case Expr.Apply(fnExpr, argExpr) => {
 
       val (fn, fnType) = fnExpr.synth.unpack
-      val paramIdent = env.uniqueVariable
+      val paramIdent = env.uniqueVariable("#")
 
       fnType match {
 

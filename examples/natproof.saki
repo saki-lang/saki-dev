@@ -38,14 +38,14 @@ def inductionReduce(
     eqab(P, pa)
 }
 
-def theoremPlusZero: ∀(n: Nat) -> Eq(Nat, plus n Nat::Zero, n) = {
+def theoremPlusZero: ∀(n: Nat) -> Eq(Nat, plus(n, Nat::Zero), n) = {
     (n: Nat) => induction(
-        (n': Nat) => Eq(Nat, plus n' Nat::Zero, n'),
+        (n': Nat) => Eq(Nat, plus(n', Nat::Zero), n'),
         refl(Nat, Nat::Zero),
-        (n': Nat, IHn: Eq(Nat, plus n' Nat::Zero, n')) => {
+        (n': Nat, IHn: Eq(Nat, plus(n', Nat::Zero), n')) => {
             inductionReduce(
                 n',
-                plus n' Nat::Zero,
+                plus(n', Nat::Zero),
                 IHn,
                 (n'': Nat) => Eq(Nat, Nat::Succ(n''), Nat::Succ(n')),
                 refl(Nat, Nat::Succ(n'))
