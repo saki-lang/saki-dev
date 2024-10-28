@@ -166,7 +166,7 @@ enum Value extends RuntimeEntity[Type] {
   @targetName("subtype")
   infix def <:<(that: Type)(
     implicit env: Environment.Typed[Value]
-  ): Boolean = (this, that) match {
+  ): Boolean = (this.readBack.forceEval, that.readBack.forceEval) match {
 
     case (PrimitiveType(LiteralType.AnyType), _) => true
 
@@ -227,7 +227,7 @@ enum Value extends RuntimeEntity[Type] {
 
     // Inductive variant subtyping: constructors must match, and arguments must be subtypes
     case (InductiveVariant(inductive1, cons1, args1), InductiveVariant(inductive2, cons2, args2)) => {
-      (inductive1 <:< inductive2) && cons1 == cons2 &&
+      (inductive1.asInstanceOf[Type] <:< inductive2.asInstanceOf[Type]) && cons1 == cons2 &&
       args1.zip(args2).forall { case (arg1, arg2) => arg1 <:< arg2 }
     }
 

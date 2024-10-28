@@ -17,6 +17,8 @@ object Synthesis:
     def normalize(implicit env: Environment.Typed[Value]): Synth = {
       Synth(term.normalize, `type`)
     }
+    def mapTerm(f: Term => Term): Synth = Synth(f(term), `type`)
+    def mapType(f: Type => Type): Synth = Synth(term, f(`type`))
   }
 
   def synth(expr: Expr)(implicit env: Environment.Typed[Value]): Synth = expr match {
@@ -127,7 +129,7 @@ object Synthesis:
 
         case Value.Universe => fn.normalize match {
           case Term.Pi(piParam, codomain) => {
-            val (argTerm, argType) = argExpr.value.synth(env).unpack
+            val (argTerm, argType) = argExpr.value.synth(env).normalize.unpack
             if !(piParam.`type`.eval <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
               s"Expected type: ${piParam.`type`}, found: $argType"
             }

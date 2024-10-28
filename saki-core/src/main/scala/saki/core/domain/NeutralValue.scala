@@ -37,7 +37,9 @@ enum NeutralValue {
       val termClauses = clauses.map { clause =>
         // Bind the pattern variables to the scrutinee values
         val bindings: Seq[(Var.Local, Typed[Value])] = scrutinees.zip(clause.patterns).flatMap {
-          (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee.infer)
+          (scrutinee, pattern) =>
+            val scrutineeType = scrutinee.infer
+            pattern.buildMatchBindings(scrutineeType)
         }.map {
           case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
         }
@@ -114,12 +116,12 @@ enum NeutralValue {
     // Match subtyping: scrutinees and clauses must match
     case (Match(scrutinees1, clauses1), Match(scrutinees2, clauses2)) => {
       scrutinees1.zip(scrutinees2).forall { case (scrutinee1, scrutinee2) => scrutinee1 <:< scrutinee2 } &&
-      clauses1.forall { clause1 =>
-        clauses2.find(_.patterns == clause1.patterns) match {
-          case Some(clause2) => clause1.body <:< clause2.body
-          case None => false
+        clauses1.forall { clause1 =>
+          clauses2.find(_.patterns == clause1.patterns) match {
+            case Some(clause2) => clause1.body <:< clause2.body
+            case None => false
+          }
         }
-      }
     }
 
     // Default case: no subtyping relationship

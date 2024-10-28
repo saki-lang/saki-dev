@@ -4,7 +4,7 @@ import saki.core.context.{Environment, Typed}
 import saki.core.domain.{NeutralValue, Type, Value}
 import saki.core.domain.neutralClosure
 import saki.core.{RuntimeEntity, RuntimeEntityFactory}
-import saki.util.unreachable
+import saki.util.{unreachable, OptionCache}
 import saki.error.CoreErrorKind.*
 
 import scala.collection.Seq
@@ -14,7 +14,7 @@ enum Term extends RuntimeEntity[Type] {
   case Universe
   case Primitive(value: Literal)
   case PrimitiveType(`type`: LiteralType)
-  case Variable(variable: Var.Local, `type`: Option[Type] = None)
+  case Variable(variable: Var.Local, `type`: OptionCache[Type] = None)
   case FunctionInvoke(fn: Var.Defined[Term, Function], args: Seq[Term])
   case OverloadInvoke(
     fn: Var.Defined[Term, Overloaded], args: Seq[Term]
@@ -118,7 +118,7 @@ enum Term extends RuntimeEntity[Type] {
 
     case PrimitiveType(_) => Value.Universe
 
-    case Variable(variable, ty) => ty match {
+    case Variable(variable, ty) => ty.toOption match {
       case Some(ty) => ty.readBack.eval
       case None => env.getTyped(variable).get.`type`
     }
@@ -229,11 +229,15 @@ enum Term extends RuntimeEntity[Type] {
 
   }
 
-  def partialEval(implicit env: Environment.Typed[Value]): Value = this.eval(doEvalFunction = false)
+  def partialEval(implicit env: Environment.Typed[Value]): Value = this.eval(evalMode = EvalMode.Partial)
 
-  def eval(implicit env: Environment.Typed[Value]): Value = this.eval(doEvalFunction = true)
+  def eval(implicit env: Environment.Typed[Value]): Value = this.eval(evalMode = EvalMode.Normal)
 
-  def eval(doEvalFunction: Boolean)(implicit env: Environment.Typed[Value]): Value = this match {
+  def forceEval(implicit env: Environment.Typed[Value]): Value = this.eval(evalMode = EvalMode.Force)
+
+  def eval(evalMode: EvalMode = EvalMode.Normal)(
+    implicit env: Environment.Typed[Value]
+  ): Value = this match {
 
     case Universe => Value.Universe
 
@@ -241,17 +245,20 @@ enum Term extends RuntimeEntity[Type] {
 
     case PrimitiveType(ty) => Value.PrimitiveType(ty)
     
-    case Variable(variable, _) => env.getValue(variable) match {
+    case Variable(variable, ty) => env.getValue(variable) match {
       case Some(value) => value
-      case None => throw new NoSuchElementException(s"Variable $variable not found in the environment")
-      // case None => Value.variable(variable, this.infer)
+      case None => ty.toOption match {
+        // If the variable is associated with a type, then it is a neutral value
+        case Some(ty) => Value.variable(variable, ty)
+        case None => throw new NoSuchElementException(s"Variable $variable not found in the environment")
+      }
     }
 
     case FunctionInvoke(fnRef, argTerms) => {
 
-      lazy val argsValue: Seq[Value] = argTerms.map(_.eval(doEvalFunction))
+      lazy val argsValue: Seq[Value] = argTerms.map(_.eval(evalMode))
 
-      if !doEvalFunction then {
+      if evalMode == EvalMode.Partial then {
         return Value.functionInvoke(fnRef, argsValue)
       }
 
@@ -272,14 +279,14 @@ enum Term extends RuntimeEntity[Type] {
 
       lazy val allArgumentsFinal = argsValue.forall(_.isFinal(Set.empty))
       lazy val argVarList: Seq[(Var.Local, Typed[Value])] = function.arguments(argsValue).map {
-        (param, arg) => (param.ident, Typed[Value](arg, param.`type`.eval(doEvalFunction)))
+        (param, arg) => (param.ident, Typed[Value](arg, param.`type`.eval(evalMode)))
       }
 
       lazy val evaluatedFunctionBody: Value = function match {
         case fn: DefinedFunction[Term] => {
           env.invokeFunction(fn.ident) { implicit env =>
             env.withLocals(argVarList.toMap) {
-              implicit env => fn.body.get.eval(doEvalFunction)(env)
+              implicit env => fn.body.get.eval(evalMode)(env)
             }
           }
         }
@@ -295,7 +302,7 @@ enum Term extends RuntimeEntity[Type] {
       }
 
       env.currentDefinition match {
-        case Some(current: Var.Defined[Term, Function] @unchecked) => {
+        case Some(current: Var.Defined[Term, Function] @unchecked) if evalMode == EvalMode.Force => {
           if !function.isRecursive || !function.dependencies.contains(current) || allArgumentsFinal then {
             evaluatedFunctionBody
           } else {
@@ -313,24 +320,24 @@ enum Term extends RuntimeEntity[Type] {
     }
 
     case invoke: OverloadInvoke => {
-      Term.functionInvoke(invoke.getOverload.ident.asInstanceOf, invoke.args).eval(doEvalFunction)
+      Term.functionInvoke(invoke.getOverload.ident.asInstanceOf, invoke.args).eval(evalMode)
     }
 
     case InductiveType(indRef, argTerms) => {
-      val argsValue: Seq[Value] = argTerms.map(_.eval(doEvalFunction))
+      val argsValue: Seq[Value] = argTerms.map(_.eval(evalMode))
       Value.inductiveType(indRef, argsValue)
     }
 
-    case InductiveVariant(inductiveTerm, constructor, args) => inductiveTerm.eval(doEvalFunction) match {
+    case InductiveVariant(inductiveTerm, constructor, args) => inductiveTerm.eval(evalMode) match {
       case inductiveType: Value.InductiveType => {
-        val argValues = env.withLocals(inductiveType.argsMap) { implicit env => args.map(_.eval(doEvalFunction)) }
+        val argValues = env.withLocals(inductiveType.argsMap) { implicit env => args.map(_.eval(evalMode)) }
         Value.inductiveVariant(inductiveType, constructor, argValues)
       }
       case ty => TypeNotMatch.raise(s"Expected inductive type, but got: ${ty.readBack}")
     }
 
     case Match(scrutinees, clauses) => {
-      val scrutineesValue = scrutinees.map(_.eval(doEvalFunction))
+      val scrutineesValue = scrutinees.map(_.eval(evalMode))
       // If all scrutinees are final, try to match the clauses
       if scrutineesValue.forall(_.isFinal(Set.empty)) then {
         // Try to match the scrutinees with the clauses
@@ -352,37 +359,37 @@ enum Term extends RuntimeEntity[Type] {
           val body = env.withLocals(bindings.toMap) { implicit env =>
             clause.body.infer match {
               case Value.PrimitiveType(LiteralType.NothingType) => clause.body.partialEval
-              case _ => clause.body.eval(doEvalFunction)
+              case _ => clause.body.eval(evalMode)
             }
           }
-          Clause(clause.patterns.map(_.map(_.eval(doEvalFunction))), body)
+          Clause(clause.patterns.map(_.map(_.eval(evalMode))), body)
         }
         Value.Neutral(NeutralValue.Match(scrutineesValue, valueClauses))
       }
     }
 
-    case piType: Pi => piType.eval(Value.Pi.apply, doEvalFunction)
+    case piType: Pi => piType.eval(Value.Pi.apply, evalMode)
 
-    case piType: OverloadedPi => piType.eval(Value.OverloadedPi.apply, doEvalFunction)
+    case piType: OverloadedPi => piType.eval(Value.OverloadedPi.apply, evalMode)
 
-    case sigmaType: Sigma => sigmaType.eval(Value.Sigma.apply, doEvalFunction)
+    case sigmaType: Sigma => sigmaType.eval(Value.Sigma.apply, evalMode)
 
-    case Record(fields) => Value.Record(fields.map((name, term) => (name, term.eval(doEvalFunction))))
+    case Record(fields) => Value.Record(fields.map((name, term) => (name, term.eval(evalMode))))
 
-    case RecordType(fields) => Value.RecordType(fields.map((name, ty) => (name, ty.eval(doEvalFunction))))
+    case RecordType(fields) => Value.RecordType(fields.map((name, ty) => (name, ty.eval(evalMode))))
 
-    case Apply(fn, arg) => fn.eval(doEvalFunction) match {
+    case Apply(fn, arg) => fn.eval(evalMode) match {
 
       case Value.Lambda(paramType, bodyClosure) => {
         if !(paramType <:< arg.infer) then TypeNotMatch.raise {
           s"Expected argument type: ${paramType.readBack}, but got: ${arg.infer.readBack}"
         }
-        bodyClosure(arg.eval(doEvalFunction))
+        bodyClosure(arg.eval(evalMode))
       }
 
       case overloaded: Value.OverloadedLambda => {
         overloaded.applyArgument(
-          arg.eval(doEvalFunction), arg.infer, Value.OverloadedLambda.apply,
+          arg.eval(evalMode), arg.infer, Value.OverloadedLambda.apply,
           unwrapStates = {
             case Value.OverloadedLambda(states) => states
             case value => TypeNotMatch.raise {
@@ -395,14 +402,14 @@ enum Term extends RuntimeEntity[Type] {
       // If the evaluation of the function stuck, the whole application is stuck
       // Thus, no need for considering the situation that function is a global call
       // because it is tried to be evaluated before but failed
-      case Value.Neutral(neutral) => Value.Neutral(NeutralValue.Apply(neutral, arg.eval(doEvalFunction)))
+      case Value.Neutral(neutral) => Value.Neutral(NeutralValue.Apply(neutral, arg.eval(evalMode)))
 
       case _ => TypeNotMatch.raise(s"Cannot apply an argument to a non-function value: $fn")
     }
 
-    case lambda: Lambda => lambda.eval(Value.Lambda.apply, doEvalFunction)
+    case lambda: Lambda => lambda.eval(Value.Lambda.apply, evalMode)
 
-    case lambda: OverloadedLambda => lambda.eval(Value.OverloadedLambda.apply, doEvalFunction)
+    case lambda: OverloadedLambda => lambda.eval(Value.OverloadedLambda.apply, evalMode)
 
     case Projection(record, field) => record.eval match {
       case Value.Record(fields) => fields.getOrElse(field, {
@@ -543,11 +550,11 @@ object Term extends RuntimeEntityFactory[Term] {
    *         2. A closure that takes a value and returns a value.
    * @see [[Value.readBackClosure]]
    */
-  private[core] def evalParameterized(param: Param[Term], term: Term, doEvalFunction: Boolean)(
+  private[core] def evalParameterized(param: Param[Term], term: Term, evalMode: EvalMode)(
     implicit env: Environment.Typed[Value]
   ): (Type, Value => Value) = {
-    val typedParam = param.map(_.eval(doEvalFunction))
-    (typedParam.`type`, neutralClosure(typedParam, implicit env => term.eval(doEvalFunction), env))
+    val typedParam = param.map(_.eval(evalMode))
+    (typedParam.`type`, neutralClosure(typedParam, implicit env => term.eval(evalMode), env))
   }
 
 }
@@ -556,10 +563,10 @@ private sealed trait LambdaLikeTerm {
   def param: Param[Term]
   def body: Term
 
-  def eval(constructor: (Type, Value  => Value) => Value, doEvalFunction: Boolean)(
+  def eval(constructor: (Type, Value  => Value) => Value, evalMode: EvalMode)(
     implicit env: Environment.Typed[Value]
   ): Value = {
-    val (paramType, closure) = Term.evalParameterized(param, body, doEvalFunction)
+    val (paramType, closure) = Term.evalParameterized(param, body, evalMode)
     constructor(paramType, closure)
   }
 
@@ -579,12 +586,12 @@ private sealed trait OverloadedTermExt[S <: Term & OverloadedTermExt[S]] {
 
   def states: Map[Param[Term], Term]
 
-  def eval(constructor: Map[Type, Value => Value] => Value, doEvalFunction: Boolean)(
+  def eval(constructor: Map[Type, Value => Value] => Value, evalMode: EvalMode)(
     implicit env: Environment.Typed[Value]
   ): Value = {
     // Normalize the states (unify the parameters with identical type but different names)
     val parameterizedTerms: Seq[(Param[Term], Term)] = states.toSeq.map {
-      (param, term) => Term.evalParameterized(param, term, doEvalFunction)
+      (param, term) => Term.evalParameterized(param, term, evalMode)
     }.map {
       (paramType, closure) => Value.readBackClosure(paramType, closure)
     }
@@ -624,7 +631,7 @@ private sealed trait OverloadedTermExt[S <: Term & OverloadedTermExt[S]] {
 
     // TODO: This need to be optimized, because the states
     //  are already evaluated before
-    constructor(merged.map((param, term) => Term.evalParameterized(param, term, doEvalFunction)))
+    constructor(merged.map((param, term) => Term.evalParameterized(param, term, evalMode)))
   }
 
   def copy(states: Map[Param[Term], Term]): S
@@ -719,4 +726,10 @@ private sealed trait OverloadInvokeExt {
 
     remainingOverloads.head
   }
+}
+
+enum EvalMode {
+  case Partial
+  case Normal
+  case Force
 }
