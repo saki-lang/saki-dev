@@ -393,6 +393,15 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             Succ(ℕ)
         }
 
+        def o: ℕ = ℕ::Zero
+        def succ(n: ℕ): ℕ = ℕ::Succ(n)
+
+        operator binary (===) left-assoc {
+            looser-than (+)
+        }
+
+        def (===)(a b: ℕ): 'Type = ℕ.Eq(a, b)
+
         def (+)(a b : ℕ): ℕ = match a {
             case ℕ::Zero => b
             case ℕ::Succ(a') => ℕ::Succ(a' + b)
@@ -401,11 +410,11 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
         def induction(
             P: ℕ -> 'Type,
             base: P(ℕ::Zero),
-            induce: ∀(n: ℕ) -> P(n) -> P(ℕ::Succ(n)),
+            induce: ∀(n: ℕ) -> P(n) -> P(n.succ),
             nat: ℕ,
         ): P(nat) = match nat {
             case ℕ::Zero => base
-            case ℕ::Succ(n') => induce(n', induction(P, base, induce, n'))
+            case ℕ::Succ(n') => induce(n', P.induction(base, induce, n'))
         }
 
         def inductionReduce(
@@ -418,14 +427,14 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             eqab(P, pa)
         }
 
-        def theoremPlusZero: ∀(n: ℕ) -> ℕ.Eq(n + ℕ::Zero, n) = {
-            ((n': ℕ) => ℕ.Eq(n' + ℕ::Zero, n')).induction(
+        def theoremPlusZero: ∀(n: ℕ) -> (n + o === n) = {
+            ((n: ℕ) => ℕ.Eq(n + o, n)).induction(
                 ℕ.refl(ℕ::Zero),
-                (n': ℕ, assumption: ℕ.Eq(n' + ℕ::Zero, n')) => {
+                (n: ℕ, assumption: (n + o === n)) => {
                     inductionReduce(
-                        n', n' + ℕ::Zero, assumption,
-                        (n'': ℕ) => ℕ.Eq(ℕ::Succ(n''), ℕ::Succ(n')),
-                        ℕ.refl(ℕ::Succ(n'))
+                        n, n + o, assumption,
+                        (n': ℕ) => (n'.succ === n.succ),
+                        ℕ.refl(n.succ)
                     )
                 }
             )
@@ -438,7 +447,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
   test("operator declaration") {
     val code = {
       """
-        operator binary # left-assoc
+        operator binary (#) left-assoc
         def (#)(a b: Int): Int = a + b
         def add(a b: Int): Int = a # b
       """

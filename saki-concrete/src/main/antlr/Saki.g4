@@ -119,15 +119,15 @@ inductiveTupleElement
     ;
 
 operatorDeclaration
-    :   'operator' 'binary' symbol=OptSymbol associativity=('left-assoc' | 'right-assoc')
-        ('{' NL* operatorPrecedence (NL+ operatorPrecedence) NL* '}')?  # binaryOperator
+    :   'operator' 'binary' '('symbol=OptSymbol')' associativity=('left-assoc' | 'right-assoc')
+        ('{' NL* operatorPrecedence (NL+ operatorPrecedence)* NL* '}')?  # binaryOperator
     |   'operator' symbol=OptSymbol 'unary' kind=('prefix' | 'postfix') # unaryOperator
     ;
 
 operatorPrecedence
-    :   (   'tighter-than' tighterThan+=OptSymbol+
-        |   'looser-than' looserThan+=OptSymbol+
-        |   'same-as' sameAs+=OptSymbol+
+    :   (   'tighter-than' ('('tighterThan+=OptSymbol')')+
+        |   'looser-than' ('('looserThan+=OptSymbol')')+
+        |   'same-as' ('('sameAs+=OptSymbol')')+
         )
     ;
 
