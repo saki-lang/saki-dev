@@ -6,6 +6,7 @@ import saki.core.domain.neutralClosure
 import saki.core.{RuntimeEntity, RuntimeEntityFactory}
 import saki.util.{unreachable, OptionCache}
 import saki.error.CoreErrorKind.*
+import saki.error.PanicError
 
 import scala.collection.Seq
 
@@ -258,6 +259,7 @@ enum Term extends RuntimeEntity[Type] {
       }
 
       lazy val evaluatedFunctionBody: Value = function match {
+
         case fn: DefinedFunction[Term] => {
           env.invokeFunction(fn.ident) { implicit env =>
             env.withLocals(argVarList.toMap) {
@@ -265,11 +267,17 @@ enum Term extends RuntimeEntity[Type] {
             }
           }
         }
+
         case fn: NativeFunction[Term] => {
           // Only evaluate the native function if all arguments are final
           if allArgumentsFinal then {
             // TODO: arguments apply mode
-            fn.invoke(argVarList.map { (_, typed) => Argument(typed.value) })
+            try fn.invoke(argVarList.map { (_, typed) => Argument(typed.value) }) catch {
+              case e: PanicError => {
+                if evalMode == EvalMode.Force then throw e
+                else Value.functionInvoke(fn.ident, argsValue)
+              }
+            }
           } else {
             Value.functionInvoke(fn.ident, argsValue)
           }

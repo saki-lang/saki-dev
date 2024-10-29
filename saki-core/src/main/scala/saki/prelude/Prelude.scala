@@ -3,7 +3,7 @@ package saki.prelude
 import saki.core.context.Environment
 import saki.core.domain.Value
 import saki.core.syntax.*
-import saki.error.CoreErrorKind
+import saki.error.PanicError
 
 import scala.annotation.targetName
 
@@ -66,7 +66,7 @@ object Prelude {
         case Value.Primitive(Literal.StringValue(value)) => value
         case _ => "Unknown error"
       }
-      CoreErrorKind.PanicFailure.raise(message)
+      throw PanicError(message)
     },
   )
 }

@@ -5,7 +5,7 @@ import saki.cli.ReadEvalPrintLoop
 import saki.concrete.{ErrorListener, Visitor}
 import saki.concrete.syntax.{Definition, Evaluation}
 import saki.core.syntax.{Literal, Module, Term}
-import saki.error.{CoreError, CoreErrorKind, Error}
+import saki.error.{CoreError, Error, PanicError}
 import saki.grammar.{SakiLexer, SakiParser}
 
 def catchError[R](source: String, path: Option[String] = None, doPrint: Boolean = true)(
@@ -40,7 +40,7 @@ def compileModule(source: String, path: Option[String] = None, doEvaluation: Boo
     val module = Module.from(definitions.map(_.emit))
     if doEvaluation then evaluations.foreach { evaluation =>
       val evalResult = try module.evaluate(evaluation.expr.emit).term catch {
-        case CoreError(CoreErrorKind.PanicFailure, info) => println(s"Panic: $info")
+        case err: PanicError => println(s"Panic: ${err.message}")
         case err: CoreError => println(s"Error occurred: ${err.info}")
         case err: Throwable => println(s"Error occurred: ${err.getMessage}")
       }

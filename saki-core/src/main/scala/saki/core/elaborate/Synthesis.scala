@@ -17,8 +17,6 @@ object Synthesis:
     def normalize(implicit env: Environment.Typed[Value]): Synth = {
       Synth(term.normalize, `type`)
     }
-    def mapTerm(f: Term => Term): Synth = Synth(f(term), `type`)
-    def mapType(f: Type => Type): Synth = Synth(term, f(`type`))
   }
 
   def synth(expr: Expr)(implicit env: Environment.Typed[Value]): Synth = expr match {
@@ -102,7 +100,6 @@ object Synthesis:
           env.withLocal(paramIdent, param, paramType) { implicit env =>
             val (argTerm, argType) = argExpr.value.synth(env).unpack
             if !(paramType <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
-              s"Expected argument type: $paramType, found argument $argExpr with type $argType"
               s"Expected argument type: ${paramType.readBack.forceEval}, found argument $argExpr with type ${argType.readBack.forceEval}"
             }
             Synth(Term.Apply(fn, argTerm), codomain(argTerm.eval))
@@ -124,7 +121,7 @@ object Synthesis:
 
           val param = Value.variable(paramIdent, argType)
           env.withLocal(paramIdent, param, argType) { implicit env =>
-            Synth(fn.apply(argTerm), eigenState)
+            Synth(Term.Apply(fn, argTerm), eigenState)
           }
         }
 

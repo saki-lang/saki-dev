@@ -22,7 +22,7 @@ case class Module(definitions: Set[Definition[Term]]) {
 
   def evaluate(expr: Expr): EvalResult = {
     val (term, ty) = expr.resolve(Resolve.Context(env))._1.synth(env).unpack
-    EvalResult(term.normalize(env), ty.readBack(env))
+    EvalResult(term.forceEval(env).readBack(env), ty.readBack(env))
   }
 
 }

@@ -20,7 +20,7 @@ private class ReplCore {
 
   def evaluate(expr: Expr): EvalResult = {
     val (term, ty) = expr.resolve(resolveContext)._1.synth(environment).unpack
-    EvalResult(term.normalize(environment), ty.readBack(environment))
+    EvalResult(term.forceEval(environment).readBack(environment), ty.readBack(environment))
   }
 
   def iterate(source: String): Unit = {

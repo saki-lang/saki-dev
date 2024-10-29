@@ -3,7 +3,7 @@ package saki.core.syntax
 import saki.core.Entity
 import saki.core.context.{Environment, Typed}
 import saki.core.domain.Value
-import saki.error.{CoreError, CoreErrorKind}
+import saki.error.PanicError
 
 import scala.collection.Seq
 
@@ -45,7 +45,7 @@ extension (clauses: Seq[Clause[Term]]) {
         }
         try Some(clause.body.eval(env.addAll(typedSubstMap))) catch {
           // if the error is a panic and not all arguments are final, ignore it
-          case CoreError(CoreErrorKind.PanicFailure, _) if !allArgsFinal => None
+          case _: PanicError if !allArgsFinal => None
           case e: Throwable => throw e
         }
       }
