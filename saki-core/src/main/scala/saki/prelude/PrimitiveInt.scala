@@ -97,7 +97,7 @@ object PrimitiveInt extends PreludeDefinitionSet {
     // toString
     NativeFunction(
       ident = Var.Defined("toString"),
-      params = Seq("a" @: IntType.toTerm),
+      params = Seq("str" @: IntType.toTerm),
       resultType = StringType.toTerm,
       nativeImpl = (args: ArgList[Value], _) => {
         val str: Value = args(0).value

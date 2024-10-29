@@ -417,9 +417,10 @@ object Value extends RuntimeEntityFactory[Value] {
   ): (Param[Term], Term) = {
     val paramIdent = env.uniqueVariable
     val paramVariable = Value.variable(paramIdent, paramType)
+    val paramTypeTerm = paramType.readBack
     env.withLocal(paramIdent, paramVariable, paramType) { implicit env =>
       val term = closure(paramVariable).readBack(env)
-      (Param(paramIdent, paramType.readBack), term)
+      (Param(paramIdent, paramTypeTerm), term)
     }
   }
 
@@ -441,9 +442,10 @@ private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] 
     states.map { (paramType, closure) =>
       val paramIdent = env.uniqueVariable
       val param = Value.variable(paramIdent, paramType)
+      val paramTypeTerm = paramType.readBack
       env.withLocal(paramIdent, param, paramType) { implicit env =>
-        val body = closure(param).readBack
-        (Param(paramIdent, paramType.readBack), body)
+        val body = closure(param).readBack(env)
+        (Param(paramIdent, paramTypeTerm), body)
       }
     }
   }

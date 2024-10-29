@@ -194,7 +194,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     module.eval("map(Int, String, Option(Int)::Some(114514), (n: Int) => n.toString)") should be (module.eval("Option(String)::Some(\"114514\")"))
   }
 
-  test("overloaded") {
+  test("overloaded 1") {
     val code = {
       """
         def add(a b: Int): Int = a + b
@@ -204,6 +204,18 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     val module = compileModule(code)
     module.eval("add(114, 514)") should be (module.eval("628"))
     module.eval("add(\"It's \", \"mygo!!!!!\")") should be (module.eval("\"It's mygo!!!!!\""))
+  }
+
+  test("overloaded 2") {
+    val code = {
+      """
+        def concat(a b: Int): Int = a * 10 + b
+        def concat(a b: String): String = a ++ b
+      """
+    }
+    val module = compileModule(code)
+    module.eval("concat(1, 2)") should be (module.eval("12"))
+    module.eval("concat(\"It's \", \"mygo!!!!!\")") should be (module.eval("\"It's mygo!!!!!\""))
   }
 
   test("mutual recursive") {
