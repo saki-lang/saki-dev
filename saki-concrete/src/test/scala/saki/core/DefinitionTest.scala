@@ -380,58 +380,55 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
       """
         def Eq(A: 'Type, a b: A): 'Type = ∀(P: A -> 'Type) -> P(a) -> P(b)
 
-        def refl(A: 'Type, a: A): Eq(A, a, a) = {
+        def refl(A: 'Type, a: A): A.Eq(a, a) = {
             (P: A -> 'Type, pa: P(a)) => pa
         }
 
-        def symmetry(A: 'Type, a b: A, eqab: Eq(A, a, b)): Eq(A, b, a) = {
-            eqab((b': A) => Eq(A, b', a), refl(A, a))
+        def symmetry(A: 'Type, a b: A, eqab: A.Eq(a, b)): A.Eq(b, a) = {
+            eqab((b': A) => A.Eq(b', a), A.refl(a))
         }
 
-        type Nat = inductive {
+        type ℕ = inductive {
             Zero
-            Succ(Nat)
+            Succ(ℕ)
         }
 
-        def plus(a b : Nat): Nat = match a {
-            case Nat::Zero => b
-            case Nat::Succ(a') => Nat::Succ(plus(a', b))
+        def (+)(a b : ℕ): ℕ = match a {
+            case ℕ::Zero => b
+            case ℕ::Succ(a') => ℕ::Succ(a' + b)
         }
 
         def induction(
-            P: Nat -> 'Type,
-            base: P(Nat::Zero),
-            induce: ∀(n: Nat) -> P(n) -> P(Nat::Succ(n)),
-            nat: Nat,
+            P: ℕ -> 'Type,
+            base: P(ℕ::Zero),
+            induce: ∀(n: ℕ) -> P(n) -> P(ℕ::Succ(n)),
+            nat: ℕ,
         ): P(nat) = match nat {
-            case Nat::Zero => base
-            case Nat::Succ(n') => induce(n', induction(P, base, induce, n'))
+            case ℕ::Zero => base
+            case ℕ::Succ(n') => induce(n', induction(P, base, induce, n'))
         }
 
         def inductionReduce(
-            a b: Nat,
-            eqba: Eq(Nat, b, a),
-            P: Nat -> 'Type,
+            a b: ℕ,
+            eqba: Eq(ℕ, b, a),
+            P: ℕ -> 'Type,
             pa: P(a),
         ): P(b) = {
-            let eqab = symmetry(Nat, b, a, eqba)
+            let eqab = ℕ.symmetry(b, a, eqba)
             eqab(P, pa)
         }
 
-        def theoremPlusZero: ∀(n: Nat) -> Eq(Nat, plus(n, Nat::Zero), n) = {
-          (n: Nat) => induction(
-            (n': Nat) => Eq(Nat, plus(n', Nat::Zero), n'),
-            refl(Nat, Nat::Zero),
-            (n': Nat, IHn: Eq(Nat, plus(n', Nat::Zero), n')) => {
-              inductionReduce(
-                n',
-                plus(n', Nat::Zero),
-                IHn,
-                (n'': Nat) => Eq(Nat, Nat::Succ(n''), Nat::Succ(n')),
-                refl(Nat, Nat::Succ(n'))
-              )
-            }
-          )
+        def theoremPlusZero: ∀(n: ℕ) -> ℕ.Eq(n + ℕ::Zero, n) = {
+            ((n': ℕ) => ℕ.Eq(n' + ℕ::Zero, n')).induction(
+                ℕ.refl(ℕ::Zero),
+                (n': ℕ, assumption: ℕ.Eq(n' + ℕ::Zero, n')) => {
+                    inductionReduce(
+                        n', n' + ℕ::Zero, assumption,
+                        (n'': ℕ) => ℕ.Eq(ℕ::Succ(n''), ℕ::Succ(n')),
+                        ℕ.refl(ℕ::Succ(n'))
+                    )
+                }
+            )
         }
       """
     }
