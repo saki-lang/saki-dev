@@ -1,8 +1,8 @@
 package saki.core.domain
 
+import saki.core.{RuntimeEntity, RuntimeEntityFactory}
 import saki.core.context.{Environment, Typed}
 import saki.core.syntax.*
-import saki.core.{RuntimeEntity, RuntimeEntityFactory}
 import saki.error.CoreErrorKind.*
 
 import scala.annotation.targetName
@@ -101,32 +101,26 @@ enum Value extends RuntimeEntity[Type] {
   def containsMatching(implicit env: Environment.Typed[Value]): Boolean = this match {
     case Neutral(neutral) => neutral.containsMatching
     case Pi(paramType, closure) => {
-      val paramIdent = env.uniqueVariable("%")
-      val variable = Value.variable(paramIdent, paramType)
-      env.withLocal(paramIdent, Typed[Value](variable, paramType)) {
-        implicit env => closure(variable).containsMatching
+      env.withNewUnique(paramType, "%") { (env, _, variable) =>
+        closure(variable).containsMatching(env)
       }
     }
     case Sigma(paramType, closure) => {
-      val paramIdent = env.uniqueVariable("%")
-      val variable = Value.variable(paramIdent, paramType)
-      env.withLocal(paramIdent, Typed[Value](variable, paramType)) {
-        implicit env => closure(variable).containsMatching
+      env.withNewUnique(paramType, "%") { (env, _, variable) =>
+        closure(variable).containsMatching(env)
       }
     }
     case Lambda(paramType, closure) => {
-      val paramIdent = env.uniqueVariable("%")
-      val variable = Value.variable(paramIdent, paramType)
-      env.withLocal(paramIdent, Typed[Value](variable, paramType)) {
-        implicit env => closure(variable).containsMatching
+      env.withNewUnique(paramType, "%") { (env, _, variable) =>
+        closure(variable).containsMatching(env)
       }
     }
     case overloaded: OverloadedLambdaLike[?] => {
       // TODO: Structures like this should be refactored to put the variable in the environment
       overloaded.states.forall { (paramType, closure) =>
-        val paramIdent = env.uniqueVariable("%")
-        val param = Value.variable(paramIdent, paramType)
-        closure(param).containsMatching
+        env.withNewUnique(paramType, "%") { (env, _, variable) =>
+          closure(variable).containsMatching(env)
+        }
       }
     }
     case Record(fields) => fields.valuesIterator.exists(_.containsMatching)
@@ -140,17 +134,20 @@ enum Value extends RuntimeEntity[Type] {
     implicit env: Environment.Typed[Value]
   ): Boolean = this match {
     case Neutral(neutral) => neutral.isFinal(variables)
-    case Pi(ty, closure) => {
-      val paramIdent = env.uniqueVariable("%")
-      closure(Value.variable(paramIdent, ty)).isFinal(variables + paramIdent)
+    case Pi(paramType, closure) => {
+      env.withNewUnique(paramType, "%") { (env, ident, variable) =>
+        closure(variable).isFinal(variables + ident)(env)
+      }
     }
-    case Sigma(ty, closure) => {
-      val paramIdent = env.uniqueVariable("%")
-      closure(Value.variable(paramIdent, ty)).isFinal(variables + paramIdent)
+    case Sigma(paramType, closure) => {
+      env.withNewUnique(paramType, "%") { (env, ident, variable) =>
+        closure(variable).isFinal(variables + ident)(env)
+      }
     }
-    case Lambda(ty, closure) => {
-      val paramIdent = env.uniqueVariable("%")
-      closure(Value.variable(paramIdent, ty)).isFinal(variables + paramIdent)
+    case Lambda(paramType, closure) => {
+      env.withNewUnique(paramType, "%") { (env, ident, variable) =>
+        closure(variable).isFinal(variables + ident)(env)
+      }
     }
     case overloaded: OverloadedLambdaLike[?] => overloaded.isStatesFinal(variables)
     case Record(fields) => fields.valuesIterator.forall(_.isFinal(variables))
@@ -166,23 +163,19 @@ enum Value extends RuntimeEntity[Type] {
     case (PrimitiveType(ty1), PrimitiveType(ty2)) => ty1 == ty2
     case (Neutral(value1), Neutral(value2)) => value1 unify value2
     case (Pi(paramType1, closure1), Pi(paramType2, closure2)) => {
-      // TODO: Refactor this, put the variable into the environment
-      val paramIdent = env.uniqueVariable("%")
-      val param1 = Value.variable(paramIdent, paramType1)
-      val param2 = Value.variable(paramIdent, paramType2)
-      (paramType1 unify paramType2) && (closure1(param1) unify closure2(param2))
+      (paramType1 unify paramType2) && env.withNewUnique(paramType1, "%") {
+        implicit (env, _, variable) => closure1(variable) unify closure2(variable)
+      }
     }
     case (Sigma(paramType1, closure1), Sigma(paramType2, closure2)) => {
-      val paramIdent = env.uniqueVariable("%")
-      val param1 = Value.variable(paramIdent, paramType1)
-      val param2 = Value.variable(paramIdent, paramType2)
-      (paramType1 unify paramType2) && (closure1(param1) unify closure2(param2))
+      (paramType1 unify paramType2) && env.withNewUnique(paramType1, "%") {
+        implicit (env, _, variable) => closure1(variable) unify closure2(variable)
+      }
     }
     case (Lambda(paramType1, body1), Lambda(paramType2, body2)) => {
-      val paramIdent = env.uniqueVariable("%")
-      val param1 = Value.variable(paramIdent, paramType1)
-      val param2 = Value.variable(paramIdent, paramType2)
-      (paramType1 unify paramType2) && (body1(param1) unify body2(param2))
+      (paramType1 unify paramType2) && env.withNewUnique(paramType1, "%") {
+        implicit (env, _, variable) => body1(variable) unify body2(variable)
+      }
     }
     case (Record(fields1), Record(fields2)) => {
       fields1.size == fields2.size &&
@@ -223,31 +216,22 @@ enum Value extends RuntimeEntity[Type] {
 
     // Function type (Pi type) subtyping: Covariant in return type, contravariant in parameter type
     case (Pi(paramType1, closure1), Pi(paramType2, closure2)) => {
-      paramType2 <:< paramType1 && {
-        val paramIdent = env.uniqueVariable("%")
-        val param1 = Value.variable(paramIdent, paramType1)
-        val param2 = Value.variable(paramIdent, paramType2)
-        closure1(param1) <:< closure2(param2)
+      paramType2 <:< paramType1 && env.withNewUnique(paramType2 <:> paramType1, "%") {
+        implicit (env, _, variable) => closure1(variable) <:< closure2(variable)
       }
     }
 
     // Sigma type subtyping: Covariant in both parameter type and dependent type
     case (Sigma(paramType1, closure1), Sigma(paramType2, closure2)) => {
-      paramType1 <:< paramType2 && {
-        val paramIdent = env.uniqueVariable("%")
-        val param1 = Value.variable(paramIdent, paramType1)
-        val param2 = Value.variable(paramIdent, paramType2)
-        closure1(param1) <:< closure2(param2)
+      paramType1 <:< paramType2 && env.withNewUnique(paramType1 <:> paramType2, "%") {
+        implicit (env, _, variable) => closure1(variable) <:< closure2(variable)
       }
     }
 
     // Lambda types must match in parameter type and be subtypes in their bodies
     case (Lambda(paramType1, body1), Lambda(paramType2, body2)) => {
-      paramType1 <:< paramType2 && {
-        val paramIdent = env.uniqueVariable("%")
-        val param1 = Value.variable(paramIdent, paramType1)
-        val param2 = Value.variable(paramIdent, paramType2)
-        body1(param1) <:< body2(param2)
+      paramType1 <:< paramType2 && env.withNewUnique(paramType1, "%") {
+        implicit (env, _, variable) => body1(variable) <:< body2(variable)
       }
     }
 
@@ -276,7 +260,8 @@ enum Value extends RuntimeEntity[Type] {
     case _ => false
   }
 
-  infix def leastUpperBound(that: Type)(implicit env: Environment.Typed[Value]): Type = (this, that) match {
+  @targetName("leastUpperBound")
+  infix def <:>(that: Type)(implicit env: Environment.Typed[Value]): Type = (this, that) match {
 
     // Case where both types are equal: the LUB is the type itself
     case (t1, t2) if t1 == t2 => t1
@@ -302,31 +287,31 @@ enum Value extends RuntimeEntity[Type] {
 
     // LUB for Pi types: contravariant parameter type, covariant return type
     case (Value.Pi(paramType1, closure1), Value.Pi(paramType2, closure2)) => {
-      val paramLub = paramType2 leastUpperBound paramType1 // Contravariant parameter type
+      val paramLub = paramType2 <:> paramType1 // Contravariant parameter type
       val paramIdent = env.uniqueVariable("%")
       val param1 = Value.variable(paramIdent, paramType1)
       val param2 = Value.variable(paramIdent, paramType2)
-      val returnLub = closure1(param1) leastUpperBound closure2(param2) // Covariant return type
+      val returnLub = closure1(param1) <:> closure2(param2) // Covariant return type
       Value.Pi(paramLub, _ => returnLub)
     }
 
     // LUB for Sigma types: covariant parameter and closure type
     case (Value.Sigma(paramType1, closure1), Value.Sigma(paramType2, closure2)) => {
-      val paramLub = paramType1 leastUpperBound paramType2 // Covariant parameter
+      val paramLub = paramType1 <:> paramType2 // Covariant parameter
       val paramIdent = env.uniqueVariable("%")
       val param1 = Value.variable(paramIdent, paramType1)
       val param2 = Value.variable(paramIdent, paramType2)
-      val closureLub = closure1(param1) leastUpperBound closure2(param2) // Covariant closure
+      val closureLub = closure1(param1) <:> closure2(param2) // Covariant closure
       Value.Sigma(paramLub, _ => closureLub)
     }
 
     // LUB for Lambda values: parameter types must match, and take the LUB of bodies
     case (Value.Lambda(paramType1, body1), Value.Lambda(paramType2, body2)) => {
-      val paramLub = paramType1 leastUpperBound paramType2 // Parameters must match
+      val paramLub = paramType1 <:> paramType2 // Parameters must match
       val paramIdent = env.uniqueVariable("%")
       val param1 = Value.variable(paramIdent, paramType1)
       val param2 = Value.variable(paramIdent, paramType2)
-      val bodyLub = body1(param1) leastUpperBound body2(param2) // LUB of bodies
+      val bodyLub = body1(param1) <:> body2(param2) // LUB of bodies
       Value.Lambda(paramLub, _ => bodyLub)
     }
 
@@ -334,7 +319,7 @@ enum Value extends RuntimeEntity[Type] {
     case (Value.Record(fields1), Value.Record(fields2)) => {
       val commonFields = fields1.keySet.intersect(fields2.keySet)
       val lubFields = commonFields.map { key =>
-        key -> (fields1(key) leastUpperBound fields2(key))
+        key -> (fields1(key) <:> fields2(key))
       }.toMap
       Value.Record(lubFields)
     }
@@ -343,14 +328,14 @@ enum Value extends RuntimeEntity[Type] {
     case (Value.RecordType(fields1), Value.RecordType(fields2)) => {
       val commonFields = fields1.keySet.intersect(fields2.keySet)
       val lubFields = commonFields.map { key =>
-        key -> (fields1(key) leastUpperBound fields2(key))
+        key -> (fields1(key) <:> fields2(key))
       }.toMap
       Value.RecordType(lubFields)
     }
 
     // LUB for Inductive Types: if they match, take LUB of arguments
     case (InductiveType(ind1, args1), InductiveType(ind2, args2)) if ind1.name == ind2.name => {
-      val lubArgs = args1.zip(args2).map { case (arg1, arg2) => arg1 leastUpperBound arg2 }
+      val lubArgs = args1.zip(args2).map { case (arg1, arg2) => arg1 <:> arg2 }
       Value.InductiveType(ind1, lubArgs)
     }
 
@@ -359,7 +344,7 @@ enum Value extends RuntimeEntity[Type] {
       Value.InductiveVariant(ind1, cons1, args1),
       Value.InductiveVariant(ind2, cons2, args2),
     ) if (ind1 unify ind2) && cons1.ident == cons2.ident => {
-      val lubArgs = args1.zip(args2).map { case (arg1, arg2) => arg1 leastUpperBound arg2 }
+      val lubArgs = args1.zip(args2).map { case (arg1, arg2) => arg1 <:> arg2 }
       Value.InductiveVariant(ind1, cons1, lubArgs)
     }
 
@@ -374,6 +359,8 @@ enum Value extends RuntimeEntity[Type] {
     case _: Throwable => super.toString
   }
 }
+
+given RuntimeEntityFactory[Value] = Value
 
 object Value extends RuntimeEntityFactory[Value] {
 

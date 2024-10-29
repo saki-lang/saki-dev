@@ -103,7 +103,7 @@ type ArgList[T <: Entity] = Seq[Argument[T]]
 trait FnLike[T <: Entity] {
   def params: Seq[Param[T]]
   def paramToVars(implicit factory: EntityFactory[T, T]): Seq[T] = params.map(_.unapply).map(factory.variable)
-  def arguments[T1 <: Entity](argValues: Seq[T1]): Seq[(Param[T], T1)] = params.zip(argValues)
+  def mapArgs[T1 <: Entity](argValues: Seq[T1]): Seq[(Param[T], T1)] = params.zip(argValues)
 }
 
 trait Symbol[T <: Entity] {

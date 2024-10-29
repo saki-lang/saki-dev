@@ -15,7 +15,7 @@ enum Term extends RuntimeEntity[Type] {
   case Universe
   case Primitive(value: Literal)
   case PrimitiveType(`type`: LiteralType)
-  case Variable(variable: Var.Local, `type`: OptionCache[Type] = None)
+  case Variable(variable: Var.Local)
   case FunctionInvoke(fn: Var.Defined[Term, Function], args: Seq[Term])
   case OverloadInvoke(
     fn: Var.Defined[Term, Overloaded], args: Seq[Term]
@@ -38,7 +38,7 @@ enum Term extends RuntimeEntity[Type] {
     case Universe => s"'Type"
     case Primitive(value) => value.toString
     case PrimitiveType(ty) => ty.toString
-    case Variable(variable, _) => variable.name
+    case Variable(variable) => variable.name
     case FunctionInvoke(fn, args) => s"${fn.name}(${args.mkString(", ")})"
     case OverloadInvoke(fn, args) => s"${fn.name}(${args.mkString(", ")})"
     case InductiveType(inductive, args) => {
@@ -86,9 +86,9 @@ enum Term extends RuntimeEntity[Type] {
 
     case PrimitiveType(_) => Value.Universe
 
-    case Variable(variable, ty) => env.getTyped(variable) match {
-      case Some(value) => value.`type`
-      case None => ty.toOption.get.readBack.eval
+    case Variable(variable) => env.getTyped(variable) match {
+      case Some(typed) => typed.`type`.eval
+      case None => throw new NoSuchElementException(s"Variable $variable not found in the environment")
     }
 
     case FunctionInvoke(fn, args) => env.getSymbol(fn).get match {
@@ -124,7 +124,7 @@ enum Term extends RuntimeEntity[Type] {
         }
         env.withLocals(bindings.toMap) { implicit env => clause.body.infer(env) }
       }
-      clausesType.reduce((a, b) => a leastUpperBound b)
+      clausesType.reduce((a, b) => a <:> b)
     }
 
     case Pi(_, _) => Value.Universe
@@ -221,13 +221,9 @@ enum Term extends RuntimeEntity[Type] {
 
     case PrimitiveType(ty) => Value.PrimitiveType(ty)
     
-    case Variable(variable, ty) => env.getValue(variable) match {
+    case Variable(variable) => env.getValue(variable) match {
       case Some(value) => value
-      case None => ty.toOption match {
-        // If the variable is associated with a type, then it is a neutral value
-        case Some(ty) => Value.variable(variable, ty)
-        case None => throw new NoSuchElementException(s"Variable $variable not found in the environment")
-      }
+      case None => throw new NoSuchElementException(s"Variable $variable not found in the environment")
     }
 
     case FunctionInvoke(fnRef, argTerms) => {
@@ -254,17 +250,21 @@ enum Term extends RuntimeEntity[Type] {
       }
 
       lazy val allArgumentsFinal = argsValue.forall(_.isFinal(Set.empty))
-      lazy val argVarList: Seq[(Var.Local, Typed[Value])] = function.arguments(argsValue).map {
-        (param, arg) => (param.ident, Typed[Value](arg, param.`type`.eval(evalMode)))
+      lazy val (bodyEnv, argVarList) = function.mapArgs(argsValue).foldLeft((env, Seq.empty[(Var.Local, Typed[Value])])) {
+        case ((env, argList), (param, arg)) => {
+          given Environment.Typed[Value] = env
+          val paramType = param.`type`.eval(evalMode)
+          val updatedEnv = env.add(param.ident, arg, paramType)
+          val argPair: (Var.Local, Typed[Value]) = (param.ident, Typed[Value](arg, paramType))
+          (updatedEnv, argList :+ argPair)
+        }
       }
 
       lazy val evaluatedFunctionBody: Value = function match {
 
         case fn: DefinedFunction[Term] => {
-          env.invokeFunction(fn.ident) { implicit env =>
-            env.withLocals(argVarList.toMap) {
-              implicit env => fn.body.get.eval(evalMode)(env)
-            }
+          bodyEnv.invokeFunction(fn.ident) {
+            implicit env => fn.body.get.eval(evalMode)(env)
           }
         }
 
@@ -422,7 +422,7 @@ enum Term extends RuntimeEntity[Type] {
     case Universe => Universe
     case Primitive(_) => this
     case PrimitiveType(_) => this
-    case Variable(variable, _) => env.getTyped(variable) match {
+    case Variable(variable) => env.getTyped(variable) match {
       case Some(typed) if typed.value.readBack unify from => to
       case _ => this
     }

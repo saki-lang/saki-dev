@@ -23,6 +23,7 @@ case class SingleSpanError(
 
 case class CoreError(kind: ErrorKind, info: String) extends Exception {
   def spanned(span: SourceSpan): Error = SingleSpanError(kind, info, span)
+  override def toString: String = s"Error: ${kind.message} - $info"
 }
 
 trait ErrorKind {

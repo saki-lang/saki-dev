@@ -127,6 +127,14 @@ case class TypedEnvironment[T <: Entity] private (
   def withLocals[R](locals: Map[Var.Local, Typed[T]])(action: TypedEnvironment[T] => R): R = {
     action(this.addAll(locals))
   }
+
+  def withNewUnique[R](ty: T, prefix: String = "$")(
+    action: (TypedEnvironment[T], Var.Local, T) => R
+  )(implicit factory: EntityFactory[T, Term]): R = {
+    val ident = this.uniqueVariable(prefix)
+    val variable = factory.variable(ident, ty)
+    action(this.add(ident, variable, ty), ident, variable)
+  }
 }
 
 object TypedEnvironment {

@@ -202,7 +202,7 @@ object Synthesis:
         SizeNotMatch.raise(expr.span) { "Expected at least one clause" }
       }
       val clauseBodyTypes: Seq[Value] = clauseBodyTypeTerms.map(_.eval)
-      val leastUpperBoundType: Type = clauseBodyTypes.reduce((a, b) => a leastUpperBound b)
+      val leastUpperBoundType: Type = clauseBodyTypes.reduce((a, b) => a <:> b)
       Synth(
         term = Term.Match(scrutineesSynth.map(_.term), clausesSynth.map(_._1)),
         `type` = leastUpperBoundType
@@ -229,7 +229,7 @@ object Synthesis:
             val returnTypeValue = returnType.eval
             if !(returnTypeValue <:< bodyType) then {
               TypeNotMatch.raise(returnTypeExpr.span) {
-                s"Expected type: $returnType, found: $bodyType"
+                s"Expected type: ${returnType.eval.readBack}, found: $bodyType"
               }
             }
             returnTypeValue

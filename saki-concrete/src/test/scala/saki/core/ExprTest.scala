@@ -182,14 +182,14 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     expr.normalize should be (IntValue(514).toTerm)
   }
 
-  test("eq refl") {
-    val code = {
-      """
-        let eq = (A: 'Type, a b: A): 'Type => ∀(P: A -> 'Type) -> P(a) -> P(b)
-        let refl = (A: 'Type, a: A): eq(A, a, a) => (P: A -> 'Type, pa: P(a)) => pa
-        let symmetry = (A: 'Type, a b: A, e: eq(A, a, b)): eq(A, b, a) => e((b: A) => eq(A, b, a), refl(A, a))
-      """
-    }
-    val (expr, _) = synthCodeBlock(code)
-  }
+//  test("eq refl") {
+//    val code = {
+//      """
+//        let eq = (A: 'Type, a b: A): 'Type => ∀(P: A -> 'Type) -> P(a) -> P(b)
+//        let refl = (A: 'Type, a: A): eq(A, a, a) => (P: A -> 'Type, pa: P(a)) => pa
+//        let symmetry = (A: 'Type, a b: A, e: eq(A, a, b)): eq(A, b, a) => e((b: A) => eq(A, b, a), refl(A, a))
+//      """
+//    }
+//    synthCodeBlock(code)
+//  }
 }

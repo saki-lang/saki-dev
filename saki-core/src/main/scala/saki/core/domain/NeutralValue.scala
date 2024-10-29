@@ -28,7 +28,7 @@ enum NeutralValue {
   def infer(implicit env: Environment.Typed[Value]): Type = this.readBack.infer
 
   def readBack(implicit env: Environment.Typed[Value]): Term = this match {
-    case Variable(ident, ty) => Term.Variable(ident, Some(ty))
+    case Variable(ident, _) => Term.Variable(ident)
     case Apply(fn, arg) => Term.Apply(fn.readBack, arg.readBack)
     case Projection(record, field) => Term.Projection(record.readBack, field)
     case FunctionInvoke(fnRef, args) => Term.FunctionInvoke(fnRef, args.map(_.readBack))
