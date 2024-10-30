@@ -12,65 +12,44 @@ import scala.collection.Seq
 enum Term extends RuntimeEntity[Type] {
 
   case Universe
+
   case Primitive(value: Literal)
+
   case PrimitiveType(`type`: LiteralType)
+
   case Variable(variable: Var.Local)
+
   case FunctionInvoke(fn: Var.Defined[Term, Function], args: Seq[Term])
+
   case OverloadInvoke(
     fn: Var.Defined[Term, Overloaded], args: Seq[Term]
   ) extends Term with OverloadInvokeExt
+
   case InductiveType(inductive: Var.Defined[Term, Inductive], args: Seq[Term])
+
   case InductiveVariant(inductive: Term, constructor: Constructor[Term], args: Seq[Term])
+
   case Match(scrutinees: Seq[Term], clauses: Seq[Clause[Term]])
+
   case Pi(param: Param[Term], codomain: Term) extends Term with PiLikeTerm
+
   case OverloadedPi(states: Map[Param[Term], Term]) extends Term with OverloadedTermExt[OverloadedPi]
+
   case Sigma(param: Param[Term], codomain: Term) extends Term with PiLikeTerm
+
   case Record(fields: Map[String, Term])
+
   case RecordType(fields: Map[String, Term])
+
   case Apply(fn: Term, arg: Term)
+
   case Lambda(param: Param[Term], body: Term) extends Term with LambdaLikeTerm
+
   case OverloadedLambda(states: Map[Param[Term], Term]) extends Term with OverloadedTermExt[OverloadedLambda]
 
   case Projection(record: Term, field: String)
 
-  override def toString: String = this match {
-    case Universe => s"'Type"
-    case Primitive(value) => value.toString
-    case PrimitiveType(ty) => ty.toString
-    case Variable(variable) => variable.name
-    case FunctionInvoke(fn, args) => s"${fn.name}(${args.mkString(", ")})"
-    case OverloadInvoke(fn, args) => s"${fn.name}(${args.mkString(", ")})"
-    case InductiveType(inductive, args) => {
-      val argsStr = if args.nonEmpty then s"(${args.mkString(", ")})" else ""
-      s"${inductive.name}$argsStr"
-    }
-    case InductiveVariant(inductive, constructor, args) => {
-      val argsStr = if args.nonEmpty then s"(${args.mkString(", ")})" else ""
-      s"$inductive::${constructor.ident}$argsStr"
-    }
-    case Match(scrutinees, clauses) => {
-      val scrutineesStr = if scrutinees.size > 1 then {
-        s"(${scrutinees.mkString(", ")})"
-      } else scrutinees.head.toString
-      s"match $scrutineesStr { ${clauses.mkString(" | ")} }"
-    }
-    case Pi(param, codomain) => s"Π(${param.name} : ${param.`type`}) -> $codomain"
-    case OverloadedPi(_) => s"#SuperPositionPi"
-    case Sigma(param, codomain) => s"Σ(${param.name} : ${param.`type`}) -> $codomain"
-    case Record(fields) => s"{ ${fields.map { case (k, v) => s"$k = $v" }.mkString(", ")} }"
-    case RecordType(fields) => s"record { ${fields.map { case (k, v) => s"$k: $v" }.mkString(", ")} }"
-    case Apply(fn, arg) => s"$fn($arg)"
-    case Lambda(param, body) => s"λ(${param.name} : ${param.`type`}) => $body"
-    case OverloadedLambda(_) => s"#SuperPositionLambda"
-    case Projection(record, field) => s"$record.$field"
-  }
-
-  def normalize(
-    implicit env: Environment.Typed[Value]
-  ): Term = {
-    val evalResult = this.eval
-    evalResult.readBack
-  }
+  def normalize(implicit env: Environment.Typed[Value]): Term = this.eval.readBack
 
   /**
    * Infer the type of the term
@@ -472,6 +451,89 @@ enum Term extends RuntimeEntity[Type] {
   }
 
   infix def unify(that: Term)(implicit env: Environment.Typed[Value]): Boolean = this.eval unify that.eval
+
+  def contains(ident: Var.Local, shadowed: Set[Var.Local] = Set.empty)(
+    implicit env: Environment.Typed[Value]
+  ): Boolean = this match {
+    case Universe => false
+    case Primitive(_) => false
+    case PrimitiveType(_) => false
+    case Variable(variable) => variable == ident && !shadowed.contains(variable)
+    case FunctionInvoke(_, args) => args.exists(_.contains(ident, shadowed))
+    case OverloadInvoke(_, args) => args.exists(_.contains(ident, shadowed))
+    case InductiveType(_, args) => args.exists(_.contains(ident, shadowed))
+    case InductiveVariant(inductive, _, args) => {
+      inductive.contains(ident, shadowed) || args.exists(_.contains(ident, shadowed))
+    }
+    case Pi(param, codomain) => codomain.contains(ident, shadowed + param.ident)
+    case OverloadedPi(states) => states.exists((param, codomain) => codomain.contains(ident, shadowed + param.ident))
+    case Sigma(param, codomain) => codomain.contains(ident, shadowed + param.ident)
+    case Record(fields) => fields.values.exists(_.contains(ident, shadowed))
+    case RecordType(fields) => fields.values.exists(_.contains(ident, shadowed))
+    case Apply(fn, arg) => fn.contains(ident, shadowed) || arg.contains(ident, shadowed)
+    case Lambda(param, body) => body.contains(ident, shadowed + param.ident)
+    case OverloadedLambda(states) => states.exists((param, body) => body.contains(ident, shadowed + param.ident))
+    case Projection(record, _) => record.contains(ident, shadowed)
+    case Match(scrutinees, clauses) => {
+      scrutinees.exists(_.contains(ident, shadowed)) || clauses.exists { clause =>
+        val bindings = clause.patterns.zip(scrutinees).flatMap {
+          (pattern, scrutinee) => pattern.buildMatchBindings(scrutinee.infer)
+        }.map { (param, _) => (param) }
+        clause.body.contains(ident, shadowed ++ bindings)
+      }
+    }
+  }
+
+  override def toString: String = this.toString(_.toString)
+
+  def toString(fmt: Term => String): String = this match {
+    case Universe => s"'Type"
+    case Primitive(value) => value.toString
+    case PrimitiveType(ty) => ty.toString
+    case Variable(variable) => variable.name
+    case FunctionInvoke(fn, args) => s"${fn.name}(${args.map(fmt).mkString(", ")})"
+    case OverloadInvoke(fn, args) => s"${fn.name}(${args.map(fmt).mkString(", ")})"
+    case InductiveType(inductive, args) => {
+      val argsStr = if args.nonEmpty then s"(${args.map(fmt).mkString(", ")})" else ""
+      s"${inductive.name}$argsStr"
+    }
+    case InductiveVariant(inductive, constructor, args) => {
+      val argsStr = if args.nonEmpty then s"(${args.map(fmt).mkString(", ")})" else ""
+      s"$inductive::${constructor.ident}$argsStr"
+    }
+    case Match(scrutinees, clauses) => {
+      val scrutineesStr = if scrutinees.size > 1 then {
+        s"(${scrutinees.map(fmt).mkString(", ")})"
+      } else scrutinees.head.toString
+      s"match ($scrutineesStr) { ${clauses.mkString(" | ")} }"
+    }
+    case Pi(param, codomain) => s"Π(${param.name} : ${fmt(param.`type`)}) -> $codomain"
+    case OverloadedPi(states) => {
+      states.map {
+        (param, body) => s"(Π(${param.name} : ${fmt(param.`type`)}) -> $body)"
+      }.mkString(" ⊕ ")
+    }
+    case Sigma(param, codomain) => s"Σ(${param.name} : ${fmt(param.`type`)}) -> $codomain"
+    case Record(fields) => s"{ ${fields.map { case (k, v) => s"$k = ${fmt(v)}" }.mkString(", ")} }"
+    case RecordType(fields) => s"record { ${fields.map { case (k, v) => s"$k: ${fmt(v)}" }.mkString(", ")} }"
+    case Apply(fn, arg) => s"(${fmt(fn)} ${fmt(arg)})"
+    case Lambda(param, body) => s"λ(${param.name} : ${fmt(param.`type`)}) => $body"
+    case OverloadedLambda(states) => {
+      states.map {
+        (param, body) => s"(λ(${param.name} : ${fmt(param.`type`)}) => $body)"
+      }.mkString(" ⊕ ")
+    }
+    case Projection(record, field) => s"${fmt(record)}.$field"
+  }
+
+  def evalString(implicit env: Environment.Typed[Value]): String = this match {
+    case Pi(param, codomain) => {
+      if !codomain.contains(param.ident) then {
+        s"${param.`type`} -> ${codomain.evalString}"
+      } else this.toString
+    }
+    case _ => this.toString(_.evalString)
+  }
 
 }
 

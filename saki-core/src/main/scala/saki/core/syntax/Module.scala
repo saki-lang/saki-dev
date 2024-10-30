@@ -22,7 +22,7 @@ case class Module(definitions: Set[Definition[Term]]) {
 
   def evaluate(expr: Expr): EvalResult = {
     val (term, ty) = expr.resolve(Resolve.Context(env))._1.synth(env).unpack
-    EvalResult(term.forceEval(env).readBack(env), ty.readBack(env))
+    EvalResult(term.forceEval(env).readBack(env), ty.readBack(env))(env)
   }
 
 }
@@ -116,8 +116,14 @@ object Module {
     }
   }
 
-  case class EvalResult(term: Term, `type`: Term) {
+  case class EvalResult(term: Term, `type`: Term)(
+    implicit env: Environment.Typed[Value]
+  ) {
     def unapply: (Term, Term) = (term, `type`)
-    override def toString: String = s"${term} : ${`type`}"
+    override def toString: String = s"${term.evalString} : ${`type`.evalString}"
+    override def equals(obj: Any): Boolean = obj match {
+      case EvalResult(term2, type2) => term == term2 && `type` == type2
+      case _ => false
+    }
   }
 }
