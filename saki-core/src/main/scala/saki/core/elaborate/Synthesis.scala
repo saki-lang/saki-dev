@@ -2,7 +2,7 @@ package saki.core.elaborate
 
 import saki.core.Param
 import saki.core.context.{Environment, Typed}
-import saki.core.domain.{Type, Value}
+import saki.core.domain.{NeutralValue, Type, Value}
 import saki.core.syntax.{*, given}
 import saki.util.{unreachable, SourceSpan}
 import saki.error.CoreErrorKind.*

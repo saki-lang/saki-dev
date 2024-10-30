@@ -324,31 +324,37 @@ enum Value extends RuntimeEntity[Type] {
     // LUB for Pi types: contravariant parameter type, covariant return type
     case (Value.Pi(paramType1, closure1), Value.Pi(paramType2, closure2)) => {
       val paramLub = paramType2 <:> paramType1 // Contravariant parameter type
-      val paramIdent = env.uniqueVariable("%")
-      val param1 = Value.variable(paramIdent, paramType1)
-      val param2 = Value.variable(paramIdent, paramType2)
-      val returnLub = closure1(param1) <:> closure2(param2) // Covariant return type
-      Value.Pi(paramLub, _ => returnLub)
+      val return1 = env.withNewUnique(paramType1, "%") {
+        implicit (env, ident, ty) => closure1(NeutralValue.Variable(ident, ty))
+      }
+      val return2 = env.withNewUnique(paramType2, "%") {
+        implicit (env, ident, ty) => closure2(NeutralValue.Variable(ident, ty))
+      }
+      Value.Pi(paramLub, _ => return1 <:> return2) // Covariant return type
     }
 
     // LUB for Sigma types: covariant parameter and closure type
     case (Value.Sigma(paramType1, closure1), Value.Sigma(paramType2, closure2)) => {
       val paramLub = paramType1 <:> paramType2 // Covariant parameter
-      val paramIdent = env.uniqueVariable("%")
-      val param1 = Value.variable(paramIdent, paramType1)
-      val param2 = Value.variable(paramIdent, paramType2)
-      val closureLub = closure1(param1) <:> closure2(param2) // Covariant closure
-      Value.Sigma(paramLub, _ => closureLub)
+      val return1 = env.withNewUnique(paramType1, "%") {
+        implicit (env, ident, ty) => closure1(NeutralValue.Variable(ident, ty))
+      }
+      val return2 = env.withNewUnique(paramType2, "%") {
+        implicit (env, ident, ty) => closure2(NeutralValue.Variable(ident, ty))
+      }
+      Value.Sigma(paramLub, _ => return1 <:> return2)
     }
 
     // LUB for Lambda values: parameter types must match, and take the LUB of bodies
     case (Value.Lambda(paramType1, body1), Value.Lambda(paramType2, body2)) => {
       val paramLub = paramType1 <:> paramType2 // Parameters must match
-      val paramIdent = env.uniqueVariable("%")
-      val param1 = Value.variable(paramIdent, paramType1)
-      val param2 = Value.variable(paramIdent, paramType2)
-      val bodyLub = body1(param1) <:> body2(param2) // LUB of bodies
-      Value.Lambda(paramLub, _ => bodyLub)
+      val return1 = env.withNewUnique(paramType1, "%") {
+        implicit (env, ident, ty) => body1(NeutralValue.Variable(ident, ty))
+      }
+      val return2 = env.withNewUnique(paramType2, "%") {
+        implicit (env, ident, ty) => body2(NeutralValue.Variable(ident, ty))
+      }
+      Value.Lambda(paramLub, _ => return1 <:> return2)
     }
 
     // LUB for Records: combine fields if types match
@@ -477,9 +483,12 @@ private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] 
 
   def isStatesFinal(variables: Set[Var.Local])(implicit env: Environment.Typed[Value]): Boolean = {
     states.forall { (paramType, closure) =>
-      val paramIdent = env.uniqueVariable("%")
-      val param = Value.variable(paramIdent, paramType)
-      closure(param).isFinal(variables + paramIdent)
+      env.withNewUnique(paramType, "%") {
+        implicit (env, ident, ty) => {
+          given Environment.Typed[Value] = env
+          closure(NeutralValue.Variable(ident, ty)).isFinal(variables + ident)
+        }
+      }
     }
   }
 
