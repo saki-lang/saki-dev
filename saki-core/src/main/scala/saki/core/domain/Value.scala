@@ -509,14 +509,14 @@ private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] 
     if candidateStates.size == 1 then {
       // If there is only one state that matches the argument type, evaluate it
       val (_, closure) = candidateStates.head
-      closure(arg)
+      closure.invokeWithEnv(arg)
     } else {
       // If there are multiple states that match the argument type, evaluate all of them
       // Evaluate each state and merge the results
       val newStates = candidateStates.flatMap { (_, closure) =>
         // Since the parameter type is checked to be a subtype of the argument type,
         // we don't need to check the type of the argument value again
-        unwrapStates(closure(arg))
+        unwrapStates(closure.invokeWithEnv(arg))
       }
       // Merge the new states by constructing a new overloaded type
       constructor(newStates)

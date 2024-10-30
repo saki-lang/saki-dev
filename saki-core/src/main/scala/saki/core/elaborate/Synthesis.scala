@@ -102,7 +102,7 @@ object Synthesis:
             if !(paramType <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
               s"Expected argument type: ${paramType.readBack.forceEval}, found argument $argExpr with type ${argType.readBack.forceEval}"
             }
-            Synth(Term.Apply(fn, argTerm), codomain(argTerm.eval))
+            Synth(Term.Apply(fn, argTerm), codomain.invokeWithEnv(argTerm.eval))
           }
         }
 

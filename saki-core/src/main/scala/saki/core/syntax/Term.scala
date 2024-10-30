@@ -146,7 +146,7 @@ enum Term extends RuntimeEntity[Type] {
           s"Expected argument type: ${paramType.readBack}, but got: ${argType.readBack}"
         }
         // To obtain the concrete return type, feed the concrete argument to the codomain closure
-        codomain(arg.eval)
+        codomain.invokeWithEnv(arg.eval)
       }
 
       case Value.OverloadedPi(states) => {
@@ -168,7 +168,7 @@ enum Term extends RuntimeEntity[Type] {
           s"Ambiguous overloading in overloaded Pi type of argument with type: ${argType.readBack}"
         }
         val (_, codomain) = validStates.head
-        codomain(arg.eval)
+        codomain.invokeWithEnv(arg.eval)
       }
 
       case _ => TypeNotMatch.raise {
@@ -370,11 +370,11 @@ enum Term extends RuntimeEntity[Type] {
 
     case Apply(fn, arg) => fn.eval(evalMode) match {
 
-      case Value.Lambda(paramType, bodyClosure) => {
+      case Value.Lambda(paramType, closure) => {
         if !(paramType <:< arg.infer) then TypeNotMatch.raise {
           s"Expected argument type: ${paramType.readBack}, but got: ${arg.infer.readBack}"
         }
-        bodyClosure(arg.eval(evalMode))
+        closure.invokeWithEnv(arg.eval(evalMode))
       }
 
       case overloaded: Value.OverloadedLambda => {

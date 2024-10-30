@@ -13,12 +13,23 @@ case class ParameterizedClosure(param: Param[Value], env: Environment.Typed[Valu
     val (closureEnv, argValue) = argument match {
       case NeutralValue.Variable(ident, ty) => {
         val variable = Value.variable(ident, ty)
-        (env.add(ident, variable, ty), variable)
+        (env, variable)
       }
       case value: Value => (env, value)
     }
     closureEnv.withLocal(param.ident, Typed[Value](argValue, param.`type`)) {
       implicit env => action(env)
+    }
+  }
+}
+
+extension (closure: (Value | NeutralValue.Variable) => Value) {
+  def invokeWithEnv(argument: Value)(implicit env: Environment.Typed[Value]): Value = {
+    argument match {
+      case nu @ Value.Neutral(NeutralValue.Variable(ident, ty)) if env.get(ident).contains(nu) => {
+        closure(Value.Neutral(NeutralValue.Variable(ident, ty)))
+      }
+      case value => closure(value)
     }
   }
 }
