@@ -2,7 +2,7 @@ package saki.core.elaborate
 
 import saki.core.Param
 import saki.core.context.{Environment, Typed}
-import saki.core.domain.{Type, Value, neutralClosure}
+import saki.core.domain.{Type, Value}
 import saki.core.syntax.{*, given}
 import saki.util.{unreachable, SourceSpan}
 import saki.error.CoreErrorKind.*
@@ -241,11 +241,9 @@ object Synthesis:
           term = Term.Lambda(Param(paramIdent, paramType), bodyTerm),
           `type` = Value.Pi(
             paramTypeValue,
-            neutralClosure(
-              Param(paramIdent, paramTypeValue),
-              implicit env => returnTypeValue.readBack.eval,
-              env
-            )
+            ParameterizedClosure(Param(paramIdent, paramTypeValue), env) {
+              implicit env => returnTypeValue.readBack.eval
+            }
           )
         )
 

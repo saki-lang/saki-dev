@@ -2,7 +2,6 @@ package saki.core.syntax
 
 import saki.core.context.{Environment, Typed}
 import saki.core.domain.{NeutralValue, Type, Value}
-import saki.core.domain.neutralClosure
 import saki.core.{RuntimeEntity, RuntimeEntityFactory}
 import saki.util.{unreachable, OptionCache}
 import saki.error.CoreErrorKind.*
@@ -183,7 +182,8 @@ enum Term extends RuntimeEntity[Type] {
       val paramType = typedParam.`type`
       env.withLocal(typedParam.ident, Value.variable(typedParam.ident, paramType), paramType) { implicit bodyEnv =>
         val bodyType = body.infer(bodyEnv).readBack(bodyEnv)
-        Value.Pi(paramType, neutralClosure(typedParam, implicit env => bodyType.eval, env))
+        val closure = ParameterizedClosure(typedParam, env) { implicit env => bodyType.eval }
+        Value.Pi(paramType, closure)
       }
     }
 
@@ -192,7 +192,8 @@ enum Term extends RuntimeEntity[Type] {
       val paramType = typedParam.`type`
       env.withLocal(typedParam.ident, Value.variable(typedParam.ident, paramType), paramType) { implicit bodyEnv =>
         val bodyType = body.infer(bodyEnv).readBack(bodyEnv)
-        (paramType, neutralClosure(typedParam, implicit env => bodyType.eval, env))
+        val closure = ParameterizedClosure(typedParam, env) { implicit env => bodyType.eval }
+        (paramType, closure)
       }
     })
 
@@ -541,18 +542,20 @@ object Term extends RuntimeEntityFactory[Term] {
    */
   private[core] def evalParameterized(param: Param[Term], term: Term, evalMode: EvalMode)(
     implicit env: Environment.Typed[Value]
-  ): (Type, Value => Value) = {
+  ): (Type, CodomainClosure) = {
     val typedParam = param.map(_.eval(evalMode))
-    (typedParam.`type`, neutralClosure(typedParam, implicit env => term.eval(evalMode), env))
+    val closure = ParameterizedClosure(typedParam, env) { implicit env => term.eval(evalMode) }
+    (typedParam.`type`, closure)
   }
 
   private[core] def evalParameterized(paramType: Type, term: Term, evalMode: EvalMode)(
     implicit env: Environment.Typed[Value]
-  ): (Type, Value => Value) = {
+  ): (Type, CodomainClosure) = {
     val paramIdent = env.uniqueVariable
     val typedParam = Param[Type](paramIdent, paramType)
     env.withLocal(paramIdent, Value.variable(paramIdent, paramType), paramType) { implicit env =>
-      (typedParam.`type`, neutralClosure(typedParam, implicit env => term.eval(evalMode), env))
+      val closure = ParameterizedClosure(typedParam, env) { implicit env => term.eval(evalMode) }
+      (typedParam.`type`, closure)
     }
   }
 
@@ -562,7 +565,7 @@ private sealed trait LambdaLikeTerm {
   def param: Param[Term]
   def body: Term
 
-  def eval(constructor: (Type, Value  => Value) => Value, evalMode: EvalMode)(
+  def eval(constructor: (Type, CodomainClosure) => Value, evalMode: EvalMode)(
     implicit env: Environment.Typed[Value]
   ): Value = {
     val (paramType, closure) = Term.evalParameterized(param, body, evalMode)
@@ -585,22 +588,22 @@ private sealed trait OverloadedTermExt[S <: Term & OverloadedTermExt[S]] {
 
   def states: Map[Param[Term], Term]
 
-  def eval(constructor: Map[Type, Value => Value] => Value, evalMode: EvalMode)(
+  def eval(constructor: Map[Type, CodomainClosure] => Value, evalMode: EvalMode)(
     implicit env: Environment.Typed[Value]
   ): Value = {
     // Normalize the states (unify the parameters with identical type but different names)
-    val closureStates: Seq[(Type, Value => Value)] = states.toSeq.map {
+    val closureStates: Seq[(Type, CodomainClosure)] = states.toSeq.map {
       (param, term) => Term.evalParameterized(param, term, evalMode)
     }
 
     // Merge the states with identical parameter types
     //  1. Group the states by parameter type
-    val grouped: Map[Type, Iterable[Value => Value]] = closureStates.groupBy(_._1.readBack).flatMap {
+    val grouped: Map[Type, Iterable[CodomainClosure]] = closureStates.groupBy(_._1.readBack).flatMap {
       (_, states) => states.map(states.head._1 -> _._2)
     }.groupMap(_._1)(_._2)
 
     //  2. Merge the states with identical parameter types
-    val merged: Map[Type, Value => Value] = grouped.map { (paramType, closures) =>
+    val merged: Map[Type, CodomainClosure] = grouped.map { (paramType, closures) =>
       assert(closures.nonEmpty)
       if closures.size == 1 then {
         paramType -> closures.head

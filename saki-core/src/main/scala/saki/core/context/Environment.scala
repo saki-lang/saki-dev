@@ -1,6 +1,7 @@
 package saki.core.context
 
 import saki.core.*
+import saki.core.domain.NeutralValue
 import saki.core.syntax.*
 import saki.error.CoreErrorKind.*
 
@@ -133,7 +134,7 @@ case class TypedEnvironment[T <: Entity] private (
   )(implicit factory: EntityFactory[T, Term]): R = {
     val ident = this.uniqueVariable(prefix)
     val variable = factory.variable(ident, ty)
-    action(this.add(ident, variable, ty), ident, variable)
+    action(this.add(ident, variable, ty), ident, ty)
   }
 }
 

@@ -65,4 +65,5 @@ trait MutableDefinitionContext extends DefinitionContext {
 
 case class Typed[+T <: Entity](value: T, `type`: T) {
   def unapply: (T, T) = (value, `type`)
+  override def toString: String = s"($value: ${`type`})"
 }
