@@ -203,7 +203,18 @@ enum Term extends RuntimeEntity[Type] {
     
     case Variable(variable) => env.getValue(variable) match {
       case Some(value) => value
-      case None => throw new NoSuchElementException(s"Variable $variable not found in the environment")
+      case None => env.locals.collectFirst {
+        // Find the variable in the local environment if it is an external neutral variable
+        // TODO: This is just a workaround for the current implementation
+        //  and may not be the correct way when there are multiple neutral variables
+        //  with the same variable name in the local environment
+        case (_,
+          Typed(value @ Value.Neutral(NeutralValue.Variable(neutral, _)), _)
+        ) if !env.contains(neutral) => value
+      } match {
+        case Some(value) => value
+        case None => Value.variable(variable, this.infer)
+      }
     }
 
     case FunctionInvoke(fnRef, argTerms) => {
