@@ -7,6 +7,7 @@ import saki.core.elaborate.Resolve.resolve
 import saki.core.elaborate.Synthesis.{synth, synthDeclaration}
 import saki.core.syntax.Module.EvalResult
 import saki.core.syntax.OverloadedDeclaration.merge
+import saki.error.CoreError
 import saki.prelude.Prelude
 import saki.util.Graph
 
@@ -22,7 +23,12 @@ case class Module(definitions: Set[Definition[Term]]) {
 
   def evaluate(expr: Expr): EvalResult = {
     val (term, ty) = expr.resolve(Resolve.Context(env))._1.synth(env).unpack
-    EvalResult(term.forceEval(env).readBack(env), ty.readBack(env))(env)
+    try {
+      EvalResult(term.forceEval(env).readBack(env), ty.readBack(env))(env)
+    } catch {
+      case e: CoreError => throw e.spanned(expr.span)
+      case e: Throwable => throw e
+    }
   }
 
 }

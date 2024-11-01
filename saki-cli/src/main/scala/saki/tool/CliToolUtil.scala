@@ -41,8 +41,8 @@ def compileModule(source: String, path: Option[String] = None, doEvaluation: Boo
     if doEvaluation then evaluations.foreach { evaluation =>
       val evalResult = try module.evaluate(evaluation.expr.emit).term catch {
         case err: PanicError => println(s"Panic: ${err.message}")
-        case err: CoreError => println(s"Error occurred: ${err.info}")
-        case err: Throwable => println(s"Error occurred: ${err.getMessage}")
+        case err: CoreError => throw err.spanned(evaluation.span)
+        case err: Throwable => throw err
       }
       evalResult match {
         case Term.Primitive(Literal.StringValue(value)) => println(value)

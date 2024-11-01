@@ -558,8 +558,8 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       ctx.symbol.getText,
       associativity,
       tighterThan.map(getBinaryOperator),
-      looserThan.map(getBinaryOperator),
       sameAs.map(getBinaryOperator),
+      looserThan.map(getBinaryOperator),
     ))
 
     Seq.empty

@@ -375,7 +375,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     compileModule(code)
   }
 
-  test("proof: n + 0 = n") {
+  test("proof: a + b = b + a") {
     val code = {
       """
         def Eq(A: 'Type, a b: A): 'Type = ∀(P: A -> 'Type) -> P(a) -> P(b)
@@ -419,7 +419,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
 
         def inductionReduce(
             a b: ℕ,
-            eqba: Eq(ℕ, b, a),
+            eqba: (b === a),
             P: ℕ -> 'Type,
             pa: P(a),
         ): P(b) = {
@@ -428,7 +428,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
         }
 
         def theoremPlusZero: ∀(n: ℕ) -> (n + o === n) = {
-            ((n: ℕ) => ℕ.Eq(n + o, n)).induction(
+            ((n: ℕ) => (n + o === n)).induction(
                 ℕ.refl(ℕ::Zero),
                 (n: ℕ, assumption: (n + o === n)) => {
                     inductionReduce(
@@ -439,9 +439,48 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
                 }
             )
         }
+
+        def leibnizEq(f: ℕ -> ℕ): ∀(a: ℕ) -> ∀(b: ℕ) -> (a === b) -> (f(a) === f(b)) = {
+            (a b : ℕ, eqab: (a === b)) => {
+                (P: ℕ -> 'Type, pfa: P(f a)) => eqab((b': ℕ) => P(f b'), pfa)
+            }
+        }
+
+        def theoremPlusZeroInv: ∀(n: ℕ) -> (n === n + o) = {
+            (n: ℕ) => ℕ.symmetry(n + o, n, theoremPlusZero(n))
+        }
+
+        def theoremPlusSucc: ∀(a: ℕ) -> ∀(b: ℕ) -> (succ(a + b) === a + b.succ) = {
+            (a b : ℕ) => induction(
+                (a': ℕ) => ∀(b: ℕ) -> (succ(a' + b) === a' + b.succ),
+                (b: ℕ) => ℕ.refl(succ(a + b)),
+                (a': ℕ, assumption: (succ(a + b) === a + b.succ)) => {
+                    leibnizEq(succ, succ(a' + b), a' + b.succ, assumption)
+                }, a
+            )
+        }
+
+        def transitivity(A: 'Type, a b c: A, eqab: A.Eq(a, b), eqbc: A.Eq(b, c)): A.Eq(a, c) = {
+            (P: A -> 'Type, pa: P(a)) => eqbc(P, eqab(P, pa))
+        }
+
+        def theoremPlusComm: ∀(a: ℕ) -> ∀(b: ℕ) -> (a + b === b + a) = {
+            (a: ℕ, b: ℕ) => induction(
+                (a: ℕ) => (a + b === b + a),
+                ℕ.refl(b),
+                (a': ℕ, IH: (a' + b === b + a')) => {
+                    let eq1 = ℕ.refl(succ(a' + b))                  // succ(a') + b === succ(a' + b)
+                    let eq2 = leibnizEq(succ, a' + b, b + a', IH)   // succ(a' + b) === succ(b + a')
+                    let eq3 = theoremPlusSucc(b, a')                // succ(b + a') === b + succ(a')
+                    let eq4 = transitivity(ℕ, succ(a' + b), succ(b + a'), b + succ(a'), eq2, eq3)
+                    transitivity(ℕ, succ(a') + b, succ(a' + b), b + succ(a'), eq1, eq4)
+                }, a
+            )
+        }
+
       """
     }
-    val module = compileModule(code)
+    compileModule(code)
   }
 
   test("operator declaration") {
