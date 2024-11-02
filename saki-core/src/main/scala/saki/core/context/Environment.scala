@@ -1,7 +1,6 @@
 package saki.core.context
 
 import saki.core.*
-import saki.core.domain.NeutralValue
 import saki.core.syntax.*
 import saki.error.CoreErrorKind.*
 
@@ -129,12 +128,8 @@ case class TypedEnvironment[T <: Entity] private (
     action(this.addAll(locals))
   }
 
-  def withNewUnique[R](ty: T, prefix: String = "$")(
-    action: (TypedEnvironment[T], Var.Local, T) => R
-  )(implicit factory: EntityFactory[T, Term]): R = {
-    val ident = this.uniqueVariable(prefix)
-    val variable = factory.variable(ident, ty)
-    action(this.add(ident, variable, ty), ident, ty)
+  def withNewUnique[R](ty: T)(action: (TypedEnvironment[T], Var.Local, T) => R): R = {
+    action(this, this.uniqueVariable("$"), ty)
   }
 }
 

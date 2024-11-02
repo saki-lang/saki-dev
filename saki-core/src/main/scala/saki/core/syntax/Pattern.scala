@@ -239,7 +239,7 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
 
   private[core] def iotaReduce(value: Value)(implicit env: Environment.Typed[Value]): Option[IotaReduction] = {
     
-    if value.isNeutral then Some(IotaReduction.PartialMatched) else self match {
+    self match {
       
       case Pattern.Primitive(literal) if value.isInstanceOf[Value.Primitive] => {
         val primitive = value.asInstanceOf[Value.Primitive]
@@ -247,7 +247,9 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
       }
       
       case Pattern.Bind(binding) => Some(IotaReduction.Matched(Map(binding -> value)))
-      
+
+      case _ if value.isNeutral => Some(IotaReduction.PartialMatched)
+
       case Pattern.Variant(
         inductiveTerm, constructorIdent, patterns
       ) if value.isInstanceOf[Value.InductiveVariant] => {

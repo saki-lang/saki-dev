@@ -93,10 +93,7 @@ extension (clauses: Seq[Clause[Term]]) {
             }
           }
           val body = env.withLocals(bindings.toMap) {
-            implicit env => clause.body.infer match {
-              case Value.PrimitiveType(LiteralType.NothingType) => clause.body.partialEval
-              case _ => clause.body.eval(evalMode)
-            }
+            implicit env => clause.body.eval(evalMode)
           }
           Clause(clause.patterns.map(_.map(_.eval(evalMode))), body)
         }

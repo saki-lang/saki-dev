@@ -76,7 +76,7 @@ enum Term extends RuntimeEntity[Type] {
     
     case Variable(variable) => env.getValue(variable) match {
       case Some(value) => value
-      case None => Value.variable(variable, this.infer)
+      case None => throw new IllegalArgumentException(s"Variable not found: ${variable.name}")
     }
 
     case FunctionInvoke(fnRef, argTerms) => {
@@ -138,7 +138,7 @@ enum Term extends RuntimeEntity[Type] {
       }
 
       env.currentDefinition match {
-        case Some(current: Var.Defined[Term, Function] @unchecked) if evalMode == EvalMode.Force => {
+        case Some(current: Var.Defined[Term, Function] @unchecked) => {
           if !function.isRecursive || !function.dependencies.contains(current) || allArgumentsFinal then {
             if evaluatedFunctionBody.containsMatching
             then Value.functionInvoke(fnRef, argsValue)
@@ -148,13 +148,9 @@ enum Term extends RuntimeEntity[Type] {
           }
         }
         case None | Some(_) => {
-          if !function.isRecursive || allArgumentsFinal then {
-            if evaluatedFunctionBody.containsMatching
-            then Value.functionInvoke(fnRef, argsValue)
-            else evaluatedFunctionBody
-          } else {
-            Value.functionInvoke(function.ident, argsValue)
-          }
+          if evaluatedFunctionBody.containsMatching
+          then Value.functionInvoke(fnRef, argsValue)
+          else evaluatedFunctionBody
         }
       }
     }

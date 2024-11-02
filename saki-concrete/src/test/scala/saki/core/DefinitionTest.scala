@@ -375,6 +375,28 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     compileModule(code)
   }
 
+  test("iota reduction") {
+    val code = {
+      """
+        type ℕ = inductive {
+            Zero
+            Succ(ℕ)
+        }
+
+        def add(a b : ℕ): ℕ = match a {
+            case ℕ::Zero => b
+            case ℕ::Succ(a') => ℕ::Succ(add a' b)
+        }
+      """
+    }
+    val module = compileModule(code)
+    module.eval(
+      "(a: ℕ) => (b: ℕ) => add(ℕ::Succ(a), b)"
+    ) should be (module.eval(
+      "(a: ℕ) => (b: ℕ) => ℕ::Succ(add(a, b))"
+    ))
+  }
+
   test("proof: a + b = b + a") {
     val code = {
       """
@@ -452,9 +474,9 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
 
         def theoremPlusSucc: ∀(a: ℕ) -> ∀(b: ℕ) -> (succ(a + b) === a + b.succ) = {
             (a b : ℕ) => induction(
-                (a': ℕ) => ∀(b: ℕ) -> (succ(a' + b) === a' + b.succ),
-                (b: ℕ) => ℕ.refl(succ(a + b)),
-                (a': ℕ, assumption: (succ(a + b) === a + b.succ)) => {
+                (a': ℕ) => (succ(a' + b) === a' + b.succ),
+                ℕ.refl(succ(o + b)),
+                (a': ℕ, assumption: (succ(a' + b) === a' + b.succ)) => {
                     leibnizEq(succ, succ(a' + b), a' + b.succ, assumption)
                 }, a
             )
@@ -466,8 +488,8 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
 
         def theoremPlusComm: ∀(a: ℕ) -> ∀(b: ℕ) -> (a + b === b + a) = {
             (a: ℕ, b: ℕ) => induction(
-                (a: ℕ) => (a + b === b + a),
-                ℕ.refl(b),
+                (a': ℕ) => (a' + b === b + a'),
+                theoremPlusZeroInv b,
                 (a': ℕ, IH: (a' + b === b + a')) => {
                     let eq1 = ℕ.refl(succ(a' + b))                  // succ(a') + b === succ(a' + b)
                     let eq2 = leibnizEq(succ, a' + b, b + a', IH)   // succ(a' + b) === succ(b + a')
@@ -477,7 +499,6 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
                 }, a
             )
         }
-
       """
     }
     compileModule(code)

@@ -100,7 +100,7 @@ object Synthesis:
           env.withLocal(paramIdent, param, paramType) { implicit env =>
             val (argTerm, argType) = argExpr.value.synth(env).unpack
             if !(paramType <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
-              s"Expected argument type: ${paramType.readBack.forceEval}, found argument $argExpr with type ${argType.readBack.forceEval}"
+              s"Expected argument type: ${paramType.readBack}, found argument $argExpr with type ${argType.readBack}"
             }
             Synth(Term.Apply(fn, argTerm), codomain.invokeWithEnv(argTerm.eval))
           }

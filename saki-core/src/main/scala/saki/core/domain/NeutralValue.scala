@@ -166,6 +166,8 @@ enum NeutralValue {
     implicit env: Environment.Typed[Value]
   ): Boolean = (this, that) match {
 
+    case (lhs, rhs) if lhs == rhs => true
+
     case (Variable(ident1, ty1), Variable(ident2, ty2)) => ident1 == ident2 && ty1 == ty2
     case (Apply(fn1, arg1), Apply(fn2, arg2)) => (fn1 unify fn2) && (arg1 unify arg2)
 
