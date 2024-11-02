@@ -341,7 +341,7 @@ object Synthesis:
       }
       val function = DefinedFunction[Term](defVar, params, resultType, updatedDependencies)
       function.body := envParams.defineFunction(function.ident) {
-        implicit env => pristineBody.get.elaborate(resultType)(env)
+        implicit env => pristineBody.get.elaborate(resultType).normalize
       }
       function
     }

@@ -2,10 +2,12 @@ package saki.core.syntax
 
 import saki.core.Entity
 import saki.core.context.{Environment, Typed}
-import saki.core.domain.Value
-import saki.error.PanicError
+import saki.core.domain.{NeutralValue, Value}
+import saki.error.{CoreErrorKind, PanicError}
 
 import scala.collection.Seq
+import scala.util.boundary
+import scala.util.boundary.break
 
 /**
  * A clause (case) in a pattern matching expression.
@@ -21,7 +23,22 @@ extension (clauses: Seq[Clause[Term]]) {
    * Try to match the given arguments with the clause set.
    * Return the body of the first matching clause.
    */
-  def tryMatch(args: Seq[Value])(implicit env: Environment.Typed[Value]): Option[Value] = {
+  def tryMatch(scrutinees: Seq[Value], evalMode: EvalMode)(implicit env: Environment.Typed[Value]): Option[Value] = {
+
+    // Iota-reduction:
+    //  filter all clauses in sequence
+    //    when the first possible match is a complete match =>
+    //      return the evaluate body
+    //    when the first possible match is a partial match =>
+    //      filter out clauses that are not matched, return the updated matching
+    //    when no possible match => throw an error
+    enum IotaReducedClause {
+      case Matched(body: Value, override val clause: Clause[Term])
+      case PartialMatch(override val clause: Clause[Term])
+      def clause: Clause[Term]
+    }
+
+    lazy val allArgsFinal = scrutinees.forall(_.isFinal(Set.empty))
     // Here we use `iterator` to avoid evaluating all clauses.
     // This is not just an optimization, but also a crucial approach when dealing with panics.
     // e.g.
@@ -31,24 +48,54 @@ extension (clauses: Seq[Clause[Term]]) {
     //   case _ => panic("not zero")
     // }
     // ```
-    lazy val allArgsFinal = args.forall(_.isFinal(Set.empty))
-    clauses.iterator.map { clause =>
-      val optionalSubstMap: Option[Map[Var.Local, Value]] = {
-        clause.patterns.zip(args).foldLeft(Some(Map.empty): Option[Map[Var.Local, Value]]) {
-          case (Some(subst), (pattern, value)) => pattern.buildSubstMap(value).map(subst ++ _)
-          case _ => None
+    val matchedIter = clauses.iterator.flatMap[IotaReducedClause] {
+      clause => boundary {
+        val substMap: Map[Var.Local, Value] = {
+          clause.patterns.zip(scrutinees).foldLeft(Map.empty[Var.Local, Value]) {
+            case (subst, (pattern, value)) => pattern.iotaReduce(value).map {
+              case IotaReduction.Matched(bindings) => subst ++ bindings
+              case IotaReduction.PartialMatched => break(Some(IotaReducedClause.PartialMatch(clause)))
+            }.getOrElse(break(None))
+          }
         }
-      }
-      optionalSubstMap.flatMap { implicit substMap =>
         val typedSubstMap = substMap.map {
           (ident, untyped) => (ident, Typed[Value](untyped, untyped.infer))
         }
-        try Some(clause.body.eval(env.addAll(typedSubstMap))) catch {
+        val updatedEnv = env.addAll(typedSubstMap)
+        try Some(IotaReducedClause.Matched(clause.body.eval(updatedEnv), clause)) catch {
           // if the error is a panic and not all arguments are final, ignore it
           case _: PanicError if !allArgsFinal => None
           case e: Throwable => throw e
         }
       }
-    }.collectFirst { case Some(body) => body }
+    }
+    
+    if !matchedIter.hasNext then CoreErrorKind.PatternMatchFail.raise {
+      s"Pattern match failed: ${scrutinees.mkString(", ")}"
+    }
+    
+    matchedIter.next() match {
+      case IotaReducedClause.Matched(body, _) => Some(body)
+      case IotaReducedClause.PartialMatch(init) => {
+        val clauses = init +: matchedIter.map(_.clause).toSeq
+        val valueClauses = clauses.map { clause =>
+          // Bind the pattern variables to the scrutinee values
+          val bindings: Seq[(Var.Local, Typed[Value])] = scrutinees.zip(clause.patterns).flatMap {
+            (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee.infer)
+          }.map {
+            case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
+          }
+          val body = env.withLocals(bindings.toMap) { implicit env =>
+            clause.body.infer match {
+              case Value.PrimitiveType(LiteralType.NothingType) => clause.body.partialEval
+              case _ => clause.body.eval(evalMode)
+            }
+          }
+          Clause(clause.patterns.map(_.map(_.eval(evalMode))), body)
+        }
+        Some(Value.Neutral(NeutralValue.Match(scrutinees, valueClauses)))
+      }
+    }
   }
+
 }

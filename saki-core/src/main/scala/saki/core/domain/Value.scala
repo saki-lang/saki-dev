@@ -56,6 +56,11 @@ enum Value extends RuntimeEntity[Type] {
     case _ => this.readBack.infer
   }
 
+  def isNeutral: Boolean = this match {
+    case Neutral(_) => true
+    case _ => false
+  }
+
   def readBack(implicit env: Environment.Typed[Value]): Term = this match {
 
     case Universe => Term.Universe

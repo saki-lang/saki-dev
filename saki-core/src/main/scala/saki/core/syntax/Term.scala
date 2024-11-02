@@ -1,11 +1,11 @@
 package saki.core.syntax
 
+import saki.core.{RuntimeEntity, RuntimeEntityFactory}
 import saki.core.context.{Environment, Typed}
 import saki.core.domain.{NeutralValue, Type, Value}
-import saki.core.{RuntimeEntity, RuntimeEntityFactory}
-import saki.util.{unreachable, OptionCache}
 import saki.error.CoreErrorKind.*
 import saki.error.PanicError
+import saki.util.unreachable
 
 import scala.collection.Seq
 
@@ -70,8 +70,18 @@ enum Term extends RuntimeEntity[Type] {
     }
 
     case FunctionInvoke(fn, args) => env.getSymbol(fn).get match {
-      case fn: Function[Term] => fn.resultType.eval
-      case decl: NaiveDeclaration[Term, ?] => decl.resultType.eval
+      case fn: (Function[Term] | NaiveDeclaration[Term, ?]) => {
+        fn.params.zip(args).foldLeft(env) {
+          case (env, (param, arg)) => {
+            val paramType = param.`type`.eval(env)
+            val argType = arg.infer(env)
+            if !(paramType <:< argType) then TypeNotMatch.raise {
+              s"Expected argument type: ${paramType.readBack}, but got: ${argType.readBack}"
+            }
+            env.add(param.ident, arg.eval(env), paramType)
+          }
+        }.withLocals(env.locals) { implicit env => fn.resultType.eval }
+      }
       case overloaded: Overloaded[Term] => Term.OverloadInvoke(overloaded.ident, args).infer
       case overloaded: OverloadedDeclaration[Term] => Term.OverloadInvoke(overloaded.ident, args).infer 
       case _: Inductive[Term] => Value.Universe
@@ -316,34 +326,11 @@ enum Term extends RuntimeEntity[Type] {
 
     case Match(scrutinees, clauses) => {
       val scrutineesValue = scrutinees.map(_.eval(evalMode))
-      // If all scrutinees are final, try to match the clauses
-      if scrutineesValue.forall(_.isFinal(Set.empty)) then {
-        // Try to match the scrutinees with the clauses
-        clauses.tryMatch(scrutineesValue).getOrElse {
-          // If all scrutinees are final and no match is found, raise an error
-          MatchNotExhaustive.raise {
-            s"Match is not exhaustive for scrutinee: ${scrutineesValue.map(_.readBack).mkString(", ")}"
-          }
-        }
-      } else {
-        clauses.tryMatch(scrutineesValue).getOrElse {
-          // Otherwise (at least one scrutinee contains neutral value), keep the match as a neutral value
-          val valueClauses = clauses.map { clause =>
-            // Bind the pattern variables to the scrutinee values
-            val bindings: Seq[(Var.Local, Typed[Value])] = scrutineesValue.zip(clause.patterns).flatMap {
-              (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee.infer)
-            }.map {
-              case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
-            }
-            val body = env.withLocals(bindings.toMap) { implicit env =>
-              clause.body.infer match {
-                case Value.PrimitiveType(LiteralType.NothingType) => clause.body.partialEval
-                case _ => clause.body.eval(evalMode)
-              }
-            }
-            Clause(clause.patterns.map(_.map(_.eval(evalMode))), body)
-          }
-          Value.Neutral(NeutralValue.Match(scrutineesValue, valueClauses))
+      // Try to match the scrutinees with the clauses
+      clauses.tryMatch(scrutineesValue, evalMode).getOrElse {
+        // If all scrutinees are final and no match is found, raise an error
+        MatchNotExhaustive.raise {
+          s"Match is not exhaustive for scrutinee: ${scrutineesValue.map(_.readBack).mkString(", ")}"
         }
       }
     }

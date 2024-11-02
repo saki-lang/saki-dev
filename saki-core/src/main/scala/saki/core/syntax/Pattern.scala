@@ -7,6 +7,7 @@ import saki.core.*
 import saki.error.CoreErrorKind.*
 import saki.util.SourceSpan
 
+import scala.annotation.tailrec
 import scala.collection.Seq
 
 enum Pattern[T <: Entity](val span: SourceSpan) {
@@ -157,37 +158,51 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
     }
   }
 
-  def buildSubstMap(value: Value)(
-    implicit env: Environment.Typed[Value]
-  ): Option[Map[Var.Local, Value]] = self match {
-    case Pattern.Primitive(literal) if value.isInstanceOf[Value.Primitive] => {
-      val primitive = value.asInstanceOf[Value.Primitive]
-      if literal == primitive.value then Some(Map.empty) else None
-    }
-    case Pattern.Bind(binding) => Some(Map(binding -> value))
-    case Pattern.Variant(
-      inductiveTerm, constructorIdent, patterns
-    ) if value.isInstanceOf[Value.InductiveVariant] => {
-      val inductiveType = inductiveTerm.eval match {
-        case inductive: Value.InductiveType => inductive
-        case ty => TypeNotMatch.raise(s"Expected inductive type, but got: ${ty.readBack}")
+  private[core] def iotaReduce(value: Value)(implicit env: Environment.Typed[Value]): Option[IotaReduction] = {
+    
+    if value.isNeutral then Some(IotaReduction.PartialMatched) else self match {
+      
+      case Pattern.Primitive(literal) if value.isInstanceOf[Value.Primitive] => {
+        val primitive = value.asInstanceOf[Value.Primitive]
+        if literal == primitive.value then Some(IotaReduction.Matched(Map.empty)) else None
       }
-      val constructor = inductiveType.inductive.definition.get.getConstructor(constructorIdent) match {
-        case Some(constructor) => constructor
-        case None => ConstructorNotFound.raise {
-          s"Constructor $constructorIdent not found in ${inductiveType.inductive.name}"
+      
+      case Pattern.Bind(binding) => Some(IotaReduction.Matched(Map(binding -> value)))
+      
+      case Pattern.Variant(
+        inductiveTerm, constructorIdent, patterns
+      ) if value.isInstanceOf[Value.InductiveVariant] => {
+        
+        val inductiveType = inductiveTerm.eval match {
+          case inductive: Value.InductiveType => inductive
+          case ty => TypeNotMatch.raise(s"Expected inductive type, but got: ${ty.readBack}")
+        }
+        
+        val constructor = inductiveType.inductive.definition.get.getConstructor(constructorIdent) match {
+          case Some(constructor) => constructor
+          case None => ConstructorNotFound.raise {
+            s"Constructor $constructorIdent not found in ${inductiveType.inductive.name}"
+          }
+        }
+        
+        val variant = value.asInstanceOf[Value.InductiveVariant]
+        if constructor != variant.constructor then None else {
+          assert(patterns.size == variant.args.size)
+          patterns.zip(variant.args).foldLeft(Some(IotaReduction.Matched(Map.empty)): Option[IotaReduction]) {
+            case (Some(reduction), (pattern, value)) => reduction match {
+              case IotaReduction.PartialMatched => Some(IotaReduction.PartialMatched)
+              case IotaReduction.Matched(subst) => pattern.iotaReduce(value).map {
+                case IotaReduction.PartialMatched => IotaReduction.PartialMatched
+                case IotaReduction.Matched(bindings) => IotaReduction.Matched(subst ++ bindings)
+              }
+            }
+            case (None, (_, _)) => None
+          }
         }
       }
-      val variant = value.asInstanceOf[Value.InductiveVariant]
-      if constructor != variant.constructor then None else {
-        assert(patterns.size == variant.args.size)
-        patterns.zip(variant.args).foldLeft(Some(Map.empty): Option[Map[Var.Local, Value]]) {
-          case (Some(subst), (pattern, value)) => pattern.buildSubstMap(value).map(subst ++ _)
-          case (None, (_, _)) => None
-        }
-      }
+      
+      case _ => None
     }
-    case _ => None
   }
 
   def toTerm(implicit env: Environment.Typed[Value]): Term = self match {
@@ -214,6 +229,11 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
       Term.Record(fieldValues.toMap)
     }
   }
+}
+
+private[core] enum IotaReduction {
+  case PartialMatched
+  case Matched(bindings: Map[Var.Local, Value])
 }
 
 object Pattern {
