@@ -69,11 +69,11 @@ extension (clauses: Seq[Clause[Term]]) {
         }
       }
     }
-    
+
     if !matchedIter.hasNext then CoreErrorKind.PatternMatchFail.raise {
       s"Pattern match failed: ${scrutinees.mkString(", ")}"
     }
-    
+
     matchedIter.next() match {
       case IotaReducedClause.Matched(body, _) => Some(body)
       case IotaReducedClause.PartialMatch(init) => {
@@ -81,7 +81,7 @@ extension (clauses: Seq[Clause[Term]]) {
         val valueClauses = clauses.map { clause =>
           // Bind the pattern variables to the scrutinee values
           val bindings: Seq[(Var.Local, Typed[Value])] = scrutinees.zip(clause.patterns).flatMap {
-            (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee.infer)
+            (scrutinee, pattern) => pattern.buildTypeMapping(scrutinee.infer)
           }.map {
             case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
           }

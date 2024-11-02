@@ -3,6 +3,7 @@ package saki.core.domain
 import saki.core.{RuntimeEntity, RuntimeEntityFactory}
 import saki.core.context.{Environment, Typed}
 import saki.core.syntax.*
+import saki.core.syntax.invokeWithEnv
 import saki.error.CoreErrorKind.*
 
 import scala.annotation.targetName
@@ -52,8 +53,38 @@ enum Value extends RuntimeEntity[Type] {
   override def eval(implicit env: Environment.Typed[Value]): Value = this
 
   override def infer(implicit env: Environment.Typed[Value]): Type = this match {
-    case Neutral(NeutralValue.Variable(_, ty)) => ty
-    case _ => this.readBack.infer
+
+    case Universe => Universe
+
+    case Primitive(value) => PrimitiveType(value.ty)
+
+    case PrimitiveType(_) => Universe
+
+    case Neutral(neutral) => neutral.infer
+
+    case Pi(_, _) => Universe
+
+    case OverloadedPi(_) => Universe
+
+    case Sigma(_, _) => Universe
+
+    case Lambda(paramType, body) => {
+      val bodyType = env.withNewUnique(paramType) {
+        (env, ident, ty) => body(NeutralValue.Variable(ident, ty)).infer(env)
+      }
+      Pi(paramType, _ => bodyType)
+    }
+
+    case OverloadedLambda(states) => Value.OverloadedPi(states.map { (paramType, body) =>
+      val bodyType = env.withNewUnique(paramType) {
+        (env, ident, ty) => body(NeutralValue.Variable(ident, ty)).infer(env)
+      }
+      (paramType, _ => bodyType): (Type, CodomainClosure)
+    })
+    case Record(fields) => RecordType(fields.map((name, value) => (name, value.infer)))
+    case RecordType(_) => Universe
+    case InductiveType(_, _) => Universe
+    case InductiveVariant(inductiveType, _, _) => inductiveType
   }
 
   def isNeutral: Boolean = this match {

@@ -301,7 +301,7 @@ object Synthesis:
     //    case Foo::Bar(a) | Foo::Baz(b) => foo(a, b)
     //  }
     val patternsBinding: Seq[Map[Var.Local, Typed[Value]]] = patterns.zip(scrutinees).map {
-      (pattern, scrutinee) => pattern.buildMatchBindings(scrutinee.`type`)
+      (pattern, scrutinee) => pattern.buildTypeMapping(scrutinee.`type`)
     }.map { bindings =>
       bindings.map { case (k, v) => k -> Typed[Value](Value.variable(k, v), v) }
     }

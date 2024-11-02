@@ -82,10 +82,8 @@ enum Pattern[T <: Entity](val span: SourceSpan) {
 }
 
 extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
-  
-  def buildMatchBindings(`type`: Type)(
-    implicit env: Environment.Typed[Value]
-  ): Map[Var.Local, Type] = self match {
+
+  def buildTypeMapping(`type`: Type)(implicit env: Environment.Typed[Value]): Map[Var.Local, Type] = self match {
 
     case Pattern.Primitive(_) => Map.empty
     case Pattern.Bind(binding) => Map(binding -> `type`)
@@ -127,7 +125,7 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
       } else {
         patterns.zip(constructor.params).foldLeft(Map.empty: Map[Var.Local, Value]) {
           case (subst, (pattern, param)) => subst ++ env.withLocals(patternInductiveType.argsMap) {
-            implicit env => pattern.buildMatchBindings(param.`type`.eval)
+            implicit env => pattern.buildTypeMapping(param.`type`.eval)
           }
         }
       }
@@ -139,7 +137,7 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
       }
     }
 
-    case Pattern.Typed(pattern, ty) => pattern.buildMatchBindings(ty.eval)
+    case Pattern.Typed(pattern, ty) => pattern.buildTypeMapping(ty.eval)
 
     case Pattern.Record(fields) if `type`.isInstanceOf[Value.RecordType] => {
       val recordType = `type`.asInstanceOf[Value.RecordType]
@@ -148,13 +146,96 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
           val fieldType = recordType.fields.getOrElse(name, {
             RecordMissingField.raise(s"Field $name not found in record")
           })
-          subst ++ pattern.buildMatchBindings(fieldType)
+          subst ++ pattern.buildTypeMapping(fieldType)
         }
       }
     }
 
     case Pattern.Record(_) => TypeNotMatch.raise {
       s"Expected record type, but got: ${`type`.readBack}"
+    }
+  }
+
+  def buildMatchBindings(value: Value)(implicit env: Environment.Typed[Value]): Map[Var.Local, Typed[Value]] = {
+
+    lazy val ty: Type = value.infer
+    self match {
+
+      case Pattern.Primitive(_) => Map.empty
+      case Pattern.Bind(binding) => Map(binding -> Typed(value, ty))
+
+      // When calling an inductive directly results in a type.
+      // e.g. In this example, `Option(A)` returns a type:
+      // ```
+      //  inductive Option(A: 'Type) {
+      //    None : this
+      //    Some : A -> this
+      //  }
+      // ```
+      case Pattern.Variant(
+        patternInductiveTerm, constructorIdent, patterns
+      ) if value.isInstanceOf[Value.InductiveVariant] => {
+        val variant = value.asInstanceOf[Value.InductiveVariant]
+        val patternInductiveType = patternInductiveTerm.eval match {
+          case inductiveType: Value.InductiveType => inductiveType
+          case ty => TypeNotMatch.raise {
+            s"Expected inductive type, but got: ${ty.readBack}"
+          }
+        }
+        val inductiveType = ty.asInstanceOf[Value.InductiveType]
+        val patternInductive = patternInductiveType.inductive.definition.get
+        val constructor = patternInductive.getConstructor(constructorIdent) match {
+          case Some(constructor) => constructor
+          case None => ConstructorNotFound.raise {
+            s"Constructor $constructorIdent not found in ${patternInductive.ident}"
+          }
+        }
+        if constructor.params.size != patterns.size then {
+          SizeNotMatch.raise {
+            s"Constructor ${constructor.ident} of ${patternInductive.ident}" +
+            s"expected ${constructor.params.size} arguments, but got ${patterns.size}"
+          }
+        } else if !(patternInductiveType <:< inductiveType) then {
+          TypeNotMatch.raise {
+            s"Expected inductive type ${inductiveType.readBack}, but got ${patternInductiveType.readBack}"
+          }
+        } else {
+          patterns.zip(variant.args).foldLeft(Map.empty: Map[Var.Local, Typed[Value]]) {
+            case (subst, (pattern, value)) => subst ++ pattern.buildMatchBindings(value)
+          }
+        }
+      }
+
+      case Pattern.Variant(inductive, _, _) => {
+        TypeNotMatch.raise {
+          s"Expected inductive type ${inductive}, but got: ${ty.readBack}"
+        }
+      }
+
+      case Pattern.Typed(pattern, expectedType) => {
+        if !(expectedType.eval <:< ty) then {
+          TypeNotMatch.raise {
+            s"Expected type ${expectedType}, but got: ${ty.readBack}"
+          }
+        }
+        pattern.buildMatchBindings(value)
+      }
+
+      case Pattern.Record(patternFields) if value.isInstanceOf[Value.Record] => {
+        val record = value.asInstanceOf[Value.Record]
+        patternFields.foldLeft(Map.empty: Map[Var.Local, Typed[Value]]) {
+          case (subst, (name, pattern)) => {
+            val field = record.fields.getOrElse(name, {
+              RecordMissingField.raise(s"Field $name not found in record")
+            })
+            subst ++ pattern.buildMatchBindings(field)
+          }
+        }
+      }
+
+      case Pattern.Record(_) => TypeNotMatch.raise {
+        s"Expected record type, but got: ${ty.readBack}"
+      }
     }
   }
 

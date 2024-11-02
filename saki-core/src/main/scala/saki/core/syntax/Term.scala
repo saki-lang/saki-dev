@@ -56,144 +56,7 @@ enum Term extends RuntimeEntity[Type] {
    * @param env The environment
    * @return The inferred type
    */
-  override def infer(implicit env: Environment.Typed[Value]): Value = this match {
-
-    case Universe => Value.Universe
-
-    case Primitive(value) => Value.PrimitiveType(value.ty)
-
-    case PrimitiveType(_) => Value.Universe
-
-    case Variable(variable) => env.getTyped(variable) match {
-      case Some(typed) => typed.`type`.eval
-      case None => throw new NoSuchElementException(s"Variable $variable not found in the environment")
-    }
-
-    case FunctionInvoke(fn, args) => env.getSymbol(fn).get match {
-      case fn: (Function[Term] | NaiveDeclaration[Term, ?]) => {
-        fn.params.zip(args).foldLeft(env) {
-          case (env, (param, arg)) => {
-            val paramType = param.`type`.eval(env)
-            val argType = arg.infer(env)
-            if !(paramType <:< argType) then TypeNotMatch.raise {
-              s"Expected argument type: ${paramType.readBack}, but got: ${argType.readBack}"
-            }
-            env.add(param.ident, arg.eval(env), paramType)
-          }
-        }.withLocals(env.locals) { implicit env => fn.resultType.eval }
-      }
-      case overloaded: Overloaded[Term] => Term.OverloadInvoke(overloaded.ident, args).infer
-      case overloaded: OverloadedDeclaration[Term] => Term.OverloadInvoke(overloaded.ident, args).infer 
-      case _: Inductive[Term] => Value.Universe
-    }
-
-    case invoke: OverloadInvoke => {
-      val func = invoke.getOverload
-      val paramMap = func.params.map { param =>
-        val paramType = param.`type`.eval
-        (param.ident, Typed[Value](Value.variable(param.ident, paramType), paramType))
-      }.toMap
-      env.withLocals(paramMap) { implicit env => func.resultType.eval(env) }
-    }
-
-    case InductiveType(indRef, _) => {
-      env.definitions(indRef).asInstanceOf[Inductive[Term]].resultType.eval
-    }
-
-    case InductiveVariant(inductive, _, _) => inductive.eval
-
-    case Match(scrutinees, clauses) => {
-      val scrutineesType = scrutinees.map(_.infer)
-      val clausesType: Seq[Value] = clauses.map { clause =>
-        val bindings: Seq[(Var.Local, Typed[Value])] = scrutineesType.zip(clause.patterns).flatMap {
-          (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee)
-        }.map {
-          case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
-        }
-        env.withLocals(bindings.toMap) { implicit env => clause.body.infer(env) }
-      }
-      clausesType.reduce((a, b) => a <:> b)
-    }
-
-    case Pi(_, _) => Value.Universe
-
-    case OverloadedPi(_) => Value.Universe
-
-    case Sigma(_, _) => Value.Universe
-
-    case Record(fields) => Value.RecordType(fields.map {
-      (name, term) => (name, term.infer)
-    })
-
-    case RecordType(_) => Value.Universe
-
-    case Apply(fn, arg) => fn.infer match {
-
-      case Value.Pi(paramType, codomain) => {
-        val argType = arg.infer
-        if !(paramType <:< argType) then TypeNotMatch.raise {
-          s"Expected argument type: ${paramType.readBack}, but got: ${argType.readBack}"
-        }
-        // To obtain the concrete return type, feed the concrete argument to the codomain closure
-        codomain.invokeWithEnv(arg.eval)
-      }
-
-      case Value.OverloadedPi(states) => {
-        val argType = arg.infer
-        // Find the states that the argument type is a subtype of the parameter type
-        val candidateStates = states.filter {
-          (paramType, _) => paramType <:< argType
-        }
-        if candidateStates.isEmpty then OverloadingNotMatch.raise {
-          s"No matched overloading in overloaded Pi type of argument with type: ${argType.readBack}"
-        }
-        // Find the states that there is no other state that is closer to the argument type
-        val validStates = candidateStates.filter {
-          (paramType, _) => !candidateStates.exists { (paramType2, _) =>
-            paramType2 != paramType && paramType2 <:< paramType
-          }
-        }
-        if validStates.size > 1 then OverloadingAmbiguous.raise {
-          s"Ambiguous overloading in overloaded Pi type of argument with type: ${argType.readBack}"
-        }
-        val (_, codomain) = validStates.head
-        codomain.invokeWithEnv(arg.eval)
-      }
-
-      case _ => TypeNotMatch.raise {
-        s"Cannot apply an argument to a non-function value: $fn"
-      }
-    }
-
-    // Lambda returns a dependent function type
-    case Lambda(param, body) => {
-      val typedParam = param.map(_.eval)
-      val paramType = typedParam.`type`
-      env.withLocal(typedParam.ident, Value.variable(typedParam.ident, paramType), paramType) { implicit bodyEnv =>
-        val bodyType = body.infer(bodyEnv).readBack(bodyEnv)
-        val closure = ParameterizedClosure(typedParam, env) { implicit env => bodyType.eval }
-        Value.Pi(paramType, closure)
-      }
-    }
-
-    case OverloadedLambda(states) => Value.OverloadedPi(states.map { (param, body) =>
-      val typedParam = param.map(_.eval)
-      val paramType = typedParam.`type`
-      env.withLocal(typedParam.ident, Value.variable(typedParam.ident, paramType), paramType) { implicit bodyEnv =>
-        val bodyType = body.infer(bodyEnv).readBack(bodyEnv)
-        val closure = ParameterizedClosure(typedParam, env) { implicit env => bodyType.eval }
-        (paramType, closure)
-      }
-    })
-
-    case Projection(record, field) => record.infer match {
-      case Value.RecordType(fields) => fields.getOrElse(field, {
-        RecordMissingField.raise(s"Field $field not found in record $record")
-      })
-      case _ => TypeNotMatch.raise(s"Cannot project from non-record value: $record")
-    }
-
-  }
+  override def infer(implicit env: Environment.Typed[Value]): Value = this.eval.infer
 
   def partialEval(implicit env: Environment.Typed[Value]): Value = this.eval(evalMode = EvalMode.Partial)
 
@@ -213,18 +76,7 @@ enum Term extends RuntimeEntity[Type] {
     
     case Variable(variable) => env.getValue(variable) match {
       case Some(value) => value
-      case None => env.locals.collectFirst {
-        // Find the variable in the local environment if it is an external neutral variable
-        // TODO: This is just a workaround for the current implementation
-        //  and may not be the correct way when there are multiple neutral variables
-        //  with the same variable name in the local environment
-        case (_,
-          Typed(value @ Value.Neutral(NeutralValue.Variable(neutral, _)), _)
-        ) if !env.contains(neutral) => value
-      } match {
-        case Some(value) => value
-        case None => Value.variable(variable, this.infer)
-      }
+      case None => Value.variable(variable, this.infer)
     }
 
     case FunctionInvoke(fnRef, argTerms) => {
@@ -435,7 +287,7 @@ enum Term extends RuntimeEntity[Type] {
       val newScrutinees = scrutinees.map(_.substitute(from, to))
       val newClauses = clauses.map { clause =>
         val bindings: Seq[(Var.Local, Typed[Value])] = scrutinees.zip(clause.patterns).flatMap {
-          (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee.infer)
+          (scrutinee, pattern) => pattern.buildTypeMapping(scrutinee.infer)
         }.map {
           case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
         }
@@ -475,7 +327,7 @@ enum Term extends RuntimeEntity[Type] {
     case Match(scrutinees, clauses) => {
       scrutinees.exists(_.contains(ident, shadowed)) || clauses.exists { clause =>
         val bindings = clause.patterns.zip(scrutinees).flatMap {
-          (pattern, scrutinee) => pattern.buildMatchBindings(scrutinee.infer)
+          (pattern, scrutinee) => pattern.buildTypeMapping(scrutinee.infer)
         }.map { (param, _) => (param) }
         clause.body.contains(ident, shadowed ++ bindings)
       }

@@ -1,7 +1,9 @@
 package saki.core.domain
 
 import saki.core.context.{Environment, Typed}
-import saki.core.syntax.{buildMatchBindings, Clause, Function, Term, Var}
+import saki.core.syntax.{buildTypeMapping, invokeWithEnv, getOverload, Clause, Function, Inductive, NaiveDeclaration, NaiveSymbol, Overloaded, OverloadedDeclaration, OverloadedSymbol, Term, Var}
+import saki.core.syntax.given
+import saki.error.CoreErrorKind.*
 
 import scala.annotation.targetName
 import scala.collection.Seq
@@ -25,7 +27,94 @@ enum NeutralValue {
     clauses: Seq[Clause[Value]]
   )
 
-  def infer(implicit env: Environment.Typed[Value]): Type = this.readBack.infer
+  def infer(implicit env: Environment.Typed[Value]): Type = this match {
+
+    case Variable(_, ty) => ty
+
+    case Apply(fn, arg) => fn.infer match {
+      case Value.Pi(paramType, codomain) => {
+        val argType = arg.infer
+        if !(paramType <:< argType) then TypeNotMatch.raise {
+          s"Expected argument type: ${paramType.readBack}, but got: ${argType.readBack}"
+        }
+        // To obtain the concrete return type, feed the concrete argument to the codomain closure
+        codomain.invokeWithEnv(arg.eval)
+      }
+
+      case Value.OverloadedPi(states) => {
+        val argType = arg.infer
+        // Find the states that the argument type is a subtype of the parameter type
+        val candidateStates = states.filter {
+          (paramType, _) => paramType <:< argType
+        }
+        if candidateStates.isEmpty then OverloadingNotMatch.raise {
+          s"No matched overloading in overloaded Pi type of argument with type: ${argType.readBack}"
+        }
+        // Find the states that there is no other state that is closer to the argument type
+        val validStates = candidateStates.filter {
+          (paramType, _) => !candidateStates.exists { (paramType2, _) =>
+            paramType2 != paramType && paramType2 <:< paramType
+          }
+        }
+        if validStates.size > 1 then OverloadingAmbiguous.raise {
+          s"Ambiguous overloading in overloaded Pi type of argument with type: ${argType.readBack}"
+        }
+        val (_, codomain) = validStates.head
+        codomain.invokeWithEnv(arg.eval)
+      }
+
+      case _ => TypeNotMatch.raise {
+        s"Cannot apply an argument to a non-function value: $fn"
+      }
+    }
+
+    case NeutralValue.Projection(record, field) => record.infer match {
+      case Value.RecordType(fieldTypes) => fieldTypes(field)
+      case ty => TypeNotMatch.raise {
+        s"Expected record type, but got: ${ty.readBack}"
+      }
+    }
+
+    case NeutralValue.FunctionInvoke(fn, args) => env.getSymbol(fn).get match {
+      case fn: (Function[Term] | NaiveDeclaration[Term, ?]) => {
+        fn.params.zip(args).foldLeft(env) {
+          case (env, (param, arg)) => {
+            val paramType = param.`type`.eval(env)
+            val argType = arg.infer(env)
+            if !(paramType <:< argType) then TypeNotMatch.raise {
+              s"Expected argument type: ${paramType.readBack}, but got: ${argType.readBack}"
+            }
+            env.add(param.ident, arg.eval(env), paramType)
+          }
+        }.withLocals(env.locals) { implicit env => fn.resultType(Term).eval }
+      }
+      case overloaded: OverloadedSymbol[Term, ?, Function[Term]] @unchecked => {
+        val func = overloaded.getOverload(args)
+        val paramMap = func.params.map { param =>
+          val paramType = param.`type`.eval
+          (param.ident, Typed[Value](Value.variable(param.ident, paramType), paramType))
+        }.toMap
+        env.withLocals(paramMap) { implicit env => func.resultType(Term).eval(env) }
+      }
+      case _: Inductive[Term] => Value.Universe
+      case _ => TypeNotMatch.raise {
+        s"Expected function or inductive type, but got: ${fn}"
+      }
+    }
+
+    case NeutralValue.Match(scrutinees, clauses) => {
+      val scrutineesType = scrutinees.map(_.infer)
+      val clausesType: Seq[Value] = clauses.map { clause =>
+        val bindings: Seq[(Var.Local, Typed[Value])] = scrutineesType.zip(clause.patterns).flatMap {
+          (scrutinee, pattern) => pattern.buildTypeMapping(scrutinee)
+        }.map {
+          case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
+        }
+        env.withLocals(bindings.toMap) { implicit env => clause.body.infer(env) }
+      }
+      clausesType.reduce((a, b) => a <:> b)
+    }
+  }
 
   def readBack(implicit env: Environment.Typed[Value]): Term = this match {
     case Variable(ident, _) => Term.Variable(ident)
@@ -39,7 +128,7 @@ enum NeutralValue {
         val bindings: Seq[(Var.Local, Typed[Value])] = scrutinees.zip(clause.patterns).flatMap {
           (scrutinee, pattern) =>
             val scrutineeType = scrutinee.infer
-            pattern.buildMatchBindings(scrutineeType)
+            pattern.buildTypeMapping(scrutineeType)
         }.map {
           case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
         }
