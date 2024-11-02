@@ -77,7 +77,7 @@ enum NeutralValue {
 
     case NeutralValue.FunctionInvoke(fn, args) => env.getSymbol(fn).get match {
       case fn: (Function[Term] | NaiveDeclaration[Term, ?]) => {
-        fn.params.zip(args).foldLeft(env) {
+        val updatedEnv = fn.params.zip(args).foldLeft(env) {
           case (env, (param, arg)) => {
             val paramType = param.`type`.eval(env)
             val argType = arg.infer(env)
@@ -86,7 +86,8 @@ enum NeutralValue {
             }
             env.add(param.ident, arg.eval(env), paramType)
           }
-        }.withLocals(env.locals) { implicit env => fn.resultType(Term).eval }
+        }
+        fn.resultType(Term).eval(updatedEnv)
       }
       case overloaded: OverloadedSymbol[Term, ?, Function[Term]] @unchecked => {
         val func = overloaded.getOverload(args)

@@ -156,13 +156,28 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
     }
   }
 
-  def buildMatchBindings(value: Value)(implicit env: Environment.Typed[Value]): Map[Var.Local, Typed[Value]] = {
+  def buildMatchBindings(
+    value: Value, `type`: Option[Type] = None
+  )(implicit env: Environment.Typed[Value]): Map[Var.Local, Typed[Value]] = {
 
-    lazy val ty: Type = value.infer
+    lazy val ty: Type = `type` match {
+      case Some(ty) => ty
+      case None => value.infer
+    }
+
     self match {
 
       case Pattern.Primitive(_) => Map.empty
       case Pattern.Bind(binding) => Map(binding -> Typed(value, ty))
+
+      case Pattern.Typed(pattern, expectedType) => {
+        if !(expectedType.eval <:< ty) then TypeNotMatch.raise {
+          s"Expected type ${expectedType}, but got: ${ty.readBack}"
+        }
+        pattern.buildMatchBindings(value)
+      }
+
+      case _ if value.isNeutral => Map.empty
 
       // When calling an inductive directly results in a type.
       // e.g. In this example, `Option(A)` returns a type:
@@ -206,24 +221,9 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
         }
       }
 
-      case Pattern.Variant(inductive, _, _) => {
-        TypeNotMatch.raise {
-          s"Expected inductive type ${inductive}, but got: ${ty.readBack}"
-        }
-      }
-
-      case Pattern.Typed(pattern, expectedType) => {
-        if !(expectedType.eval <:< ty) then {
-          TypeNotMatch.raise {
-            s"Expected type ${expectedType}, but got: ${ty.readBack}"
-          }
-        }
-        pattern.buildMatchBindings(value)
-      }
-
       case Pattern.Record(patternFields) if value.isInstanceOf[Value.Record] => {
         val record = value.asInstanceOf[Value.Record]
-        patternFields.foldLeft(Map.empty: Map[Var.Local, Typed[Value]]) {
+        patternFields.foldLeft(Map.empty[Var.Local, Typed[Value]]) {
           case (subst, (name, pattern)) => {
             val field = record.fields.getOrElse(name, {
               RecordMissingField.raise(s"Field $name not found in record")
@@ -233,9 +233,7 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
         }
       }
 
-      case Pattern.Record(_) => TypeNotMatch.raise {
-        s"Expected record type, but got: ${ty.readBack}"
-      }
+      case _ => Map.empty
     }
   }
 

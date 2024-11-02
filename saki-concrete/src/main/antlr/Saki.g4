@@ -3,7 +3,7 @@ grammar Saki;
 /* Parser Rules */
 
 program
-    : NL* (entities+=moduleEntity (NL+ entities+=moduleEntity)*)? NL* EOF
+    : NL* (entities+=moduleEntity (NL+ entities+=moduleEntity NL*)* NL*)? NL* EOF
     ;
 
 moduleEntity
@@ -183,6 +183,10 @@ RightArrow: '->';
 RightDoubleArrow: '=>';
 Colon: ':';
 
+LineComment
+    : '//' (~[\r\n])* -> skip
+    ;
+
 OptSymbol: [+\-/*<>=&!^%#:]+ | '||';
 
 PiSymbol: '∀' | 'Π';
@@ -196,10 +200,6 @@ Whitespace: [ \t\r]+ -> channel(HIDDEN);
 
 Comment
     : '/*' (Comment | .)*? '*/' -> skip
-    ;
-
-LineComment
-    : '//' (~[\r\n])* -> skip
     ;
 
 // NewLine

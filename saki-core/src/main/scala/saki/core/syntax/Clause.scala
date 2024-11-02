@@ -79,14 +79,21 @@ extension (clauses: Seq[Clause[Term]]) {
       case IotaReducedClause.PartialMatch(init) => {
         val clauses = init +: matchedIter.map(_.clause).toSeq
         val valueClauses = clauses.map { clause =>
-          // Bind the pattern variables to the scrutinee values
-          val bindings: Seq[(Var.Local, Typed[Value])] = scrutinees.zip(clause.patterns).flatMap {
+          // TODO: Is this (matchedBindings) necessary?
+          val matchedBindings: Map[Var.Local, Typed[Value]] = scrutinees.zip(clause.patterns).flatMap {
+            (scrutinee, pattern) => pattern.buildMatchBindings(scrutinee)
+          }.toMap
+          // Bind the pattern variables with scrutinee types
+          val bindings = scrutinees.zip(clause.patterns).flatMap {
             (scrutinee, pattern) => pattern.buildTypeMapping(scrutinee.infer)
           }.map {
-            case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
+            case (variable, ty) => matchedBindings.get(variable) match {
+              case Some(value) => (variable, value)
+              case None => (variable, Typed[Value](Value.variable(variable, ty), ty))
+            }
           }
-          val body = env.withLocals(bindings.toMap) { implicit env =>
-            clause.body.infer match {
+          val body = env.withLocals(bindings.toMap) {
+            implicit env => clause.body.infer match {
               case Value.PrimitiveType(LiteralType.NothingType) => clause.body.partialEval
               case _ => clause.body.eval(evalMode)
             }

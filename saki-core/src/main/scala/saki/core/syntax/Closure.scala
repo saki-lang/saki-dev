@@ -13,7 +13,7 @@ case class ParameterizedClosure(param: Param[Value], env: Environment.Typed[Valu
     val (closureEnv, argValue) = argument match {
       case NeutralValue.Variable(ident, ty) => {
         val variable = Value.variable(ident, ty)
-        (env.add(ident, variable, ty), variable)
+        (env, variable)
       }
       case value: Value => (env, value)
     }
