@@ -9,7 +9,6 @@ pub fn init_reporter() {
         let highlighter: SyntectHighlighter = SakiHighlighter::new().into();
         let handler = miette::MietteHandlerOpts::new()
             .terminal_links(true)
-            .unicode(supports_unicode())
             .context_lines(5)
             .with_syntax_highlighting(highlighter)
             .build();
@@ -42,15 +41,16 @@ impl From<RawError> for PrintableError {
     fn from(err: RawError) -> Self {
         let src = unsafe { CStr::from_ptr(err.src).to_string_lossy().into_owned() };
         let path = unsafe { CStr::from_ptr(err.path).to_string_lossy().into_owned() };
+        let byte_offset = char_to_byte_offset(&src, err.offset as usize).unwrap_or(0);
         Self {
             src: NamedSource::new(path, src),
             title: unsafe { CStr::from_ptr(err.title).to_string_lossy().into_owned() },
-            span: SourceSpan::new(SourceOffset::from(err.offset as usize), err.length as usize),
+            span: SourceSpan::new(SourceOffset::from(byte_offset), err.length as usize),
             message: unsafe { CStr::from_ptr(err.message).to_string_lossy().into_owned() },
         }
     }
 }
 
-fn supports_unicode() -> bool {
-    matches!(term::stdout(), Some(terminal) if terminal.supports_color())
+fn char_to_byte_offset(string: &str, char_offset: usize) -> Option<usize> {
+    string.char_indices().nth(char_offset).map(|(byte_offset, _)| byte_offset)
 }

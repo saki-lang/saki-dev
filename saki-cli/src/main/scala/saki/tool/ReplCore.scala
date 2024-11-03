@@ -86,9 +86,7 @@ private class ReplCore {
               resolveContext += variable
               println(s"  $name = ${term.normalize(environment)} : ${ty.readBack(environment)}\n")
             }
-            case Statement.Expression(expr) => {
-              println(s"  ${evaluate(expr.emit)}\n")
-            }
+            case Statement.Expression(expr) => println(s"  ${evaluate(expr.emit)}\n")
           }
         } catch {
           case error: Error => printError(source, error)
