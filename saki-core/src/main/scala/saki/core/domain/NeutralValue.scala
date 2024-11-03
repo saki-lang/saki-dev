@@ -1,8 +1,7 @@
 package saki.core.domain
 
 import saki.core.context.{Environment, Typed}
-import saki.core.syntax.{buildTypeMapping, invokeWithEnv, getOverload, Clause, Function, Inductive, NaiveDeclaration, NaiveSymbol, Overloaded, OverloadedDeclaration, OverloadedSymbol, Term, Var}
-import saki.core.syntax.given
+import saki.core.syntax.{buildTypeMapping, getOverload, Clause, Function, Inductive, NaiveDeclaration, OverloadedSymbol, Term, Var}
 import saki.error.CoreErrorKind.*
 
 import scala.annotation.targetName
@@ -38,7 +37,7 @@ enum NeutralValue {
           s"Expected argument type: ${paramType.readBack}, but got: ${argType.readBack}"
         }
         // To obtain the concrete return type, feed the concrete argument to the codomain closure
-        codomain.invokeWithEnv(arg.eval)
+        codomain(arg.eval)
       }
 
       case Value.OverloadedPi(states) => {
@@ -60,7 +59,7 @@ enum NeutralValue {
           s"Ambiguous overloading in overloaded Pi type of argument with type: ${argType.readBack}"
         }
         val (_, codomain) = validStates.head
-        codomain.invokeWithEnv(arg.eval)
+        codomain(arg.eval)
       }
 
       case _ => TypeNotMatch.raise {

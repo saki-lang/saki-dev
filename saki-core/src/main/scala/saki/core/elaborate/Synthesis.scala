@@ -2,10 +2,10 @@ package saki.core.elaborate
 
 import saki.core.Param
 import saki.core.context.{Environment, Typed}
-import saki.core.domain.{NeutralValue, Type, Value}
+import saki.core.domain.{Type, Value}
 import saki.core.syntax.{*, given}
-import saki.util.{unreachable, SourceSpan}
 import saki.error.CoreErrorKind.*
+import saki.util.{unreachable, SourceSpan}
 
 import scala.collection.Seq
 import scala.collection.mutable.ArrayBuffer
@@ -91,7 +91,7 @@ object Synthesis:
     case Expr.Apply(fnExpr, argExpr) => {
 
       val (fn, fnType) = fnExpr.synth.unpack
-      val paramIdent = env.uniqueVariable("#")
+      val paramIdent = env.uniqueVariable
 
       fnType match {
 
@@ -102,7 +102,7 @@ object Synthesis:
             if !(paramType <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
               s"Expected argument type: ${paramType.readBack}, found argument $argExpr with type ${argType.readBack}"
             }
-            Synth(Term.Apply(fn, argTerm), codomain.invokeWithEnv(argTerm.eval))
+            Synth(Term.Apply(fn, argTerm), codomain(argTerm.eval))
           }
         }
 

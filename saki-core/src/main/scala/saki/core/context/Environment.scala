@@ -129,7 +129,7 @@ case class TypedEnvironment[T <: Entity] private (
   }
 
   def withNewUnique[R](ty: T)(action: (TypedEnvironment[T], Var.Local, T) => R): R = {
-    action(this, this.uniqueVariable("$"), ty)
+    action(this, this.uniqueVariable, ty)
   }
 }
 

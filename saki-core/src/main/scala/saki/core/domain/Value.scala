@@ -3,7 +3,7 @@ package saki.core.domain
 import saki.core.{RuntimeEntity, RuntimeEntityFactory}
 import saki.core.context.{Environment, Typed}
 import saki.core.syntax.*
-import saki.core.syntax.invokeWithEnv
+import saki.core.syntax
 import saki.error.CoreErrorKind.*
 
 import scala.annotation.targetName
@@ -70,14 +70,14 @@ enum Value extends RuntimeEntity[Type] {
 
     case Lambda(paramType, body) => {
       val bodyType = env.withNewUnique(paramType) {
-        (env, ident, ty) => body(NeutralValue.Variable(ident, ty)).infer(env)
+        (env, ident, ty) => body(Value.variable(ident, ty)).infer(env)
       }
       Pi(paramType, _ => bodyType)
     }
 
     case OverloadedLambda(states) => Value.OverloadedPi(states.map { (paramType, body) =>
       val bodyType = env.withNewUnique(paramType) {
-        (env, ident, ty) => body(NeutralValue.Variable(ident, ty)).infer(env)
+        (env, ident, ty) => body(Value.variable(ident, ty)).infer(env)
       }
       (paramType, _ => bodyType): (Type, CodomainClosure)
     })
@@ -139,24 +139,24 @@ enum Value extends RuntimeEntity[Type] {
     case Neutral(neutral) => neutral.containsMatching
     case Pi(paramType, closure) => {
       env.withNewUnique(paramType) { (env, ident, ty) =>
-        closure(NeutralValue.Variable(ident, ty)).containsMatching(env)
+        closure(Value.variable(ident, ty)).containsMatching(env)
       }
     }
     case Sigma(paramType, closure) => {
       env.withNewUnique(paramType) { (env, ident, ty) =>
-        closure(NeutralValue.Variable(ident, ty)).containsMatching(env)
+        closure(Value.variable(ident, ty)).containsMatching(env)
       }
     }
     case Lambda(paramType, closure) => {
       env.withNewUnique(paramType) { (env, ident, ty) =>
-        closure(NeutralValue.Variable(ident, ty)).containsMatching(env)
+        closure(Value.variable(ident, ty)).containsMatching(env)
       }
     }
     case overloaded: OverloadedLambdaLike[?] => {
       // TODO: Structures like this should be refactored to put the variable in the environment
       overloaded.states.forall { (paramType, closure) =>
         env.withNewUnique(paramType) { (env, ident, ty) =>
-          closure(NeutralValue.Variable(ident, ty)).containsMatching(env)
+          closure(Value.variable(ident, ty)).containsMatching(env)
         }
       }
     }
@@ -172,17 +172,17 @@ enum Value extends RuntimeEntity[Type] {
     case Neutral(neutral) => neutral.isFinal(variables)
     case Pi(paramType, closure) => {
       env.withNewUnique(paramType) { (env, ident, ty) =>
-        closure(NeutralValue.Variable(ident, ty)).isFinal(variables + ident)(env)
+        closure(Value.variable(ident, ty)).isFinal(variables + ident)(env)
       }
     }
     case Sigma(paramType, closure) => {
       env.withNewUnique(paramType) { (env, ident, ty) =>
-        closure(NeutralValue.Variable(ident, ty)).isFinal(variables + ident)(env)
+        closure(Value.variable(ident, ty)).isFinal(variables + ident)(env)
       }
     }
     case Lambda(paramType, closure) => {
       env.withNewUnique(paramType) { (env, ident, ty) =>
-        closure(NeutralValue.Variable(ident, ty)).isFinal(variables + ident)(env)
+        closure(Value.variable(ident, ty)).isFinal(variables + ident)(env)
       }
     }
     case overloaded: OverloadedLambdaLike[?] => overloaded.isStatesFinal(variables)
@@ -209,7 +209,7 @@ enum Value extends RuntimeEntity[Type] {
       (paramType1 unify paramType2) && env.withNewUnique(paramType1) {
         implicit (env, ident, ty) => {
           given Environment.Typed[Value] = env
-          val neutral: NeutralValue.Variable = NeutralValue.Variable(ident, ty)
+          val neutral = Value.variable(ident, ty)
           closure1(neutral) unify closure2(neutral)
         }
       }
@@ -219,7 +219,7 @@ enum Value extends RuntimeEntity[Type] {
       (paramType1 unify paramType2) && env.withNewUnique(paramType1) {
         implicit (env, ident, ty) => {
           given Environment.Typed[Value] = env
-          val neutral: NeutralValue.Variable = NeutralValue.Variable(ident, ty)
+          val neutral = Value.variable(ident, ty)
           closure1(neutral) unify closure2(neutral)
         }
       }
@@ -229,7 +229,7 @@ enum Value extends RuntimeEntity[Type] {
       (paramType1 unify paramType2) && env.withNewUnique(paramType1) {
         implicit (env, ident, ty) => {
           given Environment.Typed[Value] = env
-          val neutral: NeutralValue.Variable = NeutralValue.Variable(ident, ty)
+          val neutral = Value.variable(ident, ty)
           body1(neutral) unify body2(neutral)
         }
       }
@@ -281,7 +281,7 @@ enum Value extends RuntimeEntity[Type] {
       paramType2 <:< paramType1 && env.withNewUnique(paramType2 <:> paramType1) {
         implicit (env, ident, ty) => {
           given Environment.Typed[Value] = env
-          val neutral: NeutralValue.Variable = NeutralValue.Variable(ident, ty)
+          val neutral = Value.variable(ident, ty)
           closure1(neutral) <:< closure2(neutral)
         }
       }
@@ -292,7 +292,7 @@ enum Value extends RuntimeEntity[Type] {
       paramType1 <:< paramType2 && env.withNewUnique(paramType1 <:> paramType2) {
         implicit (env, ident, ty) => {
           given Environment.Typed[Value] = env
-          val neutral: NeutralValue.Variable = NeutralValue.Variable(ident, ty)
+          val neutral = Value.variable(ident, ty)
           closure1(neutral) <:< closure2(neutral)
         }
       }
@@ -303,7 +303,7 @@ enum Value extends RuntimeEntity[Type] {
       paramType1 <:< paramType2 && env.withNewUnique(paramType1 <:> paramType2) {
         implicit (env, ident, ty) => {
           given Environment.Typed[Value] = env
-          val neutral: NeutralValue.Variable = NeutralValue.Variable(ident, ty)
+          val neutral = Value.variable(ident, ty)
           body1(neutral) <:< body2(neutral)
         }
       }
@@ -363,10 +363,10 @@ enum Value extends RuntimeEntity[Type] {
     case (Value.Pi(paramType1, closure1), Value.Pi(paramType2, closure2)) => {
       val paramLub = paramType2 <:> paramType1 // Contravariant parameter type
       val return1 = env.withNewUnique(paramType1) {
-        implicit (env, ident, ty) => closure1(NeutralValue.Variable(ident, ty))
+        implicit (env, ident, ty) => closure1(Value.variable(ident, ty))
       }
       val return2 = env.withNewUnique(paramType2) {
-        implicit (env, ident, ty) => closure2(NeutralValue.Variable(ident, ty))
+        implicit (env, ident, ty) => closure2(Value.variable(ident, ty))
       }
       Value.Pi(paramLub, _ => return1 <:> return2) // Covariant return type
     }
@@ -375,10 +375,10 @@ enum Value extends RuntimeEntity[Type] {
     case (Value.Sigma(paramType1, closure1), Value.Sigma(paramType2, closure2)) => {
       val paramLub = paramType1 <:> paramType2 // Covariant parameter
       val return1 = env.withNewUnique(paramType1) {
-        implicit (env, ident, ty) => closure1(NeutralValue.Variable(ident, ty))
+        implicit (env, ident, ty) => closure1(Value.variable(ident, ty))
       }
       val return2 = env.withNewUnique(paramType2) {
-        implicit (env, ident, ty) => closure2(NeutralValue.Variable(ident, ty))
+        implicit (env, ident, ty) => closure2(Value.variable(ident, ty))
       }
       Value.Sigma(paramLub, _ => return1 <:> return2)
     }
@@ -387,10 +387,10 @@ enum Value extends RuntimeEntity[Type] {
     case (Value.Lambda(paramType1, body1), Value.Lambda(paramType2, body2)) => {
       val paramLub = paramType1 <:> paramType2 // Parameters must match
       val return1 = env.withNewUnique(paramType1) {
-        implicit (env, ident, ty) => body1(NeutralValue.Variable(ident, ty))
+        implicit (env, ident, ty) => body1(Value.variable(ident, ty))
       }
       val return2 = env.withNewUnique(paramType2) {
-        implicit (env, ident, ty) => body2(NeutralValue.Variable(ident, ty))
+        implicit (env, ident, ty) => body2(Value.variable(ident, ty))
       }
       Value.Lambda(paramLub, _ => return1 <:> return2)
     }
@@ -484,10 +484,9 @@ object Value extends RuntimeEntityFactory[Value] {
   ): (Param[Term], Term) = {
     val paramIdent = env.uniqueVariable
     val paramVariable = Value.variable(paramIdent, paramType)
-    val paramNeutral: NeutralValue.Variable = NeutralValue.Variable(paramIdent, paramType)
     val paramTypeTerm = paramType.readBack
     env.withLocal(paramIdent, paramVariable, paramType) { implicit env =>
-      val term = closure(paramNeutral).readBack(env)
+      val term = closure(paramVariable).readBack(env)
       (Param(paramIdent, paramTypeTerm), term)
     }
   }
@@ -510,10 +509,9 @@ private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] 
     states.map { (paramType, closure) =>
       val paramIdent = env.uniqueVariable
       val paramVariable = Value.variable(paramIdent, paramType)
-      val paramNeutral: NeutralValue.Variable = NeutralValue.Variable(paramIdent, paramType)
       val paramTypeTerm = paramType.readBack
       env.withLocal(paramIdent, paramVariable, paramType) { implicit env =>
-        val body = closure(paramNeutral).readBack(env)
+        val body = closure(paramVariable).readBack(env)
         (Param(paramIdent, paramTypeTerm), body)
       }
     }
@@ -524,7 +522,7 @@ private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] 
       env.withNewUnique(paramType) {
         implicit (env, ident, ty) => {
           given Environment.Typed[Value] = env
-          closure(NeutralValue.Variable(ident, ty)).isFinal(variables + ident)
+          closure(Value.variable(ident, ty)).isFinal(variables + ident)
         }
       }
     }
@@ -547,14 +545,14 @@ private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] 
     if candidateStates.size == 1 then {
       // If there is only one state that matches the argument type, evaluate it
       val (_, closure) = candidateStates.head
-      closure.invokeWithEnv(arg)
+      closure(arg)
     } else {
       // If there are multiple states that match the argument type, evaluate all of them
       // Evaluate each state and merge the results
       val newStates = candidateStates.flatMap { (_, closure) =>
         // Since the parameter type is checked to be a subtype of the argument type,
         // we don't need to check the type of the argument value again
-        unwrapStates(closure.invokeWithEnv(arg))
+        unwrapStates(closure(arg))
       }
       // Merge the new states by constructing a new overloaded type
       constructor(newStates)

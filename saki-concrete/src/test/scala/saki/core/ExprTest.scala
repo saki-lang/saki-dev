@@ -61,9 +61,9 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
       Value.Lambda(
         Value.Universe, A => Value.Lambda(
           Value.Universe, B => Value.Lambda(
-            A.asInstanceOf, t => Value.Lambda(
-              Value.Pi(A.asInstanceOf, _ => B.asInstanceOf),
-              f => (f.asInstanceOf)(t.asInstanceOf)
+            A, t => Value.Lambda(
+              Value.Pi(A, _ => B),
+              f => (f)(t)
             )
           )
         )
@@ -73,9 +73,9 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
       Value.Pi(
         Value.Universe, A => Value.Pi(
           Value.Universe, B => Value.Pi(
-            A.asInstanceOf, _ => Value.Pi(
-              Value.Pi(A.asInstanceOf, _ => B.asInstanceOf),
-              _ => B.asInstanceOf
+            A, _ => Value.Pi(
+              Value.Pi(A, _ => B),
+              _ => B
             )
           )
         )
@@ -89,9 +89,9 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
       Value.Lambda(
         Value.Universe, A => Value.Lambda(
           Value.Universe, B => Value.Lambda(
-            A.asInstanceOf, t => Value.Lambda(
-              Value.Pi(A.asInstanceOf, _ => B.asInstanceOf),
-              f => (f.asInstanceOf)(t.asInstanceOf)
+            A, t => Value.Lambda(
+              Value.Pi(A, _ => B),
+              f => (f)(t)
             )
           )
         )
@@ -101,9 +101,9 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
       Value.Pi(
         Value.Universe, A => Value.Pi(
           Value.Universe, B => Value.Pi(
-            A.asInstanceOf, _ => Value.Pi(
-              Value.Pi(A.asInstanceOf, _ => B.asInstanceOf),
-              _ => B.asInstanceOf
+            A, _ => Value.Pi(
+              Value.Pi(A, _ => B),
+              _ => B
             )
           )
         )

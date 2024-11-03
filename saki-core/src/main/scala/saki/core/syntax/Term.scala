@@ -23,7 +23,7 @@ enum Term extends RuntimeEntity[Type] {
 
   case OverloadInvoke(
     fn: Var.Defined[Term, Overloaded], args: Seq[Term]
-  ) extends Term with OverloadInvokeExt
+  ) extends Term
 
   case InductiveType(inductive: Var.Defined[Term, Inductive], args: Seq[Term])
 
@@ -58,6 +58,7 @@ enum Term extends RuntimeEntity[Type] {
    */
   override def infer(implicit env: Environment.Typed[Value]): Value = this.eval.infer
 
+  // For non-inline functions
   def partialEval(implicit env: Environment.Typed[Value]): Value = this.eval(evalMode = EvalMode.Partial)
 
   def eval(implicit env: Environment.Typed[Value]): Value = this.eval(evalMode = EvalMode.Normal)
@@ -91,7 +92,7 @@ enum Term extends RuntimeEntity[Type] {
         case function: Function[Term] => function
         case overloaded: Overloaded[Term] => fnRef.definition.toOption match {
           case Some(function) => function
-          case None => Term.OverloadInvoke(overloaded.ident, argTerms).getOverload.asInstanceOf[Function[Term]]
+          case None => overloaded.getOverload(argTerms).asInstanceOf[Function[Term]]
         }
         case _: Declaration[Term, Function] @unchecked => {
           // If the function is a pre-declared function, keep it as a neutral value
@@ -155,8 +156,8 @@ enum Term extends RuntimeEntity[Type] {
       }
     }
 
-    case invoke: OverloadInvoke => {
-      Term.functionInvoke(invoke.getOverload.ident.asInstanceOf, invoke.args).eval(evalMode)
+    case OverloadInvoke(fn, args) => {
+      Term.functionInvoke(fn.definition.get.getOverload(args).asInstanceOf, args).eval(evalMode)
     }
 
     case InductiveType(indRef, argTerms) => {
@@ -199,7 +200,7 @@ enum Term extends RuntimeEntity[Type] {
         if !(paramType <:< arg.infer) then TypeNotMatch.raise {
           s"Expected argument type: ${paramType.readBack}, but got: ${arg.infer.readBack}"
         }
-        closure.invokeWithEnv(arg.eval(evalMode))
+        closure(arg.eval(evalMode))
       }
 
       case overloaded: Value.OverloadedLambda => {
@@ -567,69 +568,6 @@ private sealed trait OverloadedTermExt[S <: Term & OverloadedTermExt[S]] {
       param -> term
     }.toMap[Param[Term], Term]
     this.copy(mergedStates)
-  }
-}
-
-private sealed trait OverloadInvokeExt {
-  def fn: Var.Defined[Term, Overloaded]
-  def args: Seq[Term]
-
-  /**
-   * Get the most suitable state of the overloaded function that matches the argument types.
-   * @param env The environment
-   * @return The most suitable eigenstate of the overloaded function body
-   */
-  def getOverload(implicit env: Environment.Typed[Value]): NaiveSymbol[Term] = {
-    
-    val fn = env.getSymbol(this.fn).get.asInstanceOf[OverloadedSymbol[Term, ?, ? <: NaiveSymbol[Term]]]
-
-    // Filter out the candidate overloads that fit the argument types
-    val candidateOverloads = fn.overloads.filter { overload =>
-      val params = overload.params
-      if params.size != this.args.size then false
-      else params.zip(this.args).forall {
-        (param, arg) => param.`type`.eval <:< arg.infer
-      }
-    }
-
-    // If no candidate overload fits the argument types, throw an error
-    if candidateOverloads.isEmpty then {
-      NoSuchOverloading.raise {
-        s"No overloading of function ${fn.ident.name} found for arguments of types: " +
-        this.args.map(_.infer.readBack).mkString(", ")
-      }
-    }
-
-    // Otherwise, find the most suitable one
-    // The most suitable one is the one that has the most specific parameter types
-
-    // Iterate through each parameter position, eliminating branches that are not
-    // the most specific at that position
-    var remainingOverloads = candidateOverloads
-    val numParams = remainingOverloads.head.params.length
-
-    for (i <- 0 until numParams if remainingOverloads.size > 1) {
-      // Cache the current parameter type at position i for each overload
-      val currentOtherParamTypes: Seq[Type] = remainingOverloads.map(_.params(i).`type`.eval)
-      // Filter branches to keep those with the most specific parameter type at position i
-      remainingOverloads = remainingOverloads.filter { overload =>
-        val currentSelfParamType = overload.params(i).`type`.eval
-        // Check whether the current parameter type is more specific than or equal to all other parameter types
-        // at this position across the remaining branches.
-        currentOtherParamTypes.forall { otherParamType =>
-          currentSelfParamType <:< otherParamType || !(otherParamType <:< currentSelfParamType)
-        }
-      }
-    }
-
-    if (remainingOverloads.size != 1) {
-      OverloadingAmbiguous.raise {
-        s"Ambiguous overloading for function ${fn.ident.name} with arguments of types: " +
-        this.args.map(_.infer.readBack).mkString(", ")
-      }
-    }
-
-    remainingOverloads.head
   }
 }
 
