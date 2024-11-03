@@ -88,61 +88,96 @@ object Synthesis:
       }
     }
 
-    case Expr.Apply(fnExpr, argExpr) => {
+    case Expr.Apply(fnExpr, argExpr) => fnExpr match {
 
-      val (fn, fnType) = fnExpr.synth.unpack
-      val paramIdent = env.uniqueVariable
-
-      fnType match {
-
-        case Value.Pi(paramType, codomain) => {
-          val param = Value.variable(paramIdent, paramType)
-          env.withLocal(paramIdent, param, paramType) { implicit env =>
-            val (argTerm, argType) = argExpr.value.synth(env).unpack
-            if !(paramType <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
-              s"Expected argument type: ${paramType.readBack}, found argument $argExpr with type ${argType.readBack}"
-            }
-            Synth(Term.Apply(fn, argTerm), codomain(argTerm.eval))
+      // A workaround for the case when the function is a lambda (normally from a `let` statement).
+      // If we don't do this, the lambda will be synthesized without the argument in the environment.
+      // This may cause a type unification failure when a dependent type in companion with a let-bound variable.
+      // For example:
+      // ```
+      // def induction(
+      //     P: ℕ -> 'Type, base: P(ℕ::Zero),
+      //     step: ∀(n: ℕ) -> P(n) -> P(ℕ::Succ(n)), nat: ℕ,
+      // ): P(nat) = ...
+      //
+      // eval {
+      //     let p = (n: ℕ) => ...
+      //     induction(p, ..., ...)  // <--- here
+      // }
+      // ```
+      // will cause:
+      //  "Expected argument type: (p ℕ::Zero), found argument ... with type <some-type>"
+      // but (p ℕ::Zero) is actually identical to <some-type>.
+      case Expr.Lambda(paramExpr, bodyExpr, returnTypeExpr) => {
+        val (argTerm, argType) = argExpr.value.synth(env).unpack
+        lazy val argValue = argTerm.eval
+        val paramIdent = paramExpr.ident
+        val paramType = paramExpr.`type`.synth(env).term.eval
+        if !(paramType <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
+          s"Expected argument type: $paramType, found: $argType"
+        }
+        val (bodyTerm, bodyType) = env.withLocal(paramIdent, argValue, paramType) {
+          implicit env => bodyExpr.synth(env)
+        }.unpack
+        returnTypeExpr.foreach { returnTypeExpr =>
+          val returnType = returnTypeExpr.synth(env).term.eval
+          if !(bodyType <:< returnType) then TypeNotMatch.raise(returnTypeExpr.span) {
+            s"Expected return type: ${returnType.readBack}, found: ${bodyType.readBack}"
           }
         }
+        Synth(bodyTerm, bodyType)
+      }
 
-        case overloaded: Value.OverloadedPi => {
+      // Normal cases, synthesizing the function without the argument in the environment
+      case _ => {
+        lazy val (argTerm, argType) = argExpr.value.synth(env).unpack
+        lazy val argValue = argTerm.eval
+        val (fn, fnType) = fnExpr.synth.unpack
+        val paramIdent = env.uniqueVariable
 
-          val (argTerm, argType) = argExpr.value.synth(env).unpack
-          val eigenState = overloaded.applyArgument(
-            argTerm.eval, argType, Value.OverloadedPi.apply,
-            unwrapStates = {
-              case Value.OverloadedPi(states) => states
-              case value => TypeNotMatch.raise {
-                s"Expected an overloaded pi, but got: ${value.readBack}"
+        fnType match {
+
+          case Value.Pi(paramType, codomain) => {
+            env.withLocal(paramIdent, argValue, paramType) { implicit env =>
+              if !(paramType <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
+                s"Expected argument type: ${paramType.readBack}, found argument $argExpr with type ${argType.readBack}"
               }
+              Synth(Term.Apply(fn, argTerm), codomain(argValue))
             }
-          )
+          }
 
-          val param = Value.variable(paramIdent, argType)
-          env.withLocal(paramIdent, param, argType) { implicit env =>
+          case overloaded: Value.OverloadedPi => {
+
+            val eigenState = overloaded.applyArgument(
+              argValue, argType, Value.OverloadedPi.apply,
+              unwrapStates = {
+                case Value.OverloadedPi(states) => states
+                case value => TypeNotMatch.raise {
+                  s"Expected an overloaded pi, but got: ${value.readBack}"
+                }
+              }
+            )
             Synth(Term.Apply(fn, argTerm), eigenState)
           }
-        }
 
-        case Value.Universe => fn.normalize match {
-          case Term.Pi(piParam, codomain) => {
-            val (argTerm, argType) = argExpr.value.synth(env).normalize.unpack
-            if !(piParam.`type`.eval <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
-              s"Expected type: ${piParam.`type`}, found: $argType"
+          case Value.Universe => fn.normalize match {
+            case Term.Pi(piParam, codomain) => {
+              if !(piParam.`type`.eval <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
+                s"Expected type: ${piParam.`type`}, found: $argType"
+              }
+              val codomainValue = env.withLocal(piParam.ident, argValue, argType) {
+                implicit env => codomain.eval(env)
+              }
+              Synth(codomainValue.readBack, Value.Universe)
             }
-            val codomainValue = env.withLocal(piParam.ident, argTerm.eval, argType) {
-              implicit env => codomain.eval(env)
+            case _ => TypeNotMatch.raise(fnExpr.span) {
+              s"Expected a function, found: $fn"
             }
-            Synth(codomainValue.readBack, Value.Universe)
           }
-          case _ => TypeNotMatch.raise(fnExpr.span) {
+
+          case fn => TypeNotMatch.raise(fnExpr.span) {
             s"Expected a function, found: $fn"
           }
-        }
-
-        case fn => TypeNotMatch.raise(fnExpr.span) {
-          s"Expected a function, found: $fn"
         }
       }
     }

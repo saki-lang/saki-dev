@@ -30,11 +30,11 @@ def (+)(a b : ℕ): ℕ = match a {
 def induction(
     P: ℕ -> 'Type,
     base: P(ℕ::Zero),
-    induce: ∀(n: ℕ) -> P(n) -> P(n.succ),
+    step: ∀(n: ℕ) -> P(n) -> P(n.succ),
     nat: ℕ,
 ): P(nat) = match nat {
     case ℕ::Zero => base
-    case ℕ::Succ(n') => induce(n', P.induction(base, induce, n'))
+    case ℕ::Succ(n') => step(n', P.induction(base, step, n'))
 }
 
 def inductionReduce(
