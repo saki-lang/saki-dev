@@ -203,7 +203,7 @@ Comment
     ;
 
 // NewLine
-NL: '\n' | '\r' '\n'?;
+NL: '\n' | '\r' '\n'? | ';';
 
 /* Fragments */
 
