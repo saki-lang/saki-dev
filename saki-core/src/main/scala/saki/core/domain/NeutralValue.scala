@@ -11,6 +11,8 @@ enum NeutralValue {
 
   case Variable(ident: Var.Local, `type`: Type)
 
+  case TypeBarrier(value: Value, `type`: Type)
+
   case Apply(fn: NeutralValue, arg: Value)
 
   case Projection(record: Value, field: String)
@@ -29,6 +31,8 @@ enum NeutralValue {
   def infer(implicit env: Environment.Typed[Value]): Type = this match {
 
     case Variable(_, ty) => ty
+
+    case TypeBarrier(_, ty) => ty
 
     case Apply(fn, arg) => fn.infer match {
       case Value.Pi(paramType, codomain) => {
@@ -119,6 +123,7 @@ enum NeutralValue {
   def readBack(implicit env: Environment.Typed[Value]): Term = this match {
     case Variable(ident, _) => Term.Variable(ident)
     case Apply(fn, arg) => Term.Apply(fn.readBack, arg.readBack)
+    case TypeBarrier(value, ty) => Term.TypeBarrier(value.readBack, ty.readBack)
     case Projection(record, field) => Term.Projection(record.readBack, field)
     case FunctionInvoke(fnRef, args) => Term.FunctionInvoke(fnRef, args.map(_.readBack))
     case Match(scrutinees, clauses) => {
@@ -141,6 +146,7 @@ enum NeutralValue {
 
   def containsMatching(implicit env: Environment.Typed[Value]): Boolean = this match {
     case Variable(_, _) => false
+    case TypeBarrier(value, _) => value.containsMatching
     case Apply(fn, arg) => fn.containsMatching || arg.containsMatching
     case Projection(record, _) => record.containsMatching
     case FunctionInvoke(_, args) => args.exists(_.containsMatching)
@@ -151,6 +157,7 @@ enum NeutralValue {
     implicit env: Environment.Typed[Value]
   ): Boolean = this match {
     case Variable(ident, _) => variables.contains(ident)
+    case TypeBarrier(value, _) => value.isFinal(variables)
     case Apply(fn, arg) => fn.isFinal(variables) && arg.isFinal(variables)
     case Projection(record, _) => record.isFinal(variables)
     case FunctionInvoke(_, args) => args.forall(_.isFinal(variables))
@@ -161,9 +168,7 @@ enum NeutralValue {
     }
   }
 
-  infix def unify(that: NeutralValue)(
-    implicit env: Environment.Typed[Value]
-  ): Boolean = (this, that) match {
+  infix def unify(that: NeutralValue)(implicit env: Environment.Typed[Value]): Boolean = (this, that) match {
 
     case (lhs, rhs) if lhs == rhs => true
 

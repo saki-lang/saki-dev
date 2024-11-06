@@ -21,13 +21,15 @@ expr
     |   func=expr '[' NL* argList NL* ']'                                                               # exprImplicitCall
     |   subject=expr NL* '.' member=Identifier ('[' implicitArgList=argList ']')?                       # exprElimination
     |   inductive=expr '::' constructor=Identifier                                                      # exprConstructor
+    |   '^' expr                                                                                        # exprTypeOf
+    |   '(' '|'? types+=expr ('|' types+=expr)+ ')'                                                     # exprUnionType
     |   lhs=expr rhs=atom                                                                               # exprSpine
     |   lhs=expr op=OptSymbol rhs=expr                                                                  # exprSpineInfixOp
     |   lhs=expr op=OptSymbol                                                                           # exprSpinePostfixOp
     |   op=OptSymbol rhs=expr                                                                           # exprSpinePrefixOp
     |   '(' value=blockExpr ')'                                                                         # exprParen
     |   '\'(' elements+=expr ',' NL* elements+=expr ')'                                                 # exprTuple
-    |   '^(' types+=expr ',' NL* types+=expr ')'                                                        # exprTupleType
+    |   '(' types+=expr ',' NL* types+=expr ')'                                                         # exprTupleType
     |   '(' NL* lambdaParamList=paramList NL* ')' (':' returnType=expr)? '=>' body=blockExpr            # exprLambda
     |   func=expr ('|' lambdaParamList=untypedParamList '|' (':' returnType=expr)?)? body=block         # exprCallWithLambda
     // Control

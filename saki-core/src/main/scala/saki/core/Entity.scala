@@ -23,6 +23,8 @@ trait EntityFactory[T <: Entity, D <: Entity] {
 
   def variable(ident: Var.Local, ty: T): T
 
+  def typeBarrier(value: T, ty: T): T
+
   def inductiveType(inductive: Var.Defined[D, Inductive], args: Seq[T]): T
 
   def functionInvoke(function: Var.Defined[D, Function], args: Seq[T]): T

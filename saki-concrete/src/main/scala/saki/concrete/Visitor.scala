@@ -194,6 +194,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       case ctx: ExprCallContext => visitExprCall(ctx)
       case ctx: ExprImplicitCallContext => visitExprImplicitCall(ctx)
       case ctx: ExprParenContext => visitExprParen(ctx)
+      case ctx: ExprUnionTypeContext => visitExprUnionType(ctx)
       case ctx: ExprTupleTypeContext => visitExprTupleType(ctx)
       case ctx: ExprTupleContext => visitExprTuple(ctx)
       case ctx: ExprConstructorContext => visitExprConstructor(ctx)
@@ -244,6 +245,10 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
   }
 
   override def visitExprParen(ctx: ExprParenContext): ExprTree = ctx.value.visit
+
+  override def visitExprUnionType(ctx: ExprUnionTypeContext): ExprTree = {
+    ExprTree.Union(ctx.types.asScala.map(_.visit))(ctx)
+  }
 
   override def visitExprTuple(ctx: ExprTupleContext): ExprTree = {
     UnsupportedFeature.raise(ctx.span) { "Tuple is not supported yet" }
@@ -374,11 +379,11 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       val body = caseCtx.body.visit
       caseCtx.clauses.asScala.map {
         case clause: MatchClauseSingleContext => {
-          val pattern = clause.pattern.visit.get
-          if clause.`type` != null then UnsupportedFeature.raise(clause.span) {
-            "Type annotation in match clause is not supported yet"
+          val pattern: Pattern[ExprTree] = clause.pattern.visit.get
+          val typedPattern = if clause.`type` == null then pattern else {
+            Pattern.Typed(pattern, clause.`type`.visit)(ctx.span)
           }
-          Clause(Seq(pattern), body)
+          Clause(Seq(typedPattern), body)
         }
         case clause: MatchClauseTupleContext => {
           val patterns = clause.patternList.patterns.asScala.map(_.visit.get)

@@ -171,10 +171,11 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
       case Pattern.Bind(binding) => Map(binding -> Typed(value, ty))
 
       case Pattern.Typed(pattern, expectedType) => {
-        if !(expectedType.eval <:< ty) then TypeNotMatch.raise {
-          s"Expected type ${expectedType}, but got: ${ty.readBack}"
+        val expectedTypeValue = expectedType.eval
+        if value.isFinal() && !(expectedTypeValue <:< ty) then TypeNotMatch.raise {
+          s"Expected type ${expectedTypeValue.readBack}, but got: ${ty.readBack}"
         }
-        pattern.buildMatchBindings(value)
+        pattern.buildMatchBindings(value, Some(expectedTypeValue))
       }
 
       case _ if value.isNeutral => Map.empty
@@ -247,6 +248,16 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
       }
       
       case Pattern.Bind(binding) => Some(IotaReduction.Matched(Map(binding -> value)))
+
+      case Pattern.Typed(pattern, ty) => {
+        val expectedType: Value = ty.eval
+        val valueType: Value = value.infer
+        if value.isFinal() && expectedType <:< valueType then {
+          pattern.iotaReduce(value)
+        } else if valueType <:< expectedType then {
+          Some(IotaReduction.PartialMatched)
+        } else None
+      }
 
       case _ if value.isNeutral => Some(IotaReduction.PartialMatched)
 

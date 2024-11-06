@@ -209,13 +209,32 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
   test("overloaded 2") {
     val code = {
       """
-        def concat(a b: Int): Int = a * 10 + b
+        def ceilDec(x: Int): Int = if x == 0 then 1 else 10 * ceilDec(x / 10)
+        def concat(a: Int, b: Int): Int = a * ceilDec(b) + b
         def concat(a b: String): String = a ++ b
       """
     }
     val module = compileModule(code)
-    module.eval("concat(1, 2)") should be (module.eval("12"))
+    module.eval("concat(123, 456)") should be (module.eval("123456"))
     module.eval("concat(\"It's \", \"mygo!!!!!\")") should be (module.eval("\"It's mygo!!!!!\""))
+  }
+
+  test("sum type") {
+    val code = {
+      """
+        def describeValue(value: (Bool | ℤ | String)): String = match value {
+            case true => "It's true!"
+            case false => "It's false!"
+            case n: ℤ => "It's an integer: " ++ n.toString ++ "!"
+            case s: String => "It's " ++ s ++ "!!!!!"
+        }
+      """
+    }
+    val module = compileModule(code)
+    module.eval("describeValue(true)") should be (module.eval("\"It's true!\""))
+    module.eval("describeValue(false)") should be (module.eval("\"It's false!\""))
+    module.eval("describeValue(114)") should be (module.eval("\"It's an integer: 114!\""))
+    module.eval("describeValue(\"mygo\")") should be (module.eval("\"It's mygo!!!!!\""))
   }
 
   test("mutual recursive") {

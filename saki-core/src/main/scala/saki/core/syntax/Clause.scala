@@ -91,6 +91,17 @@ extension (clauses: Seq[Clause[Term]]) {
               case Some(value) => (variable, value)
               case None => (variable, Typed[Value](Value.variable(variable, ty), ty))
             }
+          }.map {
+            case (variable, Typed(value, expectedType)) => {
+              val valueType = value.infer
+              // If the expected type is a subtype of the value type but not vice versa,
+              // then a type override is needed.
+              if !(expectedType <:< valueType) && (valueType <:< expectedType) then {
+                (variable, Typed[Value](Value.typeBarrier(value, expectedType), expectedType))
+              } else {
+                (variable, Typed[Value](value, expectedType))
+              }
+            }
           }
           val body = env.withLocals(bindings.toMap) {
             implicit env => clause.body.eval(evalMode)

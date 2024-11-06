@@ -21,6 +21,10 @@ enum Value extends RuntimeEntity[Type] {
 
   case Neutral(value: NeutralValue)
 
+  case Union(types: Set[Type])
+
+  case Intersection(types: Set[Type])
+
   case Pi(paramType: Type, closure: CodomainClosure)
 
   case OverloadedPi(
@@ -34,6 +38,8 @@ enum Value extends RuntimeEntity[Type] {
   case OverloadedLambda(
     states: Map[Type, CodomainClosure]
   ) extends Value with OverloadedLambdaLike[OverloadedLambda]
+
+  case Pair(first: Value, second: Value)
 
   case Record(fields: Map[String, Value])
 
@@ -62,6 +68,10 @@ enum Value extends RuntimeEntity[Type] {
 
     case Neutral(neutral) => neutral.infer
 
+    case Union(types) => types.map(_.infer).reduce(_ <:> _)
+
+    case Intersection(_) => ??? // TODO: find the greatest lower bound
+
     case Pi(_, _) => Universe
 
     case OverloadedPi(_) => Universe
@@ -81,6 +91,7 @@ enum Value extends RuntimeEntity[Type] {
       }
       (paramType, _ => bodyType): (Type, CodomainClosure)
     })
+    case Pair(first, second) => Sigma(first.infer, _ => second.infer)
     case Record(fields) => RecordType(fields.map((name, value) => (name, value.infer)))
     case RecordType(_) => Universe
     case InductiveType(_, _) => Universe
@@ -102,6 +113,10 @@ enum Value extends RuntimeEntity[Type] {
 
     case Neutral(value) => value.readBack
 
+    case Union(types) => Term.Union(types.map(_.readBack))
+
+    case Intersection(types) => Term.Intersection(types.map(_.readBack))
+
     case Pi(paramType, codomainClosure) => {
       val (param, codomain) = Value.readBackClosure(paramType, codomainClosure)
       Term.Pi(param, codomain)
@@ -121,6 +136,8 @@ enum Value extends RuntimeEntity[Type] {
 
     case lambda: OverloadedLambda => Term.OverloadedLambda(lambda.readBackStates)
 
+    case Pair(first, second) => Term.Pair(first.readBack, second.readBack)
+
     case Record(fields) => Term.Record(fields.map((name, value) => (name, value.readBack)))
 
     case RecordType(fields) => Term.RecordType(fields.map((name, ty) => (name, ty.readBack)))
@@ -137,6 +154,8 @@ enum Value extends RuntimeEntity[Type] {
   def containsMatching(implicit env: Environment.Typed[Value]): Boolean = this match {
     case Universe | Primitive(_) | PrimitiveType(_) => false
     case Neutral(neutral) => neutral.containsMatching
+    case Union(types) => types.exists(_.containsMatching)
+    case Intersection(types) => types.exists(_.containsMatching)
     case Pi(paramType, closure) => {
       env.withNewUnique(paramType) { (env, ident, ty) =>
         closure(Value.variable(ident, ty)).containsMatching(env)
@@ -160,6 +179,7 @@ enum Value extends RuntimeEntity[Type] {
         }
       }
     }
+    case Pair(first, second) => first.containsMatching || second.containsMatching
     case Record(fields) => fields.valuesIterator.exists(_.containsMatching)
     case RecordType(fields) => fields.valuesIterator.exists(_.containsMatching)
     case InductiveType(_, args) => args.exists(_.containsMatching)
@@ -276,6 +296,12 @@ enum Value extends RuntimeEntity[Type] {
     // Neutral values
     case (Neutral(value1), Neutral(value2)) => value1 <:< value2
 
+    case (Union(types1), Union(types2)) => types1.forall(t1 => types2.exists(t1 <:< _))
+
+    case (Union(types), rhs) => types.exists(_ <:< rhs)
+
+    case (lhs, Union(types)) => types.forall(lhs <:< _)
+
     // Function type (Pi type) subtyping: Covariant in return type, contravariant in parameter type
     case (Pi(paramType1, closure1), Pi(paramType2, closure2)) => {
       paramType2 <:< paramType1 && env.withNewUnique(paramType2 <:> paramType1) {
@@ -352,11 +378,20 @@ enum Value extends RuntimeEntity[Type] {
     case (Value.Universe, Value.Universe) => Value.Universe
 
     // LUB for Primitive types: If they match, return it, otherwise no common LUB
-    case (Value.PrimitiveType(t1), Value.PrimitiveType(t2)) => {
-      if (t1 == t2) Value.PrimitiveType(t1)
-      else NoLeastUpperBound.raise {
-        s"No least upper bound for incompatible primitive types: $t1 and $t2"
-      }
+    case (Value.PrimitiveType(t1), Value.PrimitiveType(t2)) if t1 == t2 => {
+      Value.PrimitiveType(t1)
+    }
+
+    case (Value.Union(types1), Value.Union(types2)) => (types1 ++ types2).reduce(_ <:> _)
+
+    case (lhs, Value.Union(types)) => {
+      if types.exists(lhs <:< _) then lhs
+      else Value.Union(types + lhs)
+    }
+
+    case (Value.Union(types), rhs) => {
+      if types.exists(_ <:< rhs) then Value.Union(types)
+      else Value.Union(types + rhs)
     }
 
     // LUB for Pi types: contravariant parameter type, covariant return type
@@ -429,9 +464,7 @@ enum Value extends RuntimeEntity[Type] {
     }
 
     // No common LUB for incompatible types
-    case _ => NoLeastUpperBound.raise {
-      s"No least upper bound exists between: $this and $that"
-    }
+    case (lhs, rhs) => Value.Union(Set(lhs, rhs))
   }
 
   @deprecatedOverriding("For debugging purposes only, don't call it in production code")
@@ -451,6 +484,8 @@ object Value extends RuntimeEntityFactory[Value] {
   override def universe: Type = Universe
 
   override def variable(ident: Var.Local, ty: Type): Value = Neutral(NeutralValue.Variable(ident, ty))
+
+  override def typeBarrier(value: Value, ty: Type): Type = Neutral(NeutralValue.TypeBarrier(value, ty))
 
   override def functionInvoke(function: Var.Defined[Term, Function], args: Seq[Type]): Type = {
     Neutral(NeutralValue.FunctionInvoke(function, args))

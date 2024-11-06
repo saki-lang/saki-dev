@@ -42,10 +42,6 @@ object Synthesis:
 
     case Expr.PrimitiveType(ty) => Synth(Term.PrimitiveType(ty), Value.Universe)
 
-    case Expr.TypeOf(value) => value.synth(env).unpack match {
-      case (_, ty: Value) => Synth(ty.readBack, Value.Universe)
-    }
-
     case Expr.Variable(ref) => ref match {
       // Converting a definition reference to a lambda, enabling curry-style function application
       case definitionVar: Var.Defined[Term@unchecked, ?] => env.getSymbol(definitionVar) match {
@@ -60,6 +56,15 @@ object Synthesis:
           s"Unbound variable: ${variable.name}"
         }
       }
+    }
+
+    case Expr.Union(types) => {
+      val synthTypes: Seq[Synth] = types.map(_.synth(env))
+      Synth(Term.Union(synthTypes.map(_.term).toSet), Value.Universe)
+    }
+
+    case Expr.TypeOf(value) => value.synth(env).unpack match {
+      case (_, ty: Value) => Synth(ty.readBack, Value.Universe)
     }
 
     case Expr.Elimination(obj, member) => obj.synth(env).normalize.unpack match {

@@ -91,6 +91,16 @@ object Resolve {
         case None => UnresolvedReference.raise(s"Unresolved variable: $name")
       }
 
+      case Expr.Union(types) => {
+        val (resolvedTypes, typesCtx) = types.foldLeft((List.empty[Expr], ctx)) {
+          case ((resolvedTypes, ctx), ty) => {
+            val (resolved, newCtx) = ty.resolve(ctx)
+            (resolvedTypes :+ resolved, newCtx)
+          }
+        }
+        (Expr.Union(resolvedTypes), typesCtx)
+      }
+
       case Expr.Hole(_) => {
         val resolved = Expr.Hole(ctx.variables.flatMap {
           case local: Var.Local => Some(local)

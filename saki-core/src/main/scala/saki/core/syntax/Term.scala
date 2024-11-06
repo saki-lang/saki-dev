@@ -19,11 +19,15 @@ enum Term extends RuntimeEntity[Type] {
 
   case Variable(variable: Var.Local)
 
+  case TypeBarrier(term: Term, `type`: Term)
+
+  case Union(types: Set[Term])  // Sum type
+
+  case Intersection(types: Set[Term])
+
   case FunctionInvoke(fn: Var.Defined[Term, Function], args: Seq[Term])
 
-  case OverloadInvoke(
-    fn: Var.Defined[Term, Overloaded], args: Seq[Term]
-  ) extends Term
+  case OverloadInvoke(fn: Var.Defined[Term, Overloaded], args: Seq[Term]) extends Term
 
   case InductiveType(inductive: Var.Defined[Term, Inductive], args: Seq[Term])
 
@@ -47,6 +51,8 @@ enum Term extends RuntimeEntity[Type] {
 
   case OverloadedLambda(states: Map[Param[Term], Term]) extends Term with OverloadedTermExt[OverloadedLambda]
 
+  case Pair(first: Term, second: Term) // instances of Sigma type
+
   case Projection(record: Term, field: String)
 
   def normalize(implicit env: Environment.Typed[Value]): Term = this.eval.readBack
@@ -56,7 +62,14 @@ enum Term extends RuntimeEntity[Type] {
    * @param env The environment
    * @return The inferred type
    */
-  override def infer(implicit env: Environment.Typed[Value]): Value = this.eval.infer
+  override def infer(implicit env: Environment.Typed[Value]): Value = this match {
+    // Just a simple trick, avoid unnecessary evaluation, and should be removed if causing any problem
+    case Variable(variable) => env.locals.get(variable) match {
+      case Some(value) => value.`type`
+      case None => throw new IllegalArgumentException(s"Variable not found: ${variable.name}")
+    }
+    case _ => this.eval.infer
+  }
 
   // For non-inline functions
   def partialEval(implicit env: Environment.Typed[Value]): Value = this.eval(evalMode = EvalMode.Partial)
@@ -78,6 +91,23 @@ enum Term extends RuntimeEntity[Type] {
     case Variable(variable) => env.getValue(variable) match {
       case Some(value) => value
       case None => throw new IllegalArgumentException(s"Variable not found: ${variable.name}")
+    }
+
+    case TypeBarrier(term, ty) => {
+      val value: Value = term.eval(evalMode)
+      val termType: Type = value.infer
+      val expectedType: Type = ty.eval(evalMode)
+      if expectedType <:< termType then {
+        term.eval(evalMode)
+      } else {
+        Value.typeBarrier(term.eval(evalMode), expectedType)
+      }
+    }
+
+    case Union(types) => {
+      // Return the least upper bound of the types
+      val typeValues = types.map(_.eval(evalMode))
+      typeValues.reduce((a, b) => a <:> b)
     }
 
     case FunctionInvoke(fnRef, argTerms) => {
@@ -204,8 +234,9 @@ enum Term extends RuntimeEntity[Type] {
       }
 
       case overloaded: Value.OverloadedLambda => {
+        val argValue: Value = arg.eval(evalMode)
         overloaded.applyArgument(
-          arg.eval(evalMode), arg.infer, Value.OverloadedLambda.apply,
+          argValue, arg.infer, Value.OverloadedLambda.apply,
           unwrapStates = {
             case Value.OverloadedLambda(states) => states
             case value => TypeNotMatch.raise {
@@ -253,6 +284,7 @@ enum Term extends RuntimeEntity[Type] {
       case Some(typed) if typed.value.readBack unify from => to
       case _ => this
     }
+    case TypeBarrier(term, ty) => TypeBarrier(term.substitute(from, to), ty.substitute(from, to))
     case FunctionInvoke(fn, args) => FunctionInvoke(fn, args.map(_.substitute(from, to)))
     case OverloadInvoke(fn, args) => OverloadInvoke(fn, args.map(_.substitute(from, to)))
     case InductiveType(inductive, args) => InductiveType(inductive, args.map(_.substitute(from, to)))
@@ -306,6 +338,7 @@ enum Term extends RuntimeEntity[Type] {
     case Primitive(_) => false
     case PrimitiveType(_) => false
     case Variable(variable) => variable == ident && !shadowed.contains(variable)
+    case TypeBarrier(term, _) => term.contains(ident, shadowed)
     case FunctionInvoke(_, args) => args.exists(_.contains(ident, shadowed))
     case OverloadInvoke(_, args) => args.exists(_.contains(ident, shadowed))
     case InductiveType(_, args) => args.exists(_.contains(ident, shadowed))
@@ -338,6 +371,8 @@ enum Term extends RuntimeEntity[Type] {
     case Primitive(value) => value.toString
     case PrimitiveType(ty) => ty.toString
     case Variable(variable) => variable.name
+    case TypeBarrier(term, ty) => s"($term : $ty)"
+    case Union(types) => s"(${types.map(fmt).mkString(" | ")})"
     case FunctionInvoke(fn, args) => s"${fn.name}(${args.map(fmt).mkString(", ")})"
     case OverloadInvoke(fn, args) => s"${fn.name}(${args.map(fmt).mkString(", ")})"
     case InductiveType(inductive, args) => {
@@ -405,6 +440,8 @@ object Term extends RuntimeEntityFactory[Term] {
   override def universe: Term = Universe
 
   override def variable(ident: Var.Local, ty: Term): Term = Variable(ident)
+
+  override def typeBarrier(value: Term, ty: Term): Term = TypeBarrier(value, ty)
 
   override def inductiveType(
     inductive: Var.Defined[Term, Inductive], args: Seq[Term]
