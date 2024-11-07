@@ -237,6 +237,17 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     module.eval("describeValue(\"mygo\")") should be (module.eval("\"It's mygo!!!!!\""))
   }
 
+  test("superposition type") {
+    val code = {
+      """
+        def appendToString(s: String, x: Int): String = s ++ x.toString
+        def appendToString(s: String, x: String): String = s ++ x
+        eval appendToString "foo"
+      """
+    }
+    compileModule(code)
+  }
+
   test("mutual recursive") {
     val code = {
       """

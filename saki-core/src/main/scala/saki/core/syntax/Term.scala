@@ -469,7 +469,10 @@ object Term extends RuntimeEntityFactory[Term] {
     case head +: tail => {
       val updatedState: Term = overloaded.states.get(head) match {
         case Some(term: Term.OverloadedLambda) => addOverloadedPath(term, tail, body)
-        case Some(_) => OverloadingAmbiguous.raise(s"Ambiguous overloading for ${overloaded}")
+        case Some(term: Term.OverloadedPi) => addOverloadedPath(term, tail, body)
+        case Some(_) => OverloadingAmbiguous.raise {
+          s"Ambiguous overloading for function: ${head.`type`}"
+        }
         case None => if tail.isEmpty then body else addOverloadedPath(overloaded.copy(Map.empty), tail, body)
       }
       overloaded.copy(overloaded.states + (head -> updatedState))
