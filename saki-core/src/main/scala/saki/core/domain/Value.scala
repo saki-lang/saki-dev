@@ -396,7 +396,7 @@ enum Value extends RuntimeEntity[Type] {
 
     // LUB for Pi types: contravariant parameter type, covariant return type
     case (Value.Pi(paramType1, closure1), Value.Pi(paramType2, closure2)) => {
-      val paramLub = paramType2 \/ paramType1 // Contravariant parameter type
+      val paramLub = paramType1 /\ paramType2 // Contravariant parameter type
       val return1 = env.withNewUnique(paramType1) {
         implicit (env, ident, ty) => closure1(Value.variable(ident, ty))
       }
@@ -436,7 +436,7 @@ enum Value extends RuntimeEntity[Type] {
       val lubFields = commonFields.map { key =>
         key -> (fields1(key) \/ fields2(key))
       }.toMap
-      Value.Record(lubFields)
+      Value.Record(lubFields ++ (fields1 -- commonFields) ++ (fields2 -- commonFields))
     }
 
     // LUB for Record Types: similar strategy to records, fields must be present in both and have a LUB
@@ -445,7 +445,7 @@ enum Value extends RuntimeEntity[Type] {
       val lubFields = commonFields.map { key =>
         key -> (fields1(key) \/ fields2(key))
       }.toMap
-      Value.RecordType(lubFields)
+      Value.RecordType(lubFields ++ (fields1 -- commonFields) ++ (fields2 -- commonFields))
     }
 
     // LUB for Inductive Types: if they match, take LUB of arguments
