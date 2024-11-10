@@ -22,7 +22,7 @@ expr
     |   subject=expr NL* '.' member=Identifier ('[' implicitArgList=argList ']')?                       # exprElimination
     |   inductive=expr '::' constructor=Identifier                                                      # exprConstructor
     |   expr '_' Dec                                                                                    # exprTupleProjection
-    |   '^' atom                                                                                        # exprTypeOf
+    |   ('^'|'typeof') '(' expr ')'                                                                     # exprTypeOf
     |   lhs=expr rhs=atom                                                                               # exprSpine
     |   lhs=expr op=OptSymbol rhs=expr                                                                  # exprSpineInfixOp
     |   lhs=expr op=OptSymbol                                                                           # exprSpinePostfixOp

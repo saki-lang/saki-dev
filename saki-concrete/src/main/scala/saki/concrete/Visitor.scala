@@ -214,6 +214,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       case ctx: ExprSigmaTypeContext => visitExprSigmaType(ctx)
       case ctx: ExprRecordTypeContext => visitExprRecordType(ctx)
       case ctx: ExprRecordContext => visitExprRecord(ctx)
+      case ctx: ExprTypeOfContext => visitExprTypeOf(ctx)
       case _ => UnsupportedFeature.raise(self.span) { "Unsupported expression" }
     }
   }
@@ -458,6 +459,11 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       (name, value)
     }
     ExprTree.RecordValue(fields.toSeq, recordType)
+  }
+  
+  override def visitExprTypeOf(ctx: ExprTypeOfContext): ExprTree.TypeOf = {
+    given ParserRuleContext = ctx
+    ExprTree.TypeOf(ctx.expr.visit)
   }
 
   // Statement
