@@ -39,14 +39,15 @@ def compileModule(source: String, path: Option[String] = None, doEvaluation: Boo
     
     val module = Module.from(definitions.map(_.emit))
     if doEvaluation then evaluations.foreach { evaluation =>
-      val evalResult = try module.evaluate(evaluation.expr.emit).term catch {
+      val evalResult: Term | Unit = try module.evaluate(evaluation.expr.emit).term catch {
         case err: PanicError => println(s"Panic: ${err.message}")
         case err: CoreError => throw err.spanned(evaluation.span)
         case err: Throwable => throw err
       }
       evalResult match {
         case Term.Primitive(Literal.StringValue(value)) => println(value)
-        case term => println(term)
+        case term: Term => println(term.evalString(module.env))
+        case _ => { /* Do nothing */ }
       }
     }
 
