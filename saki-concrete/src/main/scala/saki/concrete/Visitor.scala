@@ -224,6 +224,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       case ctx: AtomOperatorContext => visitAtomOperator(ctx)
       case ctx: AtomIdentifierContext => visitAtomIdentifier(ctx)
       case ctx: AtomLiteralContext => visitAtomLiteral(ctx)
+      case ctx: AtomParenContext => ctx.expr.visit
       case ctx: AtomSelfContext => UnsupportedFeature.raise(ctx.span) {
         "`self` is not supported yet"
       }

@@ -29,7 +29,7 @@ expr
     |   op=OptSymbol rhs=expr                                                                           # exprSpinePrefixOp
     |   types+=atom ('|' types+=atom)+                                                                  # exprUnionType
     |   types+=atom ('&' types+=atom)+                                                                  # exprIntersectionType
-    |   '(' value=blockExpr ')'                                                                         # exprParen
+    |   '(' value=blockExpr ')'                                                                         # exprParen     // TODO: also exist in `atom`, consider remove this rule
     |   '\'(' elements+=expr ',' NL* elements+=expr ')'                                                 # exprTuple
     |   '(' types+=expr ',' NL* types+=expr ')'                                                         # exprTupleType
     |   '(' NL* lambdaParamList=paramList NL* ')' (':' returnType=expr)? '=>' body=blockExpr            # exprLambda
@@ -152,6 +152,7 @@ atom
     |   literal                 # atomLiteral
     |   ident=Identifier        # atomIdentifier
     |   '(' op=OptSymbol ')'    # atomOperator
+    |   '(' expr ')'            # atomParen
     ;
 
 identTypePair
