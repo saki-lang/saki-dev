@@ -116,7 +116,7 @@ enum NeutralValue {
         }
         env.withLocals(bindings.toMap) { implicit env => clause.body.infer(env) }
       }
-      clausesType.reduce((a, b) => a <:> b)
+      clausesType.reduce((a, b) => a \/ b)
     }
   }
 

@@ -195,6 +195,7 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
       case ctx: ExprImplicitCallContext => visitExprImplicitCall(ctx)
       case ctx: ExprParenContext => visitExprParen(ctx)
       case ctx: ExprUnionTypeContext => visitExprUnionType(ctx)
+      case ctx: ExprIntersectionTypeContext => visitExprIntersectionType(ctx)
       case ctx: ExprTupleTypeContext => visitExprTupleType(ctx)
       case ctx: ExprTupleContext => visitExprTuple(ctx)
       case ctx: ExprConstructorContext => visitExprConstructor(ctx)
@@ -248,6 +249,10 @@ class Visitor extends SakiBaseVisitor[SyntaxTree[?] | Seq[SyntaxTree[?]]] {
 
   override def visitExprUnionType(ctx: ExprUnionTypeContext): ExprTree = {
     ExprTree.Union(ctx.types.asScala.map(_.visit))(ctx)
+  }
+  
+  override def visitExprIntersectionType(ctx: ExprIntersectionTypeContext): ExprTree = {
+    ExprTree.Intersection(ctx.types.asScala.map(_.visit))(ctx)
   }
 
   override def visitExprTuple(ctx: ExprTupleContext): ExprTree = {

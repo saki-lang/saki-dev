@@ -62,6 +62,11 @@ object Synthesis:
       val synthTypes: Seq[Synth] = types.map(_.synth(env))
       Synth(Term.Union(synthTypes.map(_.term).toSet), Value.Universe)
     }
+    
+    case Expr.Intersection(types) => {
+      val synthTypes: Seq[Synth] = types.map(_.synth(env))
+      Synth(Term.Intersection(synthTypes.map(_.term).toSet), Value.Universe)
+    }
 
     case Expr.TypeOf(value) => value.synth(env).unpack match {
       case (_, ty: Value) => Synth(ty.readBack, Value.Universe)
@@ -242,7 +247,7 @@ object Synthesis:
         SizeNotMatch.raise(expr.span) { "Expected at least one clause" }
       }
       val clauseBodyTypes: Seq[Value] = clauseBodyTypeTerms.map(_.eval)
-      val leastUpperBoundType: Type = clauseBodyTypes.reduce((a, b) => a <:> b)
+      val leastUpperBoundType: Type = clauseBodyTypes.reduce((a, b) => a \/ b)
       Synth(
         term = Term.Match(scrutineesSynth.map(_.term), clausesSynth.map(_._1)),
         `type` = leastUpperBoundType

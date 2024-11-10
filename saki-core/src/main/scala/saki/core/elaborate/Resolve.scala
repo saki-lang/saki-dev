@@ -101,6 +101,16 @@ object Resolve {
         (Expr.Union(resolvedTypes), typesCtx)
       }
 
+      case Expr.Intersection(types) => {
+        val (resolvedTypes, typesCtx) = types.foldLeft((List.empty[Expr], ctx)) {
+          case ((resolvedTypes, ctx), ty) => {
+            val (resolved, newCtx) = ty.resolve(ctx)
+            (resolvedTypes :+ resolved, newCtx)
+          }
+        }
+        (Expr.Intersection(resolvedTypes), typesCtx)
+      }
+
       case Expr.Hole(_) => {
         val resolved = Expr.Hole(ctx.variables.flatMap {
           case local: Var.Local => Some(local)

@@ -21,12 +21,14 @@ expr
     |   func=expr '[' NL* argList NL* ']'                                                               # exprImplicitCall
     |   subject=expr NL* '.' member=Identifier ('[' implicitArgList=argList ']')?                       # exprElimination
     |   inductive=expr '::' constructor=Identifier                                                      # exprConstructor
-    |   '^' expr                                                                                        # exprTypeOf
-    |   '(' '|'? types+=expr ('|' types+=expr)+ ')'                                                     # exprUnionType
+    |   expr '_' Dec                                                                                    # exprTupleProjection
+    |   '^' atom                                                                                        # exprTypeOf
     |   lhs=expr rhs=atom                                                                               # exprSpine
     |   lhs=expr op=OptSymbol rhs=expr                                                                  # exprSpineInfixOp
     |   lhs=expr op=OptSymbol                                                                           # exprSpinePostfixOp
     |   op=OptSymbol rhs=expr                                                                           # exprSpinePrefixOp
+    |   types+=atom ('|' types+=atom)+                                                                  # exprUnionType
+    |   types+=atom ('&' types+=atom)+                                                                  # exprIntersectionType
     |   '(' value=blockExpr ')'                                                                         # exprParen
     |   '\'(' elements+=expr ',' NL* elements+=expr ')'                                                 # exprTuple
     |   '(' types+=expr ',' NL* types+=expr ')'                                                         # exprTupleType
@@ -40,7 +42,7 @@ expr
     |   <assoc=right> '[' domain=expr ']' '->' codomain=expr                                            # exprImplicitArrowType
     |   <assoc=right> '∀' '(' NL* param=Identifier ':' domain=expr NL* ')' '->' codomain=expr           # exprPiType
     |   <assoc=right> '∀' '[' NL* param=Identifier ':' domain=expr NL* ']' '->' codomain=expr           # exprImplicitPiType
-    |   <assoc=right> '∃' '(' NL* param=Identifier ':' domain=expr NL* ')' '->' codomain=expr           # exprSigmaType
+    |   <assoc=right> '∃' '(' NL* param=Identifier ':' domain=expr NL* ',' codomain=expr ')'            # exprSigmaType
     |   'record' (':' super=expr)? '{' NL* fields+=identTypePair (NL+ fields+=identTypePair)* NL* '}'   # exprRecordType
     |   recordType=expr '\'' '{' NL* fields+=fieldAssignment (NL+ fields+=fieldAssignment)* NL* '}'     # exprRecord
     ;
@@ -161,16 +163,17 @@ fieldAssignment
     ;
 
 literal
-    :   value=(Dec | Hex | Oct | Bin)       # literalInt
-    |   value=Float                         # literalFloat
-    |   value=CharacterLiteral              # literalChar
-    |   value=RegularStringLiteral          # literalRegularString
-    |   value=RawStringLiteral              # literalRawString
-    |   value=('true' | 'false')            # literalBool
+    :   value=Int                   # literalInt
+    |   value=Float                 # literalFloat
+    |   value=CharacterLiteral      # literalChar
+    |   value=RegularStringLiteral  # literalRegularString
+    |   value=RawStringLiteral      # literalRawString
+    |   value=('true' | 'false')    # literalBool
     ;
 
 // Literals
-Dec: '-'?[0-9]+;
+Int: '-'? (Dec | Hex | Oct | Bin);
+Dec: [0-9]+;
 Hex: '0x' HexDigit+;
 Oct: '0o' [0-7]+;
 Bin: '0b' [01]+;

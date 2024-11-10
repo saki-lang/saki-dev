@@ -32,6 +32,10 @@ enum ExprTree(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] with
     types: Seq[ExprTree],
   )(implicit ctx: ParserRuleContext)
 
+  case Intersection(
+    types: Seq[ExprTree],
+  )(implicit ctx: ParserRuleContext)
+
   case TypeOf(
     value: ExprTree,
   )(implicit ctx: ParserRuleContext)
@@ -101,6 +105,7 @@ enum ExprTree(implicit ctx: ParserRuleContext) extends SyntaxTree[CoreExpr] with
     case PrimitiveType(ty) => CoreExpr.PrimitiveType(ty)
 
     case Union(types) => CoreExpr.Union(types.map(_.emit))
+    case Intersection(types) => CoreExpr.Intersection(types.map(_.emit))
 
     case TypeOf(value) => CoreExpr.TypeOf(value.emit)
 

@@ -107,8 +107,16 @@ enum Term extends RuntimeEntity[Type] {
     case Union(types) => {
       // Return the least upper bound of the types
       val typeValues = types.map(_.eval(evalMode))
-      typeValues.reduce((a, b) => a <:> b)
+      typeValues.reduce((a, b) => a \/ b)
     }
+
+    case Intersection(types) => {
+      // Return the greatest lower bound of the types
+      val typeValues = types.map(_.eval(evalMode))
+      typeValues.reduce((a, b) => a /\ b)
+    }
+
+    case Pair(first, second) => Value.Pair(first.eval(evalMode), second.eval(evalMode))
 
     case FunctionInvoke(fnRef, argTerms) => {
 
@@ -284,6 +292,9 @@ enum Term extends RuntimeEntity[Type] {
       case Some(typed) if typed.value.readBack unify from => to
       case _ => this
     }
+    case Union(types) => Union(types.map(_.substitute(from, to)))
+    case Intersection(types) => Intersection(types.map(_.substitute(from, to)))
+    case Pair(first, second) => Pair(first.substitute(from, to), second.substitute(from, to))
     case TypeBarrier(term, ty) => TypeBarrier(term.substitute(from, to), ty.substitute(from, to))
     case FunctionInvoke(fn, args) => FunctionInvoke(fn, args.map(_.substitute(from, to)))
     case OverloadInvoke(fn, args) => OverloadInvoke(fn, args.map(_.substitute(from, to)))
@@ -338,6 +349,8 @@ enum Term extends RuntimeEntity[Type] {
     case Primitive(_) => false
     case PrimitiveType(_) => false
     case Variable(variable) => variable == ident && !shadowed.contains(variable)
+    case Union(types) => types.exists(_.contains(ident, shadowed))
+    case Intersection(types) => types.exists(_.contains(ident, shadowed))
     case TypeBarrier(term, _) => term.contains(ident, shadowed)
     case FunctionInvoke(_, args) => args.exists(_.contains(ident, shadowed))
     case OverloadInvoke(_, args) => args.exists(_.contains(ident, shadowed))
@@ -353,6 +366,7 @@ enum Term extends RuntimeEntity[Type] {
     case Apply(fn, arg) => fn.contains(ident, shadowed) || arg.contains(ident, shadowed)
     case Lambda(param, body) => body.contains(ident, shadowed + param.ident)
     case OverloadedLambda(states) => states.exists((param, body) => body.contains(ident, shadowed + param.ident))
+    case Pair(first, second) => first.contains(ident, shadowed) || second.contains(ident, shadowed)
     case Projection(record, _) => record.contains(ident, shadowed)
     case Match(scrutinees, clauses) => {
       scrutinees.exists(_.contains(ident, shadowed)) || clauses.exists { clause =>
@@ -373,6 +387,7 @@ enum Term extends RuntimeEntity[Type] {
     case Variable(variable) => variable.name
     case TypeBarrier(term, ty) => s"($term : $ty)"
     case Union(types) => s"(${types.map(fmt).mkString(" | ")})"
+    case Intersection(types) => s"(${types.map(fmt).mkString(" & ")})"
     case FunctionInvoke(fn, args) => s"${fn.name}(${args.map(fmt).mkString(", ")})"
     case OverloadInvoke(fn, args) => s"${fn.name}(${args.map(fmt).mkString(", ")})"
     case InductiveType(inductive, args) => {
@@ -405,6 +420,7 @@ enum Term extends RuntimeEntity[Type] {
         (param, body) => s"(λ(${param.name} : ${fmt(param.`type`)}) => $body)"
       }.mkString(" ⊕ ")
     }
+    case Pair(first, second) => s"(${fmt(first)}, ${fmt(second)})"
     case Projection(record, field) => s"${fmt(record)}.$field"
   }
 

@@ -68,9 +68,9 @@ enum Value extends RuntimeEntity[Type] {
 
     case Neutral(neutral) => neutral.infer
 
-    case Union(types) => types.map(_.infer).reduce(_ <:> _)
+    case Union(types) => types.map(_.infer).reduce(_ \/ _)
 
-    case Intersection(_) => ??? // TODO: find the greatest lower bound
+    case Intersection(types) => types.map(_.infer).reduce(_ /\ _)
 
     case Pi(_, _) => Universe
 
@@ -304,7 +304,7 @@ enum Value extends RuntimeEntity[Type] {
 
     // Function type (Pi type) subtyping: Covariant in return type, contravariant in parameter type
     case (Pi(paramType1, closure1), Pi(paramType2, closure2)) => {
-      paramType2 <:< paramType1 && env.withNewUnique(paramType2 <:> paramType1) {
+      paramType2 <:< paramType1 && env.withNewUnique(paramType2 \/ paramType1) {
         implicit (env, ident, ty) => {
           given Environment.Typed[Value] = env
           val neutral = Value.variable(ident, ty)
@@ -315,7 +315,7 @@ enum Value extends RuntimeEntity[Type] {
 
     // Sigma type subtyping: Covariant in both parameter type and dependent type
     case (Sigma(paramType1, closure1), Sigma(paramType2, closure2)) => {
-      paramType1 <:< paramType2 && env.withNewUnique(paramType1 <:> paramType2) {
+      paramType1 <:< paramType2 && env.withNewUnique(paramType1 \/ paramType2) {
         implicit (env, ident, ty) => {
           given Environment.Typed[Value] = env
           val neutral = Value.variable(ident, ty)
@@ -326,7 +326,7 @@ enum Value extends RuntimeEntity[Type] {
 
     // Lambda types must match in parameter type and be subtypes in their bodies
     case (Lambda(paramType1, body1), Lambda(paramType2, body2)) => {
-      paramType1 <:< paramType2 && env.withNewUnique(paramType1 <:> paramType2) {
+      paramType1 <:< paramType2 && env.withNewUnique(paramType1 \/ paramType2) {
         implicit (env, ident, ty) => {
           given Environment.Typed[Value] = env
           val neutral = Value.variable(ident, ty)
@@ -361,7 +361,7 @@ enum Value extends RuntimeEntity[Type] {
   }
 
   @targetName("leastUpperBound")
-  infix def <:>(that: Type)(implicit env: Environment.Typed[Value]): Type = (this, that) match {
+  infix def \/(that: Type)(implicit env: Environment.Typed[Value]): Type = (this, that) match {
 
     // Case where both types are equal: the LUB is the type itself
     case (t1, t2) if t1 unify t2 => t1
@@ -382,7 +382,7 @@ enum Value extends RuntimeEntity[Type] {
       Value.PrimitiveType(t1)
     }
 
-    case (Value.Union(types1), Value.Union(types2)) => (types1 ++ types2).reduce(_ <:> _)
+    case (Value.Union(types1), Value.Union(types2)) => (types1 ++ types2).reduce(_ \/ _)
 
     case (lhs, Value.Union(types)) => {
       if types.exists(lhs <:< _) then lhs
@@ -396,45 +396,45 @@ enum Value extends RuntimeEntity[Type] {
 
     // LUB for Pi types: contravariant parameter type, covariant return type
     case (Value.Pi(paramType1, closure1), Value.Pi(paramType2, closure2)) => {
-      val paramLub = paramType2 <:> paramType1 // Contravariant parameter type
+      val paramLub = paramType2 \/ paramType1 // Contravariant parameter type
       val return1 = env.withNewUnique(paramType1) {
         implicit (env, ident, ty) => closure1(Value.variable(ident, ty))
       }
       val return2 = env.withNewUnique(paramType2) {
         implicit (env, ident, ty) => closure2(Value.variable(ident, ty))
       }
-      Value.Pi(paramLub, _ => return1 <:> return2) // Covariant return type
+      Value.Pi(paramLub, _ => return1 \/ return2) // Covariant return type
     }
 
     // LUB for Sigma types: covariant parameter and closure type
     case (Value.Sigma(paramType1, closure1), Value.Sigma(paramType2, closure2)) => {
-      val paramLub = paramType1 <:> paramType2 // Covariant parameter
+      val paramLub = paramType1 \/ paramType2 // Covariant parameter
       val return1 = env.withNewUnique(paramType1) {
         implicit (env, ident, ty) => closure1(Value.variable(ident, ty))
       }
       val return2 = env.withNewUnique(paramType2) {
         implicit (env, ident, ty) => closure2(Value.variable(ident, ty))
       }
-      Value.Sigma(paramLub, _ => return1 <:> return2)
+      Value.Sigma(paramLub, _ => return1 \/ return2)
     }
 
     // LUB for Lambda values: parameter types must match, and take the LUB of bodies
     case (Value.Lambda(paramType1, body1), Value.Lambda(paramType2, body2)) => {
-      val paramLub = paramType1 <:> paramType2 // Parameters must match
+      val paramLub = paramType1 \/ paramType2 // Parameters must match
       val return1 = env.withNewUnique(paramType1) {
         implicit (env, ident, ty) => body1(Value.variable(ident, ty))
       }
       val return2 = env.withNewUnique(paramType2) {
         implicit (env, ident, ty) => body2(Value.variable(ident, ty))
       }
-      Value.Lambda(paramLub, _ => return1 <:> return2)
+      Value.Lambda(paramLub, _ => return1 \/ return2)
     }
 
     // LUB for Records: combine fields if types match
     case (Value.Record(fields1), Value.Record(fields2)) => {
       val commonFields = fields1.keySet.intersect(fields2.keySet)
       val lubFields = commonFields.map { key =>
-        key -> (fields1(key) <:> fields2(key))
+        key -> (fields1(key) \/ fields2(key))
       }.toMap
       Value.Record(lubFields)
     }
@@ -443,14 +443,14 @@ enum Value extends RuntimeEntity[Type] {
     case (Value.RecordType(fields1), Value.RecordType(fields2)) => {
       val commonFields = fields1.keySet.intersect(fields2.keySet)
       val lubFields = commonFields.map { key =>
-        key -> (fields1(key) <:> fields2(key))
+        key -> (fields1(key) \/ fields2(key))
       }.toMap
       Value.RecordType(lubFields)
     }
 
     // LUB for Inductive Types: if they match, take LUB of arguments
     case (InductiveType(ind1, args1), InductiveType(ind2, args2)) if ind1.name == ind2.name => {
-      val lubArgs = args1.zip(args2).map { case (arg1, arg2) => arg1 <:> arg2 }
+      val lubArgs = args1.zip(args2).map { case (arg1, arg2) => arg1 \/ arg2 }
       Value.InductiveType(ind1, lubArgs)
     }
 
@@ -459,12 +459,120 @@ enum Value extends RuntimeEntity[Type] {
       Value.InductiveVariant(ind1, cons1, args1),
       Value.InductiveVariant(ind2, cons2, args2),
     ) if (ind1 unify ind2) && cons1.ident == cons2.ident => {
-      val lubArgs = args1.zip(args2).map { case (arg1, arg2) => arg1 <:> arg2 }
+      val lubArgs = args1.zip(args2).map { case (arg1, arg2) => arg1 \/ arg2 }
       Value.InductiveVariant(ind1, cons1, lubArgs)
     }
 
     // No common LUB for incompatible types
     case (lhs, rhs) => Value.Union(Set(lhs, rhs))
+  }
+
+  @targetName("greatestLowerBound")
+  infix def /\(that: Type)(implicit env: Environment.Typed[Value]): Type = (this, that) match {
+
+    // Case where both types are equal: the GLB is the type itself
+    case (t1, t2) if t1 unify t2 => t1
+
+    // GLB involving Nothing: Nothing is the bottom element
+    case (_, PrimitiveType(LiteralType.NothingType)) => PrimitiveType(LiteralType.NothingType)
+    case (PrimitiveType(LiteralType.NothingType), _) => PrimitiveType(LiteralType.NothingType)
+
+    // GLB for Universe levels: Universe is the top level, so we return Universe
+    case (Value.Universe, Value.Universe) => Value.Universe
+
+    // GLB for Primitive types: If they match, return it, otherwise return Nothing
+    case (Value.PrimitiveType(t1), Value.PrimitiveType(t2)) if t1 == t2 => {
+      Value.PrimitiveType(t1)
+    }
+    case (_: Value.PrimitiveType, _: Value.PrimitiveType) => PrimitiveType(LiteralType.NothingType)
+
+    // GLB for Union types: take GLB for each combination of the elements
+    case (Value.Union(types1), Value.Union(types2)) => {
+      Value.Union(for (t1 <- types1; t2 <- types2) yield t1 /\ t2)
+    }
+
+    case (Value.Union(types), rhs) => {
+      Value.Union(types.map(_ /\ rhs))
+    }
+
+    case (lhs, Value.Union(types)) => {
+      Value.Union(types.map(lhs /\ _))
+    }
+
+    // GLB for Intersection types: merge the sets
+    case (Value.Intersection(types1), Value.Intersection(types2)) => {
+      Value.Intersection(types1 ++ types2)
+    }
+
+    case (lhs, Value.Intersection(types)) => {
+      if types.forall(lhs <:< _) then lhs
+      else Value.Intersection(types + lhs)
+    }
+
+    case (Value.Intersection(types), rhs) => {
+      if types.forall(_ <:< rhs) then rhs
+      else Value.Intersection(types + rhs)
+    }
+
+    // GLB for Pi types: contravariant parameter type, covariant return type
+    case (Value.Pi(paramType1, closure1), Value.Pi(paramType2, closure2)) => {
+      val paramGlb = paramType1 \/ paramType2 // Contravariant parameter type
+      val return1 = env.withNewUnique(paramType1) {
+        implicit (env, ident, ty) => closure1(Value.variable(ident, ty))
+      }
+      val return2 = env.withNewUnique(paramType2) {
+        implicit (env, ident, ty) => closure2(Value.variable(ident, ty))
+      }
+      Value.Pi(paramGlb, _ => return1 /\ return2) // Covariant return type
+    }
+
+    // GLB for Sigma types: covariant parameter and closure type
+    case (Value.Sigma(paramType1, closure1), Value.Sigma(paramType2, closure2)) => {
+      val paramGlb = paramType1 /\ paramType2 // Covariant parameter
+      val return1 = env.withNewUnique(paramType1) {
+        implicit (env, ident, ty) => closure1(Value.variable(ident, ty))
+      }
+      val return2 = env.withNewUnique(paramType2) {
+        implicit (env, ident, ty) => closure2(Value.variable(ident, ty))
+      }
+      Value.Sigma(paramGlb, _ => return1 /\ return2)
+    }
+
+    // GLB for Records: only fields present in both are retained
+    case (Value.Record(fields1), Value.Record(fields2)) => {
+      val commonFields = fields1.keySet.intersect(fields2.keySet)
+      val glbFields = commonFields.map { key =>
+        key -> (fields1(key) /\ fields2(key))
+      }.toMap
+      Value.Record(glbFields)
+    }
+
+    // GLB for Record Types: similar to records, fields must be present in both and have a GLB
+    case (Value.RecordType(fields1), Value.RecordType(fields2)) => {
+      val commonFields = fields1.keySet.intersect(fields2.keySet)
+      val glbFields = commonFields.map { key =>
+        key -> (fields1(key) /\ fields2(key))
+      }.toMap
+      Value.RecordType(glbFields)
+    }
+
+    // GLB for Inductive Types: if they match, take GLB of arguments
+    case (InductiveType(ind1, args1), InductiveType(ind2, args2)) if ind1.name == ind2.name => {
+      val glbArgs = args1.zip(args2).map { case (arg1, arg2) => arg1 /\ arg2 }
+      Value.InductiveType(ind1, glbArgs)
+    }
+
+    // GLB for Inductive Variants: constructors and types must match, arguments need GLB
+    case (
+      Value.InductiveVariant(ind1, cons1, args1),
+      Value.InductiveVariant(ind2, cons2, args2),
+    ) if (ind1 unify ind2) && cons1.ident == cons2.ident => {
+      val glbArgs = args1.zip(args2).map { case (arg1, arg2) => arg1 /\ arg2 }
+      Value.InductiveVariant(ind1, cons1, glbArgs)
+    }
+
+    // Default case: if types are incompatible, return Nothing
+    case _ => PrimitiveType(LiteralType.NothingType)
   }
 
   @deprecatedOverriding("For debugging purposes only, don't call it in production code")

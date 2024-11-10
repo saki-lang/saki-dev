@@ -222,7 +222,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
   test("sum type") {
     val code = {
       """
-        def describeValue(value: (Bool | ℤ | String)): String = match value {
+        def describeValue(value: Bool | ℤ | String): String = match value {
             case true => "It's true!"
             case false => "It's false!"
             case n: ℤ => "It's an integer: " ++ n.toString ++ "!"

@@ -38,6 +38,10 @@ enum Expr(val span: SourceSpan) extends Entity {
     types: Seq[Expr]
   )(implicit span: SourceSpan) extends Expr(span)
 
+  case Intersection(
+    types: Seq[Expr]
+  )(implicit span: SourceSpan) extends Expr(span)
+
   case TypeOf(
     value: Expr
   )(implicit span: SourceSpan) extends Expr(span)
@@ -150,6 +154,7 @@ enum Expr(val span: SourceSpan) extends Entity {
     case Unresolved(name) => name
     case Variable(ref) => ref.toString
     case Union(types) => s"(${types.map(_.toString).mkString(" | ")})"
+    case Intersection(types) => s"(${types.map(_.toString).mkString(" & ")})"
     case TypeOf(value) => s"^($value)"
     case Hole(_) => "_"
     case Pi(param, result) => s"Π(${param.ident} : ${param.`type`}) -> $result"
