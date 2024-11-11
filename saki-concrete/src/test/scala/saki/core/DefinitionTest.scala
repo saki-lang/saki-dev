@@ -427,6 +427,135 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     ))
   }
 
+  test("nested function calls and partial application") {
+    val code = {
+      """
+          def multiply(a b: Int): Int = a * b
+          def subtract(a b: Int): Int = a - b
+          def compose(f: Int -> Int, g: Int -> Int): Int -> Int = (x: Int) => f(g(x))
+        """
+    }
+    val module = compileModule(code)
+
+    module.eval("multiply(3, subtract(10, 7))") should be(module.eval("9"))
+    module.eval("subtract(15)(multiply(2, 4))") should be(module.eval("7"))
+    module.eval("compose(multiply(2), subtract(5))(3)") should be(module.eval("4"))
+  }
+
+  test("recursive function call with different styles") {
+    val code = {
+      """
+          def factorial(n: Int): Int = {
+              if n == 0 then 1
+              else n * factorial(n - 1)
+          }
+        """
+    }
+    val module = compileModule(code)
+
+    module.eval("factorial(5)") should be(module.eval("120"))
+    module.eval("5.factorial") should be(module.eval("120"))
+    module.eval("factorial 5") should be(module.eval("120"))
+  }
+
+  test("higher order function") {
+    val code = {
+      """
+          def twice(f: Int -> Int, x: Int): Int = f(f(x))
+          def increment(n: Int): Int = n + 1
+        """
+    }
+    val module = compileModule(code)
+
+    module.eval("twice(increment, 5)") should be(module.eval("7"))
+    module.eval("increment.twice 5") should be(module.eval("7"))
+    module.eval("twice increment 5") should be(module.eval("7"))
+  }
+
+  test("using GADT with map and pattern matching") {
+    val code = {
+      """
+          type Either(L: 'Type, R: 'Type) = inductive {
+              Left(L)
+              Right(R)
+          }
+
+          def mapEither(L: 'Type, R: 'Type, S: 'Type, either: Either(L, R), transform: R -> S): Either(L, S) = {
+              match either {
+                  case Either(L, R)::Left(value) => Either(L, S)::Left(value)
+                  case Either(L, R)::Right(value) => Either(L, S)::Right(transform(value))
+              }
+          }
+        """
+    }
+    val module = compileModule(code)
+
+    module.eval("mapEither(Int, String, Bool, Either(Int, String)::Right(\"hello\"), (s: String) => s == \"hello\")") should be(module.eval("Either(Int, Bool)::Right(true)"))
+    module.eval("mapEither(Int, String, Bool, Either(Int, String)::Left(42), (s: String) => s == \"hello\")") should be(module.eval("Either(Int, Bool)::Left(42)"))
+  }
+
+  test("higher kinded type and mapping") {
+    val code = {
+      """
+          type List(T: 'Type) = inductive {
+              Nil
+              Cons(T, List(T))
+          }
+
+          def mapList(A: 'Type, B: 'Type, list: List(A), transform: A -> B): List(B) = {
+              match list {
+                  case List(A)::Nil => List(B)::Nil
+                  case List(A)::Cons(head, tail) => List(B)::Cons(transform(head), mapList(A, B, tail, transform))
+              }
+          }
+        """
+    }
+    val module = compileModule(code)
+
+    module.eval("mapList(Int, String, List(Int)::Cons(1, List(Int)::Cons(2, List(Int)::Nil)), (n: Int) => n.toString)") should be(module.eval("List(String)::Cons(\"1\", List(String)::Cons(\"2\", List(String)::Nil))"))
+    module.eval("mapList(Int, Bool, List(Int)::Nil, (n: Int) => n > 0)") should be(module.eval("List(Bool)::Nil"))
+  }
+
+  test("overloaded function with different types") {
+    val code = {
+      """
+          def compare(a b: Int): String = if a > b then "greater" else if a < b then "less" else "equal"
+          def compare(a b: String): String = if a.length > b.length then "longer" else if a.length < b.length then "shorter" else "same length"
+        """
+    }
+    val module = compileModule(code)
+
+    module.eval("compare(10, 5)") should be(module.eval("\"greater\""))
+    module.eval("compare(5, 10)") should be(module.eval("\"less\""))
+    module.eval("compare(10, 10)") should be(module.eval("\"equal\""))
+    module.eval("compare(\"hello\", \"world\")") should be(module.eval("\"same length\""))
+    module.eval("compare(\"hi\", \"world\")") should be(module.eval("\"shorter\""))
+    module.eval("compare(\"hello\", \"hi\")") should be(module.eval("\"longer\""))
+  }
+
+  test("pattern matching with sum type containing more variants") {
+    val code = {
+      """
+          type Shape = inductive {
+              Circle(Int)
+              Rectangle(Int, Int)
+              Square(Int)
+          }
+
+          def area(shape: Shape): Int = match shape {
+              case Shape::Circle(radius) => 3 * radius * radius
+              case Shape::Rectangle(width, height) => width * height
+              case Shape::Square(side) => side * side
+          }
+        """
+    }
+    val module = compileModule(code)
+
+    module.eval("area(Shape::Circle(5))") should be(module.eval("75"))
+    module.eval("area(Shape::Rectangle(4, 5))") should be(module.eval("20"))
+    module.eval("area(Shape::Square(3))") should be(module.eval("9"))
+  }
+
   test("proof: a + b = b + a") {
     val code = {
       """
