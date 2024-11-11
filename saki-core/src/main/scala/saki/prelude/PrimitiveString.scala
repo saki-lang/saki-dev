@@ -116,6 +116,20 @@ object PrimitiveString extends PreludeDefinitionSet {
     }
   )
 
+  val appendRune: NativeFunction[Term] = NativeFunction(
+    ident = Var.Defined("++"),
+    params = Seq("str" @: StringType.toTerm, "c" @: RuneType.toTerm),
+    resultType = StringType.toTerm,
+    nativeImpl = (args: ArgList[Value], _) => {
+      val str: Value = args(0).value
+      val c: Value = args(1).value
+      (str, c) match {
+        case (Value.Primitive(StringValue(str)), Value.Primitive(RuneValue(c))) => Value.Primitive(StringValue(str + c))
+        case _ => throw new IllegalArgumentException(s"Invalid arguments: $str, $c")
+      }
+    }
+  )
+
   override lazy val definitions: Seq[NativeFunction[Term]] = Seq(
     unaryFunction("toLowerCase", _.toLowerCase),
     unaryFunction("toUpperCase", _.toUpperCase),
@@ -128,6 +142,7 @@ object PrimitiveString extends PreludeDefinitionSet {
     parseInt,
     parseFloat,
     repeat,
+    appendRune,
   )
   
 }

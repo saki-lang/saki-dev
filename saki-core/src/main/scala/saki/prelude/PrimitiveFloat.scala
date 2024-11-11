@@ -37,6 +37,19 @@ object PrimitiveFloat extends PreludeDefinitionSet {
     }
   )
 
+  private def unaryIntFunction(ident: String, fn: Double => BigInt): NativeFunction[Term] = NativeFunction(
+    ident = Var.Defined(ident),
+    params = Seq("a" @: FloatType.toTerm),
+    resultType = IntType.toTerm,
+    nativeImpl = (args: ArgList[Value], _) => {
+      val a: Value = args(0).value
+      a match {
+        case Value.Primitive(FloatValue(a)) => Value.Primitive(IntValue(fn(a)))
+        case _ => throw new IllegalArgumentException(s"Invalid argument: $a")
+      }
+    }
+  )
+
   private def binaryBoolFunction(ident: String, fn: (Double, Double) => Boolean): NativeFunction[Term] = NativeFunction(
     ident = Var.Defined(ident),
     params = Seq("a" @: FloatType.toTerm, "b" @: FloatType.toTerm),
@@ -52,6 +65,7 @@ object PrimitiveFloat extends PreludeDefinitionSet {
   )
 
   override lazy val definitions: Seq[NativeFunction[Term]] = Seq(
+
     binaryFunction("+", _ + _),
     binaryFunction("-", _ - _),
     binaryFunction("*", _ * _),
@@ -82,8 +96,9 @@ object PrimitiveFloat extends PreludeDefinitionSet {
     unaryFunction("exp", Math.exp),
     unaryFunction("log", Math.log),
     unaryFunction("sqrt", Math.sqrt),
-    unaryFunction("ceil", Math.ceil),
-    unaryFunction("floor", Math.floor),
+
+    unaryIntFunction("ceil", value => BigInt(Math.ceil(value).toInt)),
+    unaryIntFunction("floor", value => BigInt(Math.floor(value).toInt)),
 
     // round
     NativeFunction(

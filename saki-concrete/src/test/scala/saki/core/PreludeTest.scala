@@ -85,4 +85,9 @@ class PreludeTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     "\"\\f\"".synth should be (StringValue("\f").term)
     "\"\\\\\"".synth should be (StringValue("\\").term)
   }
+
+  test("rune test") {
+    "'a' ++ 'b'".synth should be (StringValue("ab").term)
+    "\"It's mygo\" ++ '!'".synth should be (StringValue("It's mygo!").term)
+  }
 }

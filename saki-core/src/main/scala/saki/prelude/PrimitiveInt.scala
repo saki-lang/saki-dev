@@ -39,6 +39,19 @@ object PrimitiveInt extends PreludeDefinitionSet {
     }
   )
 
+  private def unaryFloatFunction(ident: String, fn: BigInt => Double): NativeFunction[Term] = NativeFunction(
+    ident = Var.Defined(ident),
+    params = Seq("a" @: IntType.toTerm),
+    resultType = FloatType.toTerm,
+    nativeImpl = (args: ArgList[Value], _) => {
+      val a: Value = args(0).value
+      a match {
+        case Value.Primitive(IntValue(a)) => Value.Primitive(FloatValue(fn(a)))
+        case _ => throw new IllegalArgumentException(s"Invalid argument: $a")
+      }
+    }
+  )
+
   private def binaryBoolFunction(ident: String, fn: (BigInt, BigInt) => Boolean): NativeFunction[Term] = NativeFunction(
     ident = Var.Defined(ident),
     params = Seq("a" @: IntType.toTerm, "b" @: IntType.toTerm),
@@ -64,6 +77,7 @@ object PrimitiveInt extends PreludeDefinitionSet {
   }
   
   override lazy val definitions: Seq[NativeFunction[Term]] = Seq(
+
     binaryFunction("+", _ + _),
     binaryFunction("-", _ - _),
     binaryFunction("*", _ * _),
@@ -93,6 +107,18 @@ object PrimitiveInt extends PreludeDefinitionSet {
     unaryFunction("dec", _ - 1),
     unaryFunction("--", -_),
     unaryFunction("inv", ~_),
+
+    // toFloat
+    unaryFloatFunction("toFloat", _.toDouble),
+    unaryFloatFunction("sqrt", value => Math.sqrt(value.toDouble)),
+    unaryFloatFunction("sin", value => Math.sin(value.toDouble)),
+    unaryFloatFunction("cos", value => Math.cos(value.toDouble)),
+    unaryFloatFunction("tan", value => Math.tan(value.toDouble)),
+    unaryFloatFunction("asin", value => Math.asin(value.toDouble)),
+    unaryFloatFunction("acos", value => Math.acos(value.toDouble)),
+    unaryFloatFunction("atan", value => Math.atan(value.toDouble)),
+    unaryFloatFunction("exp", value => Math.exp(value.toDouble)),
+    unaryFloatFunction("log", value => Math.log(value.toDouble)),
 
     // toString
     NativeFunction(

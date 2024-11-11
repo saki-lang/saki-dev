@@ -430,10 +430,10 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
   test("nested function calls and partial application") {
     val code = {
       """
-          def multiply(a b: Int): Int = a * b
-          def subtract(a b: Int): Int = a - b
-          def compose(f: Int -> Int, g: Int -> Int): Int -> Int = (x: Int) => f(g(x))
-        """
+        def multiply(a b: Int): Int = a * b
+        def subtract(a b: Int): Int = a - b
+        def compose(f: Int -> Int, g: Int -> Int): Int -> Int = (x: Int) => f(g(x))
+      """
     }
     val module = compileModule(code)
 
@@ -445,11 +445,11 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
   test("recursive function call with different styles") {
     val code = {
       """
-          def factorial(n: Int): Int = {
-              if n == 0 then 1
-              else n * factorial(n - 1)
-          }
-        """
+        def factorial(n: Int): Int = {
+            if n == 0 then 1
+            else n * factorial(n - 1)
+        }
+      """
     }
     val module = compileModule(code)
 
@@ -461,9 +461,9 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
   test("higher order function") {
     val code = {
       """
-          def twice(f: Int -> Int, x: Int): Int = f(f(x))
-          def increment(n: Int): Int = n + 1
-        """
+        def twice(f: Int -> Int, x: Int): Int = f(f(x))
+        def increment(n: Int): Int = n + 1
+      """
     }
     val module = compileModule(code)
 
@@ -475,18 +475,18 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
   test("using GADT with map and pattern matching") {
     val code = {
       """
-          type Either(L: 'Type, R: 'Type) = inductive {
-              Left(L)
-              Right(R)
-          }
+        type Either(L: 'Type, R: 'Type) = inductive {
+            Left(L)
+            Right(R)
+        }
 
-          def mapEither(L: 'Type, R: 'Type, S: 'Type, either: Either(L, R), transform: R -> S): Either(L, S) = {
-              match either {
-                  case Either(L, R)::Left(value) => Either(L, S)::Left(value)
-                  case Either(L, R)::Right(value) => Either(L, S)::Right(transform(value))
-              }
-          }
-        """
+        def mapEither(L: 'Type, R: 'Type, S: 'Type, either: Either(L, R), transform: R -> S): Either(L, S) = {
+            match either {
+                case Either(L, R)::Left(value) => Either(L, S)::Left(value)
+                case Either(L, R)::Right(value) => Either(L, S)::Right(transform(value))
+            }
+        }
+      """
     }
     val module = compileModule(code)
 
@@ -497,23 +497,45 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
   test("higher kinded type and mapping") {
     val code = {
       """
-          type List(T: 'Type) = inductive {
-              Nil
-              Cons(T, List(T))
-          }
+        type List(T: 'Type) = inductive {
+            Nil
+            Cons(T, List(T))
+        }
 
-          def mapList(A: 'Type, B: 'Type, list: List(A), transform: A -> B): List(B) = {
-              match list {
-                  case List(A)::Nil => List(B)::Nil
-                  case List(A)::Cons(head, tail) => List(B)::Cons(transform(head), mapList(A, B, tail, transform))
-              }
-          }
-        """
+        def mapList(A: 'Type, B: 'Type, list: List(A), transform: A -> B): List(B) = {
+            match list {
+                case List(A)::Nil => List(B)::Nil
+                case List(A)::Cons(head, tail) => List(B)::Cons(transform(head), mapList(A, B, tail, transform))
+            }
+        }
+      """
     }
     val module = compileModule(code)
 
     module.eval("mapList(Int, String, List(Int)::Cons(1, List(Int)::Cons(2, List(Int)::Nil)), (n: Int) => n.toString)") should be(module.eval("List(String)::Cons(\"1\", List(String)::Cons(\"2\", List(String)::Nil))"))
     module.eval("mapList(Int, Bool, List(Int)::Nil, (n: Int) => n > 0)") should be(module.eval("List(Bool)::Nil"))
+  }
+
+  test("lambda apply different style") {
+    val code = {
+      """
+        type List(T: 'Type) = inductive {
+            Nil
+            Cons(T, List(T))
+        }
+
+        def fold[A: 'Type, B: 'Type](list: List(A), initial: B, combine: B -> A -> B): B = {
+            match list {
+                case List(A)::Nil => initial
+                case List(A)::Cons(head, tail) => tail.fold[A, B](combine(initial, head), combine)
+            }
+        }
+
+        def sum(list: List(Int)): Int = list.fold[Int, Int](0) |lhs: Int, rhs: Int| { lhs + rhs }
+      """
+    }
+    val module = compileModule(code)
+    module.eval("sum(List(Int)::Cons(1, List(Int)::Cons(2, List(Int)::Cons(3, List(Int)::Nil))))") should be(module.eval("6"))
   }
 
   test("overloaded function with different types") {
@@ -929,7 +951,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
          * This implementation models core constructs of MLTT, including terms, values, environments,
          * evaluation, type inference, and normalization.
          */
-
+        
         /**
          * Extracts the value from an `Option[A]`. Throws an error if the option is `None`.
          * @param <A> Type of the value.
@@ -940,7 +962,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             None        // Represents the absence of a value.
             Some(A)     // Wraps a value of type A.
         }
-
+        
         /**
          * Extracts the value from an `Option[A]`. Throws an error if the option is `None`.
          * @param <A> Type of the value.
@@ -951,7 +973,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             case Option[A]::None => panic("Unwrapping a none option type")
             case Option[A]::Some(value) => value
         }
-
+        
         /**
          * `Term` represents the syntax of expressions in MLTT. Each constructor corresponds
          * to a syntactic category.
@@ -967,8 +989,18 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             Lambda(String, Term, Term)
             // Application: Applying a function to an argument.
             Apply(Term, Term)
+            // Sigma Type: `Σ(x : A). B`, a dependent pair type.
+            Sigma(String, Term, Term)
+            // Pair Term: `(a, b)`.
+            Pair(Term, Term)
+            // Projection: Extracting the first or second element of a pair.
+            Proj(Projection, Term)
         }
-
+        
+        type Projection = inductive {
+            Fst; Snd
+        }
+        
         /**
          * `Value` represents the evaluated form of terms, reducing to values during evaluation.
          */
@@ -981,15 +1013,19 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             Lambda(Value, Value -> Value)
             // Pi Type Value: Represents a dependent function type.
             Pi(Value, Value -> Value)
+            // Sigma Type Value: Represents a dependent pair type.
+            Sigma(Value, Value -> Value)
+            // Pair Value: A pair of values.
+            Pair(Value, Value)
         }
-
+        
         /**
          * Types are represented as values within this implementation.
          */
         type Type = Value
-
+        
         // **Neutral Values**
-
+        
         /*
          * `NeutralValue` represents expressions that cannot be evaluated further due to
          * the absence of sufficient information (e.g., variables or applications of variables).
@@ -999,15 +1035,17 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             Var(String)
             // Application: Applying a neutral function to a value.
             Apply(NeutralValue, Value)
+            // Projection: Extracting the first or second element of a pair.
+            Proj(Projection, NeutralValue)
         }
-
+        
         /**
          * Converts a `NeutralValue` into a `Value`.
          * @param neutral The `NeutralValue` to convert.
          * @return The resulting `Value`.
          */
         def toValue(neutral: NeutralValue): Value = Value::Neutral(neutral)
-
+        
         /**
          * `TypedValue` pairs a value with its type, essential for type checking and
          * ensuring type safety during evaluation.
@@ -1016,7 +1054,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             value: Value    // The evaluated value.
             ty: Type        // The type of the value.
         }
-
+        
         /**
          * `Env` represents the typing context, mapping variable names to their corresponding typed values.
          */
@@ -1024,7 +1062,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             Empty
             Cons(String, TypedValue, Env)
         }
-
+        
         /**
          * Adds a new binding to the environment.
          * @param env The current environment.
@@ -1040,7 +1078,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             }
             Env::Cons(name, typedValue, env)
         }
-
+        
         /**
          * Adds a variable to the environment as a neutral value, commonly used when introducing parameters.
          * @param env The current environment.
@@ -1051,7 +1089,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
         def addVar(env: Env, ident: String, ty: Type): Env = {
             env.add(ident, NeutralValue::Var(ident).toValue, ty)
         }
-
+        
         /**
          * Retrieves a binding from the environment by name.
          * @param env The current environment.
@@ -1067,7 +1105,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
                 }
             }
         }
-
+        
         /**
          * Checks if a name exists in the environment.
          * @param env The current environment.
@@ -1078,7 +1116,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             case Env::Empty => false  // Name not found.
             case Env::Cons(name', _, env') => name' == name || env'.contains(name)  // Found or continue searching.
         }
-
+        
         /**
          * Generates a fresh identifier not present in the environment, used to avoid variable capture during substitution.
          * @param env The current environment.
@@ -1090,14 +1128,14 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             if !env.contains(ident) then ident  // If not in the environment, it's fresh.
             else env.freshIdentFrom(cnt + 1)    // Try the next identifier.
         }
-
+        
         /**
          * Generates a fresh identifier starting from `$0`.
          * @param env The current environment.
          * @return A fresh identifier.
          */
         def freshIdent(env: Env): String = env.freshIdentFrom(0)
-
+        
         /**
          * Evaluates a `Term` in a given environment to produce a `Value`.
          * Evaluation proceeds by pattern matching on the term's structure.
@@ -1128,6 +1166,15 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
                 }
                 Value::Pi(paramType, closure)
             }
+            // Sigma Type Evaluation: Similar to lambda
+            case Term::Sigma(paramIdent, paramTypeTerm, codomainTerm) => {
+                let paramType = env.evaluate(paramTypeTerm) // Evaluate parameter type.
+                let closure = (arg: Value) => {
+                    // Evaluate codomain with argument bound.
+                    env.add(paramIdent, arg, paramType).evaluate(codomainTerm)
+                }
+                Value::Sigma(paramType, closure)
+            }
             // Function Application Evaluation
             case Term::Apply(fn, arg) => match env.evaluate(fn) {
                 // Apply function to the argument.
@@ -1136,9 +1183,11 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
                 case Value::Neutral(neutral) => NeutralValue::Apply(neutral, env.evaluate(arg)).toValue
                 case _ => panic("Invalid type: not a function")
             }
+            // Pair Construction
+            case Term::Pair(fst, snd) => Value::Pair(env.evaluate(fst), env.evaluate(snd))
         }
-
-
+        
+        
         /**
          * Converts a `NeutralValue` back into a `Term`, used during normalization to reconstruct
          * terms from evaluated values.
@@ -1151,8 +1200,10 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             case NeutralValue::Var(name) => Term::Var(name)
             // Reconstruct application.
             case NeutralValue::Apply(fn, arg) => Term::Apply(fn.readBack(env), arg.readBack(env))
+            // Reconstruct projection.
+            case NeutralValue::Proj(proj, neutral) => Term::Proj(proj, neutral.readBack(env))
         }
-
+        
         /**
          * Converts a `Value` back into a `Term`, effectively normalizing the term by reducing it to its simplest form.
          * @param value The `Value` to convert.
@@ -1162,6 +1213,8 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
         def readBack(value: Value, env: Env): Term = match value {
             case Value::Neutral(neutral) => neutral.readBack(env)
             case Value::Type(univ) => Term::Type(univ)
+            case Value::Pair(fst, snd) => Term::Pair(fst.readBack(env), snd.readBack(env))
+        
             // Lambda Normalization: Generate a fresh variable to avoid capture.
             case Value::Lambda(paramType, fn) => {
                 let paramIdent: String = env.freshIdent
@@ -1176,6 +1229,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
                     fn(variable).readBack(updatedEnv)  // Normalize the body.
                 )
             }
+        
             // Pi Type Normalization: Similar to lambda normalization.
             case Value::Pi(paramType, fn) => {
                 // Fresh parameter name.
@@ -1191,8 +1245,24 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
                     fn(variable).readBack(updatedEnv)   // Normalize the codomain.
                 )
             }
+        
+            // Sigma Type Normalization: Similar to lambda normalization.
+            case Value::Sigma(paramType, fn) => {
+                // Fresh parameter name.
+                let paramIdent: String = env.freshIdent
+                // Normalize parameter type.
+                let paramTypeTerm = paramType.readBack(env)
+                // Create variable value.
+                let variable: Value = NeutralValue::Var(paramIdent).toValue
+                // Extend environment.
+                let updatedEnv = env.add(paramIdent, variable, env.evaluate(paramTypeTerm))
+                Term::Sigma(
+                    paramIdent, paramTypeTerm,          // Construct Sigma type term.
+                    fn(variable).readBack(updatedEnv)   // Normalize the codomain.
+                )
+            }
         }
-
+        
         /**
          * Retrieves the universe level from a `Type` value.
          * Universe levels are critical in MLTT to maintain consistency and avoid paradoxes.
@@ -1203,7 +1273,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             case Value::Type(univ) => univ                                  // Extract universe level.
             case _ => panic("Failed to unwrap universe level: not a type")  // Panic if not a type.
         }
-
+        
         /**
          * Infers the type of a `Term` within a given environment following MLTT's typing rules.
          * @param env The current environment.
@@ -1211,10 +1281,13 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
          * @return The inferred type as a `Value`.
          */
         def infer(env: Env, expr: Term): Value = match expr {
+        
             // Retrieve the variable's type from the environment.
             case Term::Var(name) => env.get(name).unwrap[TypedValue].ty
+        
             // `Type(n)` has type `Type(n + 1)`.
             case Term::Type(univ) => Value::Type(univ + 1)
+        
             // Lambda Type Inference:
             case Term::Lambda(paramIdent, paramTypeTerm, bodyTerm) => {
                 // Infer parameter type's universe level.
@@ -1238,6 +1311,19 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
                     }
                 )
             }
+        
+            // Pair Type Inference:
+            case Term::Pair(fst, snd) => {
+                // Infer the type of the first element.
+                let fstType: Type = env.infer(fst)
+                // Infer the type of the second element.
+                let sndType: Type = env.infer(snd)
+                // The pair type is a Sigma type of the two elements.
+                Value::Sigma(fstType, (fstValue: Value) => {
+                    Value::Sigma(sndType, (sndValue: Value) => Value::Pair(fstValue, sndValue))
+                })
+            }
+        
             // Pi Type Inference:
             case Term::Pi(paramIdent, paramTypeTerm, returnTypeTerm) => {
                 // Infer parameter type's universe level.
@@ -1250,8 +1336,21 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
                 // The Pi type's universe level is the maximum of parameter and return types.
                 Value::Type(max paramLevel returnTypeLevel)
             }
+        
+            // Sigma Type Inference:
+            case Term::Sigma(paramIdent, paramTypeTerm, codomainTerm) => {
+                // Infer parameter type's universe level.
+                let paramLevel = env.infer(paramTypeTerm).universeLevel
+                // Evaluate parameter type.
+                let paramType: Type = env.evaluate(paramTypeTerm)
+                // Create variable for parameter.
+                let variable: Value = NeutralValue::Var(paramIdent).toValue
+                let rhsTypeLevel = env.add(paramIdent, variable, paramType).infer(codomainTerm).universeLevel
+                // The sigma type's universe level is the maximum of lhs and rhs types.
+                Value::Type(max paramLevel rhsTypeLevel)
+            }
         }
-
+        
         /**
          * Normalizes a `Term` by evaluating it and converting the result back into a term.
          * Normalization is essential for comparing terms for equality and ensuring consistent behavior.

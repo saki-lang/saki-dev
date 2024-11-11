@@ -24,6 +24,7 @@ object Prelude {
     PrimitiveBool.definitions,
     PrimitiveInt.definitions,
     PrimitiveFloat.definitions,
+    PrimitiveRune.definitions,
     PrimitiveString.definitions,
     Seq(equals, notEquals, panic),
   ).flatten

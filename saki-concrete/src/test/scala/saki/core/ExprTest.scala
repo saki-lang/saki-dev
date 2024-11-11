@@ -182,14 +182,47 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
     expr.normalize should be (IntValue(514).toTerm)
   }
 
-//  test("eq refl") {
-//    val code = {
-//      """
-//        let eq = (A: 'Type, a b: A): 'Type => ∀(P: A -> 'Type) -> P(a) -> P(b)
-//        let refl = (A: 'Type, a: A): eq(A, a, a) => (P: A -> 'Type, pa: P(a)) => pa
-//        let symmetry = (A: 'Type, a b: A, e: eq(A, a, b)): eq(A, b, a) => e((b: A) => eq(A, b, a), refl(A, a))
-//      """
-//    }
-//    synthCodeBlock(code)
-//  }
+  test("synth higher-order function") {
+    val code = {
+      """
+        let applyTwice: ((Int -> Int) -> Int -> Int) = (f: Int -> Int) => (x: Int) => f(f(x))
+        applyTwice((x: Int) => x + 2)(3)
+      """
+    }
+    val (expr, _) = synthCodeBlock(code)
+    expr.normalize should be(IntValue(7).toTerm)
+  }
+
+  test("synth dependent type function") {
+    val code = {
+      """
+        let identity = (A: 'Type) => (x: A) => x
+        identity(Int)(42)
+      """
+    }
+    val (expr, _) = synthCodeBlock(code)
+    expr.normalize should be(IntValue(42).toTerm)
+  }
+
+  test("synth dependent types in function composition") {
+    val code = {
+      """
+        let compose = (A: 'Type, B: 'Type, C: 'Type) => (f: A -> B) => (g: B -> C) => (x: A) => g(f(x))
+        compose(Int, Float, String) ((x: Int) => x.toFloat) ((x: Float) => x.toString) 10
+      """
+    }
+    val (expr, _) = synthCodeBlock(code)
+    expr.normalize should be(StringValue("10.0").toTerm)
+  }
+
+  test("eq refl") {
+    val code = {
+      """
+        let eq = (A: 'Type, a b: A): 'Type => ∀(P: A -> 'Type) -> P(a) -> P(b)
+        let refl = (A: 'Type, a: A): eq(A, a, a) => (P: A -> 'Type, pa: P(a)) => pa
+        let symmetry = (A: 'Type, a b: A, e: eq(A, a, b)): eq(A, b, a) => e((b: A) => eq(A, b, a), refl(A, a))
+      """
+    }
+    synthCodeBlock(code)
+  }
 }

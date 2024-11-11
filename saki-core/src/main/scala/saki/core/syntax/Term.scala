@@ -563,9 +563,9 @@ private sealed trait OverloadedTermExt[S <: Term & OverloadedTermExt[S]] {
 
     // Merge the states with identical parameter types
     //  1. Group the states by parameter type
-    val grouped: Map[Type, Iterable[CodomainClosure]] = closureStates.groupBy(_._1.readBack).flatMap {
+    val grouped: Map[Type, Iterable[CodomainClosure]] = closureStates.groupBy(_._1.readBack).map {
       (_, states) => states.map(states.head._1 -> _._2)
-    }.groupMap(_._1)(_._2)
+    }.flatten.groupMap(_._1)(_._2)
 
     //  2. Merge the states with identical parameter types
     val merged: Map[Type, CodomainClosure] = grouped.map { (paramType, closures) =>
@@ -573,11 +573,9 @@ private sealed trait OverloadedTermExt[S <: Term & OverloadedTermExt[S]] {
       if closures.size == 1 then {
         paramType -> closures.head
       } else {
-        val paramIdent = env.uniqueVariable
-        val variable = Value.variable(paramIdent, paramType)
-        env.withLocal(paramIdent, variable, paramType) { implicit env =>
-          val terms = closures.map(_(variable).readBack)
-          val merged = terms.map {
+        val merged = closures.map { closure =>
+          val (_, bodyTerm) = Value.readBackClosure(paramType, closure)
+          bodyTerm match {
             // case 1: The term is a lambda-like term, convert it to an overloaded lambda
             case lambdaLikeTerm: LambdaLikeTerm => lambdaLikeTerm.toOverloaded
             // case 2: The term is an overloaded lambda, keep it as is
@@ -586,11 +584,11 @@ private sealed trait OverloadedTermExt[S <: Term & OverloadedTermExt[S]] {
             case _ => OverloadingAmbiguous.raise {
               s"Ambiguous overloading for function: ${paramType}"
             }
-          }.reduce {
-            (merged, overloaded) => merged.merge(overloaded)
           }
-          Term.evalParameterized(paramType, merged, evalMode)
+        }.reduce {
+          (merged, overloaded) => merged.merge(overloaded)
         }
+        Term.evalParameterized(paramType, merged, evalMode)
       }
     }
     constructor(merged)
