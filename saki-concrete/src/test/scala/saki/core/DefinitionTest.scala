@@ -1360,12 +1360,42 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
          */
         def normalize(env: Env, expr: Term): Term = env.evaluate(expr).readBack(env)
 
+        def pretty(expr: Term): String = match expr {
+            case Term::Var(name) => name
+            case Term::Type(univ) => "Type(" ++ univ.toString ++ ")"
+            case Term::Lambda(paramIdent, paramType, body) =>
+                "λ(" ++ paramIdent ++ " : " ++ paramType.pretty ++ "). " ++ body.pretty
+            case Term::Apply(fn, arg) => "(" ++ fn.prettyAtom ++ " " ++ arg.prettyAtom ++ ")"
+            case Term::Pi(paramIdent, paramType, returnType) =>
+                "Π(" ++ paramIdent ++ " : " ++ paramType.pretty ++ "). " ++ returnType.pretty
+            case Term::Sigma(paramIdent, paramType, codomain) =>
+                "Σ(" ++ paramIdent ++ " : " ++ paramType.pretty ++ "). " ++ codomain.pretty
+            case Term::Pair(fst, snd) => "(" ++ fst.pretty ++ ", " ++ snd.pretty ++ ")"
+            case Term::Proj(Projection::Fst, pair) => "fst " ++ pair.pretty
+        }
+
+        def prettyAtom(expr: Term): String = match expr {
+            case Term::Var(name) => name
+            case Term::Type(_) => expr.pretty
+            case Term::Lambda(_, _, _) => "(" ++ expr.pretty ++ ")"
+            case Term::Apply(_, _) => "(" ++ expr.pretty ++ ")"
+            case Term::Pi(_, _, _) => "(" ++ expr.pretty ++ ")"
+            case Term::Sigma(_, _, _) => "(" ++ expr.pretty ++ ")"
+            case Term::Pair(_, _) => expr.pretty
+            case Term::Proj(_, _) => "(" ++ expr.pretty ++ ")"
+        }
+
         def var(ident: String): Value = NeutralValue::Var(ident).toValue
 
         def prelude: Env = Env::Empty
+            .addVar("Any", Value::Type(0))
+            .addVar("Nothing", Value::Type(0))
             .addVar("Bool", Value::Type(0))
             .addVar("true", var("Bool"))
             .addVar("false", var("Bool"))
+            .addVar("Nat", Value::Type(0))
+            .addVar("zero", var("Nat"))
+            .addVar("succ", Value::Pi(var("Nat"), (n: Value) => var("Nat")))
       """
     }
     val module = compileModule(code)
