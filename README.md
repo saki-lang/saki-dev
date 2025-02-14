@@ -1,6 +1,8 @@
-# Saki-lang
+# Lepton-lang
 
-Saki is a dependently-typed, pure functional language with algebraic subtyping and overloaded superposition types.  It prioritizes simplicity in design, using a Scala-inspired syntax while leveraging a type system grounded in Martin-Löf Type Theory. Saki introduces novel features like constraint universes and superposition types, serving as a research platform for exploring advanced type systems and verified program synthesis.
+> Former Saki-lang. No more MyGo. No more Ave Mujica. No more Saki. Getting tired. -- Feb 15, 2025. After watching Ave Mujica ep7. 
+
+Lepton is a dependently-typed, pure functional language with algebraic subtyping and overloaded superposition types.  It prioritizes simplicity in design, using a Scala-inspired syntax while leveraging a type system grounded in Martin-Löf Type Theory. Lepton introduces novel features like constraint universes and superposition types, serving as a research platform for exploring advanced type systems and verified program synthesis.
 
 ```
 def Eq(A: 'Type, a b: A): 'Type = ∀(P: A -> 'Type) -> P(a) -> P(b)
@@ -38,4 +40,4 @@ def theoremPlusZero: ∀(n: ℕ) -> (n + ℕ::Zero ^= n) = {
 }
 ```
 
-[Documents](https://saki-lang.github.io/) | [Playground](https://saki-lang.tech/) | [Online REPL](https://repl.saki-lang.tech/)
+[Documents](https://lepton-lang.github.io/) | [Playground](https://lepton-lang.tech/) | [Online REPL](https://repl.lepton-lang.tech/)
