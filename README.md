@@ -40,4 +40,4 @@ def theoremPlusZero: ∀(n: ℕ) -> (n + ℕ::Zero ^= n) = {
 }
 ```
 
-[Documents](https://lepton-lang.github.io/) | [Playground](https://lepton-lang.tech/) | [Online REPL](https://repl.lepton-lang.tech/)
+[Documents](https://saki-lang.github.io/) | [Playground](https://saki-lang.tech/) | [Online REPL](https://repl.saki-lang.tech/)
