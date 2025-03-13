@@ -214,7 +214,7 @@ case class Match(scrutinees: Seq[Term], clauses: Seq[Clause[Term]]) extends Term
   }
 }
 
-case class Pi(param: Param[Term], codomain: Term) extends Term with PiLikeTerm {
+case class Pi(param: Param[Term], codomain: Term) extends Term with ApplicableTypeTerm {
   override def eval(evalMode: EvalMode)(implicit env: Environment.Typed[Value]): Value =
     this.eval(Value.Pi.apply, evalMode)
   override def substituteTerm(from: Term, to: Term)(implicit env: Environment.Typed[Value]): Term = {
@@ -226,7 +226,7 @@ case class Pi(param: Param[Term], codomain: Term) extends Term with PiLikeTerm {
     codomain.contains(ident, shadowed + param.ident)
 }
 
-case class OverloadedPi(states: Map[Param[Term], Term]) extends Term with OverloadedTermExt[OverloadedPi] {
+case class OverloadedPi(states: Map[Param[Term], Term]) extends Term with OverloadedTerm[OverloadedPi] {
   override def eval(evalMode: EvalMode)(implicit env: Environment.Typed[Value]): Value =
     this.eval(Value.OverloadedPi.apply, evalMode)
   override def substituteTerm(from: Term, to: Term)(implicit env: Environment.Typed[Value]): Term =
@@ -235,7 +235,7 @@ case class OverloadedPi(states: Map[Param[Term], Term]) extends Term with Overlo
     states.exists((param, codomain) => codomain.contains(ident, shadowed + param.ident))
 }
 
-case class Sigma(param: Param[Term], codomain: Term) extends Term with PiLikeTerm {
+case class Sigma(param: Param[Term], codomain: Term) extends Term with ApplicableTypeTerm {
   override def eval(evalMode: EvalMode)(implicit env: Environment.Typed[Value]): Value =
     this.eval(Value.Sigma.apply, evalMode)
   override def substituteTerm(from: Term, to: Term)(implicit env: Environment.Typed[Value]): Term = {
@@ -293,7 +293,7 @@ case class Apply(fn: Term, arg: Term) extends Term {
     fn.contains(ident, shadowed) || arg.contains(ident, shadowed)
 }
 
-case class Lambda(param: Param[Term], body: Term) extends Term with LambdaLikeTerm {
+case class Lambda(param: Param[Term], body: Term) extends Term with ApplicableTerm {
   override def eval(evalMode: EvalMode)(implicit env: Environment.Typed[Value]): Value =
     this.eval(Value.Lambda.apply, evalMode)
   override def substituteTerm(from: Term, to: Term)(implicit env: Environment.Typed[Value]): Term = {
@@ -304,7 +304,7 @@ case class Lambda(param: Param[Term], body: Term) extends Term with LambdaLikeTe
     body.contains(ident, shadowed + param.ident)
 }
 
-case class OverloadedLambda(states: Map[Param[Term], Term]) extends Term with OverloadedTermExt[OverloadedLambda] {
+case class OverloadedLambda(states: Map[Param[Term], Term]) extends Term with OverloadedTerm[OverloadedLambda] {
   override def eval(evalMode: EvalMode)(implicit env: Environment.Typed[Value]): Value =
     this.eval(Value.OverloadedLambda.apply, evalMode)
   override def substituteTerm(from: Term, to: Term)(implicit env: Environment.Typed[Value]): Term =
@@ -360,14 +360,14 @@ object Term extends RuntimeEntityFactory[Term] {
     inductive: Term, constructor: Constructor[Term], args: Seq[Term]
   ): Term = InductiveVariant(inductive, constructor, args)
 
-  def overloaded[T <: Term & OverloadedTermExt[T]](
+  def overloaded[T <: Term & OverloadedTerm[T]](
     constructor: Map[Param[Term], Term] => T,
     paths: Seq[(Seq[Param[Term]], Term)],
   ): T = paths.foldLeft(constructor(Map.empty)) {
     case (overloaded, (path, body)) => addOverloadedPath(overloaded, path, body)
   }
 
-  private def addOverloadedPath[T <: Term & OverloadedTermExt[T]](
+  private def addOverloadedPath[T <: Term & OverloadedTerm[T]](
     overloaded: T, path: Seq[Param[Term]], body: Term,
   ): T = path match {
     case Nil => overloaded
@@ -413,114 +413,5 @@ object Term extends RuntimeEntityFactory[Term] {
     }
   }
 
-}
-
-private sealed trait LambdaLikeTerm {
-  def param: Param[Term]
-  def body: Term
-
-  def eval(constructor: (Type, CodomainClosure) => Value, evalMode: EvalMode)(
-    implicit env: Environment.Typed[Value]
-  ): Value = {
-    val (paramType, closure) = Term.evalParameterized(param, body, evalMode)
-    constructor(paramType, closure)
-  }
-
-  def toOverloaded: OverloadedTermExt[?] & Term = this match {
-    case lambda: Lambda => OverloadedLambda(Map(lambda.param -> lambda.body))
-    case pi: Pi => OverloadedPi(Map(pi.param -> pi.codomain))
-    case _ => unreachable
-  }
-}
-
-private sealed trait PiLikeTerm extends LambdaLikeTerm {
-  def codomain: Term
-  override def body: Term = codomain
-}
-
-extension (params: ParamList[Term]) {
-  def buildPiType(body: Term): Term = params.foldRight(body) {
-    case (param, body) => Pi(param, body)
-  }
-
-  def buildLambda(body: Term): Term = params.foldRight(body) {
-    case (param, body) => Lambda(param, body)
-  }
-}
-
-private sealed trait OverloadedTermExt[S <: Term & OverloadedTermExt[S]] {
-
-  def states: Map[Param[Term], Term]
-
-  def eval(constructor: Map[Type, CodomainClosure] => Value, evalMode: EvalMode)(
-    implicit env: Environment.Typed[Value]
-  ): Value = {
-    // Normalize the states (unify the parameters with identical type but different names)
-    val closureStates: Seq[(Type, CodomainClosure)] = states.toSeq.map {
-      (param, term) => Term.evalParameterized(param, term, evalMode)
-    }
-
-    // Merge the states with identical parameter types
-    //  1. Group the states by parameter type
-    val grouped: Map[Type, Iterable[CodomainClosure]] = closureStates.groupBy(_._1.readBack).map {
-      (_, states) => states.map(states.head._1 -> _._2)
-    }.flatten.groupMap(_._1)(_._2)
-
-    //  2. Merge the states with identical parameter types
-    val merged: Map[Type, CodomainClosure] = grouped.map { (paramType, closures) =>
-      assert(closures.nonEmpty)
-      if closures.size == 1 then {
-        paramType -> closures.head
-      } else {
-        val merged = closures.map { closure =>
-          val (_, bodyTerm) = Value.readBackClosure(paramType, closure)
-          bodyTerm match {
-            // case 1: The term is a lambda-like term, convert it to an overloaded lambda
-            case lambdaLikeTerm: LambdaLikeTerm => lambdaLikeTerm.toOverloaded
-            // case 2: The term is an overloaded lambda, keep it as is
-            case overloaded: OverloadedTermExt[?] => overloaded
-            // case 3: The term is not a lambda-like term, indicating an ambiguous overload
-            case _ => OverloadingAmbiguous.raise {
-              s"Ambiguous overloading for function: ${paramType}"
-            }
-          }
-        }.reduce {
-          (merged, overloaded) => merged.merge(overloaded)
-        }
-        Term.evalParameterized(paramType, merged, evalMode)
-      }
-    }
-    constructor(merged)
-  }
-
-  def copy(states: Map[Param[Term], Term]): S
-
-  @SuppressWarnings(Array("unchecked"))
-  private def merge(other: OverloadedTermExt[?]): S = {
-    assert(this.getClass == other.getClass)
-    val mergedStates = (this.states.keySet ++ other.states.keySet).map { param =>
-      val term: Term = (this.states.get(param), other.states.get(param)) match {
-        case (Some(term1: Term), Some(term2: Term)) => (term1, term2) match {
-          // States are overloaded lambdas, merge them recursively
-          case (overloaded1: OverloadedTermExt[?], overloaded2: OverloadedTermExt[?]) => {
-            // Recursively merge the states
-            try overloaded1.asInstanceOf[S].merge(overloaded2.asInstanceOf[S]) catch {
-              // If the merge fails, the states are not compatible (e.g. trying to merge a Pi and a Lambda)
-              case _: ClassCastException => TypeNotMatch.raise {
-                s"Cannot merge states of different types: ${term1}, ${term2}"
-              }
-            }
-          }
-          // States are not overloaded lambdas, indicating a mismatch
-          case _ => TypeNotMatch.raise(s"Cannot merge states of different types: ${term1}, ${term2}")
-        }
-        case (Some(term: Term), _) => term
-        case (_, Some(term: Term)) => term
-        case (None, None) => unreachable
-      }
-      param -> term
-    }.toMap[Param[Term], Term]
-    this.copy(mergedStates)
-  }
 }
 
