@@ -2,6 +2,8 @@ package saki.prelude
 
 import saki.core.domain.Value
 import saki.core.syntax.*
+import saki.core.term
+import saki.core.term.Term
 import saki.prelude.@:
 
 // noinspection ZeroIndexToHead

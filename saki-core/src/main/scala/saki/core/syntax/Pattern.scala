@@ -4,6 +4,8 @@ import saki.core.context.{Environment, Typed}
 import saki.core.domain.{Type, Value}
 import saki.core.elaborate.Resolve
 import saki.core.*
+import saki.core.term
+import saki.core.term.Term
 import saki.error.CoreErrorKind.*
 import saki.util.SourceSpan
 
@@ -298,8 +300,8 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
   }
 
   def toTerm(implicit env: Environment.Typed[Value]): Term = self match {
-    case Pattern.Primitive(value) => Term.Primitive(value)
-    case Pattern.Bind(binding) => Term.Variable(binding)
+    case Pattern.Primitive(value) => term.Primitive(value)
+    case Pattern.Bind(binding) => term.Variable(binding)
     case Pattern.Variant(inductiveTerm, constructorIdent, patterns) => {
       val inductiveType = inductiveTerm.eval match {
         case inductive: Value.InductiveType => inductive
@@ -313,12 +315,12 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
         }
       }
       val args = patterns.map(_.toTerm)
-      Term.InductiveVariant(inductiveType.readBack, constructor, args)
+      term.InductiveVariant(inductiveType.readBack, constructor, args)
     }
     case Pattern.Typed(pattern, _) => pattern.toTerm
     case Pattern.Record(fields) => {
       val fieldValues = fields.map((name, pattern) => (name, pattern.toTerm))
-      Term.Record(fieldValues.toMap)
+      term.Record(fieldValues.toMap)
     }
   }
 }

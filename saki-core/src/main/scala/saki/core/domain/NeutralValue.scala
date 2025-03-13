@@ -1,7 +1,9 @@
 package saki.core.domain
 
 import saki.core.context.{Environment, Typed}
-import saki.core.syntax.{buildTypeMapping, getOverload, Clause, Function, Inductive, NaiveDeclaration, OverloadedSymbol, Term, Var}
+import saki.core.syntax.{buildTypeMapping, getOverload, Clause, Function, Inductive, NaiveDeclaration, OverloadedSymbol, Var}
+import saki.core.term
+import saki.core.term.Term
 import saki.error.CoreErrorKind.*
 
 import scala.annotation.targetName
@@ -121,11 +123,11 @@ enum NeutralValue {
   }
 
   def readBack(implicit env: Environment.Typed[Value]): Term = this match {
-    case Variable(ident, _) => Term.Variable(ident)
-    case Apply(fn, arg) => Term.Apply(fn.readBack, arg.readBack)
-    case TypeBarrier(value, ty) => Term.TypeBarrier(value.readBack, ty.readBack)
-    case Projection(record, field) => Term.Projection(record.readBack, field)
-    case FunctionInvoke(fnRef, args) => Term.FunctionInvoke(fnRef, args.map(_.readBack))
+    case Variable(ident, _) => term.Variable(ident)
+    case Apply(fn, arg) => term.Apply(fn.readBack, arg.readBack)
+    case TypeBarrier(value, ty) => term.TypeBarrier(value.readBack, ty.readBack)
+    case Projection(record, field) => term.Projection(record.readBack, field)
+    case FunctionInvoke(fnRef, args) => term.FunctionInvoke(fnRef, args.map(_.readBack))
     case Match(scrutinees, clauses) => {
       // TODO: May be we don't need to build the match bindings here
       val termClauses = clauses.map { clause =>
@@ -140,7 +142,7 @@ enum NeutralValue {
         val bodyTerm = env.withLocals(bindings.toMap) { implicit env => clause.body.readBack }
         Clause(clause.patterns.map(_.map(_.readBack)), bodyTerm)
       }
-      Term.Match(scrutinees.map(_.readBack), termClauses)
+      term.Match(scrutinees.map(_.readBack), termClauses)
     }
   }
 

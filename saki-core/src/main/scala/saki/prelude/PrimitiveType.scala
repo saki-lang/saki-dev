@@ -1,13 +1,15 @@
 package saki.prelude
 import saki.core.domain.Value
 import saki.core.syntax.*
+import saki.core.term
+import saki.core.term.Term
 
 object PrimitiveType extends PreludeDefinitionSet {
 
   private def primitiveType(ident: String, value: Value): NativeFunction[Term] = NativeFunction(
     ident = Var.Defined(ident),
     params = Seq.empty,
-    resultType = Term.Universe,
+    resultType = term.Universe,
     nativeImpl = (_: ArgList[Value], _) => value
   )
 

@@ -2,6 +2,8 @@ package saki.core.context
 
 import saki.core.*
 import saki.core.syntax.Var
+import saki.core.term
+import saki.core.term.Term
 
 trait Context[K, +V] {
   def get(key: K): Option[V]

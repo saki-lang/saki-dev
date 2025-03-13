@@ -2,6 +2,8 @@ package saki.core.context
 
 import saki.core.*
 import saki.core.syntax.*
+import saki.core.term
+import saki.core.term.Term
 import saki.error.CoreErrorKind.*
 
 import scala.collection.Seq

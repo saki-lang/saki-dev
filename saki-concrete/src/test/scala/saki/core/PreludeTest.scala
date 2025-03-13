@@ -4,6 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should
 import saki.core.context.Environment
 import saki.core.domain.Value
+import saki.core.term.Term
 
 class PreludeTest extends AnyFunSuite with should.Matchers with SakiTestExt {
 

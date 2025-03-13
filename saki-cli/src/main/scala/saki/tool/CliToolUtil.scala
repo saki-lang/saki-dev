@@ -4,7 +4,9 @@ import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 import saki.cli.ReadEvalPrintLoop
 import saki.concrete.{ErrorListener, Visitor}
 import saki.concrete.syntax.{Definition, Evaluation}
-import saki.core.syntax.{Literal, Module, Term}
+import saki.core.syntax.{Literal, Module}
+import saki.core.term
+import saki.core.term.Term
 import saki.error.{CoreError, Error, PanicError}
 import saki.grammar.{SakiLexer, SakiParser}
 
@@ -45,7 +47,7 @@ def compileModule(source: String, path: Option[String] = None, doEvaluation: Boo
         case err: Throwable => throw err
       }
       evalResult match {
-        case Term.Primitive(Literal.StringValue(value)) => println(value)
+        case term.Primitive(Literal.StringValue(value)) => println(value)
         case term: Term => println(term.evalString(module.env))
         case _ => { /* Do nothing */ }
       }

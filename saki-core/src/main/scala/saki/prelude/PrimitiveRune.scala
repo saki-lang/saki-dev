@@ -1,6 +1,8 @@
 package saki.prelude
 import saki.core.domain.Value
-import saki.core.syntax.{NativeFunction, Term, Var}
+import saki.core.syntax.{NativeFunction, Var}
+import saki.core.term
+import saki.core.term.Term
 
 object PrimitiveRune extends PreludeDefinitionSet {
 

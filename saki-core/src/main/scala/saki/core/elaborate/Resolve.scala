@@ -2,6 +2,8 @@ package saki.core.elaborate
 
 import saki.core.context.DefinitionContext
 import saki.core.syntax.*
+import saki.core.term
+import saki.core.term.Term
 import saki.util.{unreachable, Graph, LateInit, SourceSpan}
 import saki.error.CoreErrorKind.*
 

@@ -3,7 +3,11 @@ package saki.core.elaborate
 import saki.core.Param
 import saki.core.context.{Environment, Typed}
 import saki.core.domain.{Type, Value}
-import saki.core.syntax.{*, given}
+import saki.core.syntax.*
+import saki.core.term
+import saki.core.term.Term
+import saki.core.term.{buildLambda, buildPiType}
+import saki.core.term.given
 import saki.error.CoreErrorKind.*
 import saki.util.{unreachable, SourceSpan}
 
@@ -36,11 +40,11 @@ object Synthesis:
       }
     }
 
-    case Expr.Universe() => Synth(Term.Universe, Value.Universe)
+    case Expr.Universe() => Synth(term.Universe, Value.Universe)
 
-    case Expr.Primitive(value) => Synth(Term.Primitive(value), Value.PrimitiveType(value.ty))
+    case Expr.Primitive(value) => Synth(term.Primitive(value), Value.PrimitiveType(value.ty))
 
-    case Expr.PrimitiveType(ty) => Synth(Term.PrimitiveType(ty), Value.Universe)
+    case Expr.PrimitiveType(ty) => Synth(term.PrimitiveType(ty), Value.Universe)
 
     case Expr.Variable(ref) => ref match {
       // Converting a definition reference to a lambda, enabling curry-style function application
@@ -60,12 +64,12 @@ object Synthesis:
 
     case Expr.Union(types) => {
       val synthTypes: Seq[Synth] = types.map(_.synth(env))
-      Synth(Term.Union(synthTypes.map(_.term).toSet), Value.Universe)
+      Synth(term.Union(synthTypes.map(_.term).toSet), Value.Universe)
     }
     
     case Expr.Intersection(types) => {
       val synthTypes: Seq[Synth] = types.map(_.synth(env))
-      Synth(Term.Intersection(synthTypes.map(_.term).toSet), Value.Universe)
+      Synth(term.Intersection(synthTypes.map(_.term).toSet), Value.Universe)
     }
 
     case Expr.TypeOf(value) => value.synth(env).unpack match {
@@ -75,14 +79,14 @@ object Synthesis:
     case Expr.Elimination(obj, member) => obj.synth(env).normalize.unpack match {
       // This is a project operation
       // `obj.field`
-      case (term, recordType: Value.RecordType) => term match {
-        case Term.Record(fields) => fields.get(member) match {
+      case (termSynth, recordType: Value.RecordType) => termSynth match {
+        case term.Record(fields) => fields.get(member) match {
           case Some(value) => Synth(value, recordType.fields(member))
           case None => RecordMissingField.raise(expr.span) {
             s"Field not found: $member"
           }
         }
-        case _ => Synth(Term.Projection(term, member), recordType.fields(member))
+        case _ => Synth(term.Projection(termSynth, member), recordType.fields(member))
       }
       // This is a method call
       // `obj.method`
@@ -152,7 +156,7 @@ object Synthesis:
               if !(paramType <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
                 s"Expected argument type: ${paramType.readBack}, found argument $argExpr with type ${argType.readBack}"
               }
-              Synth(Term.Apply(fn, argTerm), codomain(argValue))
+              Synth(term.Apply(fn, argTerm), codomain(argValue))
             }
           }
 
@@ -167,11 +171,11 @@ object Synthesis:
                 }
               }
             )
-            Synth(Term.Apply(fn, argTerm), eigenState)
+            Synth(term.Apply(fn, argTerm), eigenState)
           }
 
           case Value.Universe => fn.normalize match {
-            case Term.Pi(piParam, codomain) => {
+            case term.Pi(piParam, codomain) => {
               if !(piParam.`type`.eval <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
                 s"Expected type: ${piParam.`type`}, found: $argType"
               }
@@ -210,7 +214,7 @@ object Synthesis:
         s"Expected inductive type ${inductive.name}, found: ${constructor.owner.name}"
       }
       // Build lambda
-      val variant = Term.InductiveVariant(inductiveType.readBack, constructor, constructor.paramToVars)
+      val variant = term.InductiveVariant(inductiveType.readBack, constructor, constructor.paramToVars)
       env.withLocals(inductiveType.argsMap) { implicit env =>
         Synth(
           term = constructor.params.buildLambda(variant).normalize,
@@ -249,14 +253,14 @@ object Synthesis:
       val clauseBodyTypes: Seq[Value] = clauseBodyTypeTerms.map(_.eval)
       val leastUpperBoundType: Type = clauseBodyTypes.reduce((a, b) => a \/ b)
       Synth(
-        term = Term.Match(scrutineesSynth.map(_.term), clausesSynth.map(_._1)),
+        term = term.Match(scrutineesSynth.map(_.term), clausesSynth.map(_._1)),
         `type` = leastUpperBoundType
       )
     }
 
-    case Expr.Pi(param, result) => synthDependentType(param, result, Term.Pi.apply)
+    case Expr.Pi(param, result) => synthDependentType(param, result, term.Pi.apply)
 
-    case Expr.Sigma(param, result) => synthDependentType(param, result, Term.Sigma.apply)
+    case Expr.Sigma(param, result) => synthDependentType(param, result, term.Sigma.apply)
 
     case Expr.Lambda(param, body, returnType) => {
       val paramIdent = param.ident
@@ -283,7 +287,7 @@ object Synthesis:
         }
 
         Synth(
-          term = Term.Lambda(Param(paramIdent, paramType), bodyTerm),
+          term = term.Lambda(Param(paramIdent, paramType), bodyTerm),
           `type` = Value.Pi(
             paramTypeValue,
             ParameterizedClosure(Param(paramIdent, paramTypeValue), env) {
@@ -307,12 +311,12 @@ object Synthesis:
           }
         }
       }
-      Synth(Term.Record(recordFields), recordType)
+      Synth(term.Record(recordFields), recordType)
     }
 
     case Expr.RecordType(fields) => {
       val fieldTypes: Map[String, Term] = fields.map((name, ty) => (name -> ty.synth.term))
-      Synth(Term.RecordType(fieldTypes), Value.Universe)
+      Synth(term.RecordType(fieldTypes), Value.Universe)
     }
     
   }
@@ -435,7 +439,7 @@ object Synthesis:
 
     case inductive @ Inductive(_, paramExprs, _) => {
       val (params, _) = synthParams(paramExprs)
-      NaiveDeclaration[Term, Inductive](inductive.toIdent[Term], params, Term.Universe, SymbolKind.Inductive)
+      NaiveDeclaration[Term, Inductive](inductive.toIdent[Term], params, term.Universe, SymbolKind.Inductive)
     }
 
     case _ => unreachable
@@ -476,8 +480,8 @@ object Synthesis:
     case overloaded: Overloaded[Term] => {
       val lambdaPaths = overloaded.overloads.map(overloaded => (overloaded.params, overloaded.buildInvoke(Term)))
       val piPaths = overloaded.overloads.map(overloaded => (overloaded.params, overloaded.resultType))
-      val lambda = Term.overloaded(Term.OverloadedLambda.apply, lambdaPaths)
-      val pi = Term.overloaded(Term.OverloadedPi.apply, piPaths)
+      val lambda = Term.overloaded(term.OverloadedLambda.apply, lambdaPaths)
+      val pi = Term.overloaded(term.OverloadedPi.apply, piPaths)
       Synth(lambda, pi.eval)
     }
 
@@ -489,8 +493,8 @@ object Synthesis:
     case overloaded: OverloadedDeclaration[Term] => {
       val lambdaPaths = overloaded.overloads.map(overloaded => (overloaded.params, overloaded.buildInvoke(Term)))
       val piPaths = overloaded.overloads.map(overloaded => (overloaded.params, overloaded.resultType))
-      val lambda = Term.overloaded(Term.OverloadedLambda.apply, lambdaPaths)
-      val pi = Term.overloaded(Term.OverloadedPi.apply, piPaths)
+      val lambda = Term.overloaded(term.OverloadedLambda.apply, lambdaPaths)
+      val pi = Term.overloaded(term.OverloadedPi.apply, piPaths)
       Synth(lambda, pi.eval)
     }
 

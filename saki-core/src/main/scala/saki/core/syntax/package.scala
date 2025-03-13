@@ -1,10 +1,12 @@
 package saki.core
 
+import saki.core.term
+import saki.core.term.Term
+
 export syntax.{
   Literal,
   LiteralType,
   Expr,
-  Term,
   Param,
   ParamList,
   Argument,

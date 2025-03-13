@@ -1,6 +1,8 @@
 package saki.core.syntax
 
 import saki.core.domain.Value
+import saki.core.term
+import saki.core.term.Term
 
 enum Literal {
 
@@ -29,7 +31,7 @@ enum Literal {
     case StringValue(_) => LiteralType.StringType
   }
 
-  def toTerm: Term = Term.Primitive(this)
+  def toTerm: Term = term.Primitive(this)
   def toValue: Value = Value.Primitive(this)
 }
 
@@ -61,6 +63,6 @@ enum LiteralType {
     case StringType => "String"
   }
 
-  def toTerm: Term = Term.PrimitiveType(this)
+  def toTerm: Term = term.PrimitiveType(this)
   def toValue: Value = Value.PrimitiveType(this)
 }

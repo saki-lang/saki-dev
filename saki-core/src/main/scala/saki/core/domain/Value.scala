@@ -4,6 +4,8 @@ import saki.core.{RuntimeEntity, RuntimeEntityFactory}
 import saki.core.context.{Environment, Typed}
 import saki.core.syntax.*
 import saki.core.syntax
+import saki.core.term
+import saki.core.term.Term
 import saki.error.CoreErrorKind.*
 
 import scala.annotation.targetName
@@ -105,42 +107,42 @@ enum Value extends RuntimeEntity[Type] {
 
   def readBack(implicit env: Environment.Typed[Value]): Term = this match {
 
-    case Universe => Term.Universe
+    case Universe => term.Universe
 
-    case Primitive(value) => Term.Primitive(value)
+    case Primitive(value) => term.Primitive(value)
 
-    case PrimitiveType(ty) => Term.PrimitiveType(ty)
+    case PrimitiveType(ty) => term.PrimitiveType(ty)
 
     case Neutral(value) => value.readBack
 
-    case Union(types) => Term.Union(types.map(_.readBack))
+    case Union(types) => term.Union(types.map(_.readBack))
 
-    case Intersection(types) => Term.Intersection(types.map(_.readBack))
+    case Intersection(types) => term.Intersection(types.map(_.readBack))
 
     case Pi(paramType, codomainClosure) => {
       val (param, codomain) = Value.readBackClosure(paramType, codomainClosure)
-      Term.Pi(param, codomain)
+      term.Pi(param, codomain)
     }
 
-    case pi: OverloadedPi => Term.OverloadedPi(pi.readBackStates)
+    case pi: OverloadedPi => term.OverloadedPi(pi.readBackStates)
 
     case Sigma(paramType, codomainClosure) => {
       val (param, codomain) = Value.readBackClosure(paramType, codomainClosure)
-      Term.Sigma(param, codomain)
+      term.Sigma(param, codomain)
     }
 
     case Lambda(paramType, bodyClosure) => {
       val (param, body) = Value.readBackClosure(paramType, bodyClosure)
-      Term.Lambda(param, body)
+      term.Lambda(param, body)
     }
 
-    case lambda: OverloadedLambda => Term.OverloadedLambda(lambda.readBackStates)
+    case lambda: OverloadedLambda => term.OverloadedLambda(lambda.readBackStates)
 
-    case Pair(first, second) => Term.Pair(first.readBack, second.readBack)
+    case Pair(first, second) => term.Pair(first.readBack, second.readBack)
 
-    case Record(fields) => Term.Record(fields.map((name, value) => (name, value.readBack)))
+    case Record(fields) => term.Record(fields.map((name, value) => (name, value.readBack)))
 
-    case RecordType(fields) => Term.RecordType(fields.map((name, ty) => (name, ty.readBack)))
+    case RecordType(fields) => term.RecordType(fields.map((name, ty) => (name, ty.readBack)))
 
     case InductiveType(inductive, args) => {
       Term.inductiveType(inductive, args.map(_.readBack))
@@ -620,7 +622,7 @@ object Value extends RuntimeEntityFactory[Value] {
    * @param env       The environment to use for reading back
    * @return 1. The parameter of the lambda term
    *         2. The body of the lambda term
-   * @see [[Term.evalParameterized]]
+   * @see [[term.evalParameterized]]
    */
   private[core] def readBackClosure(paramType: Type, closure: CodomainClosure)(
     implicit env: Environment.Typed[Value]

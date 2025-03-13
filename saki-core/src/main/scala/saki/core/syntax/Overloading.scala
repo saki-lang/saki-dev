@@ -3,6 +3,8 @@ package saki.core.syntax
 import saki.core.RuntimeEntity
 import saki.core.context.Environment
 import saki.core.domain.{Type, Value}
+import saki.core.term
+import saki.core.term.Term
 import saki.error.CoreErrorKind.{NoSuchOverloading, OverloadingAmbiguous}
 
 import scala.collection.Seq

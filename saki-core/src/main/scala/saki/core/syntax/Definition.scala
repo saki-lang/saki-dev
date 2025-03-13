@@ -3,6 +3,8 @@ package saki.core.syntax
 import saki.core.{Entity, EntityFactory}
 import saki.core.context.Environment
 import saki.core.domain.Value
+import saki.core.term
+import saki.core.term.Term
 import saki.util.LateInit
 
 import scala.collection.Seq

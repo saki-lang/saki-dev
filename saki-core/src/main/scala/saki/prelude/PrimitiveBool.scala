@@ -1,7 +1,9 @@
 package saki.prelude
 
 import saki.core.domain.Value
-import saki.core.syntax.{ArgList, NativeFunction, Term, Var}
+import saki.core.syntax.{ArgList, NativeFunction, Var}
+import saki.core.term
+import saki.core.term.Term
 
 // noinspection ZeroIndexToHead
 object PrimitiveBool extends PreludeDefinitionSet {

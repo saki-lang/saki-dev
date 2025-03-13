@@ -7,6 +7,9 @@ import saki.core.elaborate.Resolve.resolve
 import saki.core.elaborate.Synthesis.{synth, synthDeclaration}
 import saki.core.syntax.Module.EvalResult
 import saki.core.syntax.OverloadedDeclaration.merge
+import saki.core.term
+import saki.core.term
+import saki.core.term.Term
 import saki.error.CoreError
 import saki.prelude.Prelude
 import saki.util.Graph

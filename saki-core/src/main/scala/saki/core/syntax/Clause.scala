@@ -3,6 +3,7 @@ package saki.core.syntax
 import saki.core.Entity
 import saki.core.context.{Environment, Typed}
 import saki.core.domain.{NeutralValue, Value}
+import saki.core.term.{EvalMode, Term}
 import saki.error.{CoreErrorKind, PanicError}
 
 import scala.collection.Seq

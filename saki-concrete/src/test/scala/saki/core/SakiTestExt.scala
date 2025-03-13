@@ -7,6 +7,9 @@ import saki.core.context.Environment
 import saki.core.domain.{NeutralValue, Type, Value}
 import saki.core.elaborate.Resolve
 import saki.core.syntax.{Module, Var}
+import saki.core
+import saki.core.term
+import saki.core.term.Term
 import saki.grammar.{SakiLexer, SakiParser}
 import saki.prelude.Prelude
 
@@ -20,12 +23,12 @@ trait SakiTestExt {
   }
 
   extension (literal: Literal) {
-    def term: Term.Primitive = Term.Primitive(literal)
+    def term: core.term.Primitive = core.term.Primitive(literal)
     def value: Value.Primitive = Value.Primitive(literal)
   }
 
   extension (literalType: LiteralType) {
-    def term: Term.PrimitiveType = Term.PrimitiveType(literalType)
+    def term: core.term.PrimitiveType = core.term.PrimitiveType(literalType)
     def value: Value.PrimitiveType = Value.PrimitiveType(literalType)
   }
 

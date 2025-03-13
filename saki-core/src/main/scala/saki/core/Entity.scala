@@ -3,6 +3,8 @@ package saki.core
 import saki.core.context.Environment
 import saki.core.domain.Value
 import saki.core.syntax.{Constructor, Function, Inductive, Var}
+import saki.core.term
+import saki.core.term.Term
 
 import scala.collection.Seq
 

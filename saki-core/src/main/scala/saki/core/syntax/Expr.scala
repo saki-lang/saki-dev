@@ -4,6 +4,8 @@ import saki.core.context.Environment
 import saki.core.domain.Value
 import saki.core.elaborate.{Resolve, Synthesis}
 import saki.core.Entity
+import saki.core.term
+import saki.core.term.Term
 import saki.util.SourceSpan
 import saki.error.{CoreError, Error, UnknownError}
 import saki.error.CoreErrorKind.TypeNotMatch

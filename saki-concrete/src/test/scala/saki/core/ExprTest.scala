@@ -2,7 +2,9 @@ package saki.core
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should
+import saki.core
 import saki.core.domain.Value
+import saki.core.term.Term
 
 class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
 
@@ -11,32 +13,32 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
 
   test("synth primitive type Int") {
     val (term, ty) = synthExpr("1")
-    term should be (Term.Primitive(IntValue(1)))
+    term should be (core.term.Primitive(IntValue(1)))
     ty should be (Value.PrimitiveType(IntType))
   }
 
   test("synth lambda") {
     val (term, ty) = synthExpr("(x: Int) => x")
-    term should be (Term.Lambda(Param(!"x", IntType.term), Term.Variable(!"x")).normalize)
+    term should be (core.term.Lambda(Param(!"x", IntType.term), core.term.Variable(!"x")).normalize)
     ty.readBack should be (Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType)).readBack)
   }
 
   test("synth lambda with explicit type") {
     val (term, ty) = synthExpr("(x: Int): Int => x")
-    term should be (Term.Lambda(Param(!"x", IntType.term), Term.Variable(!"x")).normalize)
+    term should be (core.term.Lambda(Param(!"x", IntType.term), core.term.Variable(!"x")).normalize)
     ty.readBack should be (Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType)).readBack)
   }
 
   test("synth high-order lambda") {
     val (term, ty) = synthExpr("(x: Int) => (y: Float) => (z: String): Int => x")
     term should be (
-      Term.Lambda(
+      core.term.Lambda(
         Param(!"x", IntType.term),
-        Term.Lambda(
+        core.term.Lambda(
           Param(!"y", FloatType.term),
-          Term.Lambda(
+          core.term.Lambda(
             Param(!"z", StringType.term),
-            Term.Variable(!"x")
+            core.term.Variable(!"x")
           )
         )
       ).normalize
