@@ -62,9 +62,7 @@ private trait OverloadedTerm[S <: Term & OverloadedTerm[S]] {
     //  2. Merge the states with identical parameter types
     val merged: Map[Type, CodomainClosure] = grouped.map { (paramType, closures) =>
       assert(closures.nonEmpty)
-      if closures.size == 1 then {
-        paramType -> closures.head
-      } else {
+      if closures.size == 1 then paramType -> closures.head else {
         val merged = closures.map { closure =>
           val (_, bodyTerm) = Value.readBackClosure(paramType, closure)
           bodyTerm match {
@@ -73,13 +71,9 @@ private trait OverloadedTerm[S <: Term & OverloadedTerm[S]] {
             // case 2: The term is an overloaded lambda, keep it as is
             case overloaded: OverloadedTerm[?] => overloaded
             // case 3: The term is not a lambda-like term, indicating an ambiguous overload
-            case _ => OverloadingAmbiguous.raise {
-              s"Ambiguous overloading for function: ${paramType}"
-            }
+            case _ => OverloadingAmbiguous.raise(s"Ambiguous overloading for function: ${paramType}")
           }
-        }.reduce {
-          (merged, overloaded) => merged.merge(overloaded)
-        }
+        }.reduce((merged, overloaded) => merged.merge(overloaded))
         Term.evalParameterized(paramType, merged, evalMode)
       }
     }
@@ -99,9 +93,7 @@ private trait OverloadedTerm[S <: Term & OverloadedTerm[S]] {
             // Recursively merge the states
             try overloaded1.asInstanceOf[S].merge(overloaded2.asInstanceOf[S]) catch {
               // If the merge fails, the states are not compatible (e.g. trying to merge a Pi and a Lambda)
-              case _: ClassCastException => TypeNotMatch.raise {
-                s"Cannot merge states of different types: ${term1}, ${term2}"
-              }
+              case _: ClassCastException => TypeNotMatch.raise(s"Cannot merge states of different types: ${term1}, ${term2}")
             }
           }
           // States are not overloaded lambdas, indicating a mismatch
