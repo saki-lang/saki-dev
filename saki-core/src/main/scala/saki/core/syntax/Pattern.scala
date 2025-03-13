@@ -104,7 +104,7 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
       val patternInductiveType = patternInductiveTerm.eval match {
         case inductiveType: Value.InductiveType => inductiveType
         case ty => TypeNotMatch.raise {
-          s"Expected inductive type, but got: ${ty.readBack}"
+          s"Expected inductive type, but got: ${ty.reflect}"
         }
       }
       val inductiveType = `type`.asInstanceOf[Value.InductiveType]
@@ -122,7 +122,7 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
         }
       } else if !(patternInductiveType <:< inductiveType) then {
         TypeNotMatch.raise {
-          s"Expected inductive type ${inductiveType.readBack}, but got ${patternInductiveType.readBack}"
+          s"Expected inductive type ${inductiveType.reflect}, but got ${patternInductiveType.reflect}"
         }
       } else {
         patterns.zip(constructor.params).foldLeft(Map.empty: Map[Var.Local, Value]) {
@@ -135,7 +135,7 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
 
     case Pattern.Variant(inductive, _, _) => {
       TypeNotMatch.raise {
-        s"Expected inductive type ${inductive}, but got: ${`type`.readBack}"
+        s"Expected inductive type ${inductive}, but got: ${`type`.reflect}"
       }
     }
 
@@ -154,7 +154,7 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
     }
 
     case Pattern.Record(_) => TypeNotMatch.raise {
-      s"Expected record type, but got: ${`type`.readBack}"
+      s"Expected record type, but got: ${`type`.reflect}"
     }
   }
 
@@ -175,7 +175,7 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
       case Pattern.Typed(pattern, expectedType) => {
         val expectedTypeValue = expectedType.eval
         if value.isFinal() && !(expectedTypeValue <:< ty) then TypeNotMatch.raise {
-          s"Expected type ${expectedTypeValue.readBack}, but got: ${ty.readBack}"
+          s"Expected type ${expectedTypeValue.reflect}, but got: ${ty.reflect}"
         }
         pattern.buildMatchBindings(value, Some(expectedTypeValue))
       }
@@ -197,7 +197,7 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
         val patternInductiveType = patternInductiveTerm.eval match {
           case inductiveType: Value.InductiveType => inductiveType
           case ty => TypeNotMatch.raise {
-            s"Expected inductive type, but got: ${ty.readBack}"
+            s"Expected inductive type, but got: ${ty.reflect}"
           }
         }
         val inductiveType = ty.asInstanceOf[Value.InductiveType]
@@ -215,7 +215,7 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
           }
         } else if !(patternInductiveType <:< inductiveType) then {
           TypeNotMatch.raise {
-            s"Expected inductive type ${inductiveType.readBack}, but got ${patternInductiveType.readBack}"
+            s"Expected inductive type ${inductiveType.reflect}, but got ${patternInductiveType.reflect}"
           }
         } else {
           patterns.zip(variant.args).foldLeft(Map.empty: Map[Var.Local, Typed[Value]]) {
@@ -269,7 +269,7 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
         
         val inductiveType = inductiveTerm.eval match {
           case inductive: Value.InductiveType => inductive
-          case ty => TypeNotMatch.raise(s"Expected inductive type, but got: ${ty.readBack}")
+          case ty => TypeNotMatch.raise(s"Expected inductive type, but got: ${ty.reflect}")
         }
         
         val constructor = inductiveType.inductive.definition.get.getConstructor(constructorIdent) match {
@@ -305,7 +305,7 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
     case Pattern.Variant(inductiveTerm, constructorIdent, patterns) => {
       val inductiveType = inductiveTerm.eval match {
         case inductive: Value.InductiveType => inductive
-        case ty => TypeNotMatch.raise(s"Expected inductive type, but got: ${ty.readBack}")
+        case ty => TypeNotMatch.raise(s"Expected inductive type, but got: ${ty.reflect}")
       }
       val inductive = inductiveType.inductive.definition.get
       val constructor = inductive.getConstructor(constructorIdent) match {
@@ -315,7 +315,7 @@ extension [T <: RuntimeEntity[Type]](self: Pattern[T]) {
         }
       }
       val args = patterns.map(_.toTerm)
-      term.InductiveVariant(inductiveType.readBack, constructor, args)
+      term.InductiveVariant(inductiveType.reflect, constructor, args)
     }
     case Pattern.Typed(pattern, _) => pattern.toTerm
     case Pattern.Record(fields) => {

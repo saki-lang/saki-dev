@@ -55,7 +55,7 @@ private trait OverloadedTerm[S <: Term & OverloadedTerm[S]] {
 
     // Merge the states with identical parameter types
     //  1. Group the states by parameter type
-    val grouped: Map[Type, Iterable[CodomainClosure]] = closureStates.groupBy(_._1.readBack).map {
+    val grouped: Map[Type, Iterable[CodomainClosure]] = closureStates.groupBy(_._1.reflect).map {
       (_, states) => states.map(states.head._1 -> _._2)
     }.flatten.groupMap(_._1)(_._2)
 

@@ -40,7 +40,7 @@ enum NeutralValue {
       case Value.Pi(paramType, codomain) => {
         val argType = arg.infer
         if !(paramType <:< argType) then TypeNotMatch.raise {
-          s"Expected argument type: ${paramType.readBack}, but got: ${argType.readBack}"
+          s"Expected argument type: ${paramType.reflect}, but got: ${argType.reflect}"
         }
         // To obtain the concrete return type, feed the concrete argument to the codomain closure
         codomain(arg.eval)
@@ -53,7 +53,7 @@ enum NeutralValue {
           (paramType, _) => paramType <:< argType
         }
         if candidateStates.isEmpty then OverloadingNotMatch.raise {
-          s"No matched overloading in overloaded Pi type of argument with type: ${argType.readBack}"
+          s"No matched overloading in overloaded Pi type of argument with type: ${argType.reflect}"
         }
         // Find the states that there is no other state that is closer to the argument type
         val validStates = candidateStates.filter {
@@ -62,7 +62,7 @@ enum NeutralValue {
           }
         }
         if validStates.size > 1 then OverloadingAmbiguous.raise {
-          s"Ambiguous overloading in overloaded Pi type of argument with type: ${argType.readBack}"
+          s"Ambiguous overloading in overloaded Pi type of argument with type: ${argType.reflect}"
         }
         val (_, codomain) = validStates.head
         codomain(arg.eval)
@@ -76,7 +76,7 @@ enum NeutralValue {
     case NeutralValue.Projection(record, field) => record.infer match {
       case Value.RecordType(fieldTypes) => fieldTypes(field)
       case ty => TypeNotMatch.raise {
-        s"Expected record type, but got: ${ty.readBack}"
+        s"Expected record type, but got: ${ty.reflect}"
       }
     }
 
@@ -87,7 +87,7 @@ enum NeutralValue {
             val paramType = param.`type`.eval(env)
             val argType = arg.infer(env)
             if !(paramType <:< argType) then TypeNotMatch.raise {
-              s"Expected argument type: ${paramType.readBack}, but got: ${argType.readBack}"
+              s"Expected argument type: ${paramType.reflect}, but got: ${argType.reflect}"
             }
             env.add(param.ident, arg.eval(env), paramType)
           }
@@ -122,12 +122,12 @@ enum NeutralValue {
     }
   }
 
-  def readBack(implicit env: Environment.Typed[Value]): Term = this match {
+  def reflect(implicit env: Environment.Typed[Value]): Term = this match {
     case Variable(ident, _) => term.Variable(ident)
-    case Apply(fn, arg) => term.Apply(fn.readBack, arg.readBack)
-    case TypeBarrier(value, ty) => term.TypeBarrier(value.readBack, ty.readBack)
-    case Projection(record, field) => term.Projection(record.readBack, field)
-    case FunctionInvoke(fnRef, args) => term.FunctionInvoke(fnRef, args.map(_.readBack))
+    case Apply(fn, arg) => term.Apply(fn.reflect, arg.reflect)
+    case TypeBarrier(value, ty) => term.TypeBarrier(value.reflect, ty.reflect)
+    case Projection(record, field) => term.Projection(record.reflect, field)
+    case FunctionInvoke(fnRef, args) => term.FunctionInvoke(fnRef, args.map(_.reflect))
     case Match(scrutinees, clauses) => {
       // TODO: May be we don't need to build the match bindings here
       val termClauses = clauses.map { clause =>
@@ -139,10 +139,10 @@ enum NeutralValue {
         }.map {
           case (param, ty) => (param, Typed[Value](Value.variable(param, ty), ty))
         }
-        val bodyTerm = env.withLocals(bindings.toMap) { implicit env => clause.body.readBack }
-        Clause(clause.patterns.map(_.map(_.readBack)), bodyTerm)
+        val bodyTerm = env.withLocals(bindings.toMap) { implicit env => clause.body.reflect }
+        Clause(clause.patterns.map(_.map(_.reflect)), bodyTerm)
       }
-      term.Match(scrutinees.map(_.readBack), termClauses)
+      term.Match(scrutinees.map(_.reflect), termClauses)
     }
   }
 

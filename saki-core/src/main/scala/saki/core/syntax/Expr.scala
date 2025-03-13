@@ -139,7 +139,7 @@ enum Expr(val span: SourceSpan) extends Entity {
   def elaborate(expectedType: Term)(implicit env: Environment.Typed[Value]): Term = {
     val (term, ty) = this.synth(env).unpack
     if !(ty <:< expectedType.eval) then TypeNotMatch.raise(this.span) {
-      s"Expected type: ${expectedType.normalize}, found: ${ty.readBack}"
+      s"Expected type: ${expectedType.normalize}, found: ${ty.reflect}"
     } else term
   }
 

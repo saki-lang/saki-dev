@@ -19,7 +19,7 @@ trait Term extends RuntimeEntity[Type] {
     case _ => this.substituteTerm(from, to)
   }
   def substituteTerm(from: Term, to: Term)(implicit env: Environment.Typed[Value]): Term
-  def normalize(implicit env: Environment.Typed[Value]): Term = this.eval.readBack
+  def normalize(implicit env: Environment.Typed[Value]): Term = this.eval.reflect
   infix def unify(that: Term)(implicit env: Environment.Typed[Value]): Boolean = this.eval unify that.eval
   override def infer(implicit env: Environment.Typed[Value]): Value = this.eval.infer
   def contains(ident: Var.Local, shadowed: Set[Var.Local] = Set.empty)(
@@ -56,7 +56,7 @@ case class Variable(variable: Var.Local) extends Term {
     case None => throw new IllegalArgumentException(s"Variable not found: ${variable.name}")
   }
   override def substituteTerm(from: Term, to: Term)(implicit env: Environment.Typed[Value]): Term = env.getTyped(variable) match {
-    case Some(typed) if typed.value.readBack unify from => to
+    case Some(typed) if typed.value.reflect unify from => to
     case _ => this
   }
   // Just a simple trick, avoid unnecessary evaluation, and should be removed if causing any problem
@@ -176,7 +176,7 @@ case class InductiveVariant(inductive: Term, constructor: Constructor[Term], arg
       val argValues = env.withLocals(inductiveType.argsMap) { implicit env => args.map(_.eval(evalMode)(env)) }
       Value.inductiveVariant(inductiveType, constructor, argValues)
     }
-    case ty => TypeNotMatch.raise(s"Expected inductive type, but got: ${ty.readBack}")
+    case ty => TypeNotMatch.raise(s"Expected inductive type, but got: ${ty.reflect}")
   }
   override def substituteTerm(from: Term, to: Term)(implicit env: Environment.Typed[Value]): Term =
     InductiveVariant(inductive.substitute(from, to), constructor, args.map(_.substitute(from, to)))
@@ -190,7 +190,7 @@ case class Match(scrutinees: Seq[Term], clauses: Seq[Clause[Term]]) extends Term
     // Try to match the scrutinees with the clauses
     clauses.tryMatch(scrutineesValue, evalMode).getOrElse {
       // If all scrutinees are final and no match is found, raise an error
-      MatchNotExhaustive.raise(s"Match is not exhaustive for scrutinee: ${scrutineesValue.map(_.readBack).mkString(", ")}")
+      MatchNotExhaustive.raise(s"Match is not exhaustive for scrutinee: ${scrutineesValue.map(_.reflect).mkString(", ")}")
     }
   }
   override def substituteTerm(from: Term, to: Term)(implicit env: Environment.Typed[Value]): Term = {
@@ -268,7 +268,7 @@ case class RecordType(fields: Map[String, Term]) extends Term {
 case class Apply(fn: Term, arg: Term) extends Term {
   override def eval(evalMode: EvalMode)(implicit env: Environment.Typed[Value]): Value = fn.eval(evalMode) match {
     case Value.Lambda(paramType, closure) => {
-      if !(paramType <:< arg.infer) then TypeNotMatch.raise(s"Expected argument type: ${paramType.readBack}, but got: ${arg.infer.readBack}")
+      if !(paramType <:< arg.infer) then TypeNotMatch.raise(s"Expected argument type: ${paramType.reflect}, but got: ${arg.infer.reflect}")
       closure(arg.eval(evalMode))
     }
     case overloaded: Value.OverloadedLambda => {
@@ -277,7 +277,7 @@ case class Apply(fn: Term, arg: Term) extends Term {
         argValue, arg.infer, Value.OverloadedLambda.apply,
         unwrapStates = {
           case Value.OverloadedLambda(states) => states
-          case value => TypeNotMatch.raise(s"Expected an overloaded lambda, but got: ${value.readBack}")
+          case value => TypeNotMatch.raise(s"Expected an overloaded lambda, but got: ${value.reflect}")
         }
       )
     }

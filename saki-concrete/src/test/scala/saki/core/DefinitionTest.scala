@@ -1195,13 +1195,13 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
          * @param env The current environment.
          * @return The reconstructed `Term`.
          */
-        def readBack(neutral: NeutralValue, env: Env): Term = match neutral {
+        def reflect(neutral: NeutralValue, env: Env): Term = match neutral {
             // Convert variable to term.
             case NeutralValue::Var(name) => Term::Var(name)
             // Reconstruct application.
-            case NeutralValue::Apply(fn, arg) => Term::Apply(fn.readBack(env), arg.readBack(env))
+            case NeutralValue::Apply(fn, arg) => Term::Apply(fn.reflect(env), arg.reflect(env))
             // Reconstruct projection.
-            case NeutralValue::Proj(proj, neutral) => Term::Proj(proj, neutral.readBack(env))
+            case NeutralValue::Proj(proj, neutral) => Term::Proj(proj, neutral.reflect(env))
         }
         
         /**
@@ -1210,23 +1210,23 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
          * @param env The current environment.
          * @return The normalized `Term`.
          */
-        def readBack(value: Value, env: Env): Term = match value {
-            case Value::Neutral(neutral) => neutral.readBack(env)
+        def reflect(value: Value, env: Env): Term = match value {
+            case Value::Neutral(neutral) => neutral.reflect(env)
             case Value::Type(univ) => Term::Type(univ)
-            case Value::Pair(fst, snd) => Term::Pair(fst.readBack(env), snd.readBack(env))
+            case Value::Pair(fst, snd) => Term::Pair(fst.reflect(env), snd.reflect(env))
         
             // Lambda Normalization: Generate a fresh variable to avoid capture.
             case Value::Lambda(paramType, fn) => {
                 let paramIdent: String = env.freshIdent
                 // Normalize parameter type.
-                let paramTypeTerm = paramType.readBack(env)
+                let paramTypeTerm = paramType.reflect(env)
                 // Create variable value.
                 let variable: Value = NeutralValue::Var(paramIdent).toValue
                 // Extend environment.
                 let updatedEnv = env.add(paramIdent, variable, env.evaluate(paramTypeTerm))
                 Term::Lambda(
                     paramIdent, paramTypeTerm,         // Construct lambda term.
-                    fn(variable).readBack(updatedEnv)  // Normalize the body.
+                    fn(variable).reflect(updatedEnv)  // Normalize the body.
                 )
             }
         
@@ -1235,14 +1235,14 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
                 // Fresh parameter name.
                 let paramIdent: String = env.freshIdent
                 // Normalize parameter type.
-                let paramTypeTerm = paramType.readBack(env)
+                let paramTypeTerm = paramType.reflect(env)
                 // Create variable value.
                 let variable: Value = NeutralValue::Var(paramIdent).toValue
                 // Extend environment.
                 let updatedEnv = env.add(paramIdent, variable, env.evaluate(paramTypeTerm))
                 Term::Pi(
                     paramIdent, paramTypeTerm,          // Construct Pi type term.
-                    fn(variable).readBack(updatedEnv)   // Normalize the codomain.
+                    fn(variable).reflect(updatedEnv)   // Normalize the codomain.
                 )
             }
         
@@ -1251,14 +1251,14 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
                 // Fresh parameter name.
                 let paramIdent: String = env.freshIdent
                 // Normalize parameter type.
-                let paramTypeTerm = paramType.readBack(env)
+                let paramTypeTerm = paramType.reflect(env)
                 // Create variable value.
                 let variable: Value = NeutralValue::Var(paramIdent).toValue
                 // Extend environment.
                 let updatedEnv = env.add(paramIdent, variable, env.evaluate(paramTypeTerm))
                 Term::Sigma(
                     paramIdent, paramTypeTerm,          // Construct Sigma type term.
-                    fn(variable).readBack(updatedEnv)   // Normalize the codomain.
+                    fn(variable).reflect(updatedEnv)   // Normalize the codomain.
                 )
             }
         }
@@ -1305,7 +1305,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
                     paramType,
                     (arg: Value) => {
                         // Infer argument's type.
-                        let argType = env.infer(arg.readBack(bodyEnv))
+                        let argType = env.infer(arg.reflect(bodyEnv))
                         // Evaluate the body.
                         bodyEnv.add(paramIdent, arg, argType).evaluate(bodyTerm)
                     }
@@ -1358,7 +1358,7 @@ class DefinitionTest extends AnyFunSuite with should.Matchers with SakiTestExt {
          * @param expr The `Term` to normalize.
          * @return The normalized `Term`.
          */
-        def normalize(env: Env, expr: Term): Term = env.evaluate(expr).readBack(env)
+        def normalize(env: Env, expr: Term): Term = env.evaluate(expr).reflect(env)
 
         def pretty(expr: Term): String = match expr {
             case Term::Var(name) => name
