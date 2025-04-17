@@ -1,7 +1,5 @@
 # Lepton-lang
 
-> Former Saki-lang. No more MyGo. No more Ave Mujica. No more Saki. Getting tired. -- Feb 15, 2025. After watching Ave Mujica ep7. 
-
 Lepton is a dependently-typed, pure functional language with algebraic subtyping and overloaded superposition types.  It prioritizes simplicity in design, using a Scala-inspired syntax while leveraging a type system grounded in Martin-Löf Type Theory. Lepton introduces novel features like constraint universes and superposition types, serving as a research platform for exploring advanced type systems and verified program synthesis.
 
 ```
