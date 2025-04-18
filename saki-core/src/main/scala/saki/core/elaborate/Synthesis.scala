@@ -32,7 +32,7 @@ object Synthesis:
       env.getDefinitionByName(name) match {
         case Some(definition) => Expr.Variable(definition.ident).synth(env)
         case None => env.getTyped(name) match {
-          case Some(Typed(value, ty)) => Synth(value.readBack, ty)
+          case Some(Typed(value, ty)) => Synth(value.reflect, ty)
           case None => UnresolvedReference.raise(expr.span) {
             s"Unresolved reference: $name"
           }
@@ -55,7 +55,7 @@ object Synthesis:
         }
       }
       case variable: Var.Local => env.locals.get(variable) match {
-        case Some(ty) => Synth(ty.value.readBack, ty.`type`)
+        case Some(ty) => Synth(ty.value.reflect, ty.`type`)
         case None => UnboundVariable.raise(expr.span) {
           s"Unbound variable: ${variable.name}"
         }
@@ -73,7 +73,7 @@ object Synthesis:
     }
 
     case Expr.TypeOf(value) => value.synth(env).unpack match {
-      case (_, ty: Value) => Synth(ty.readBack, Value.Universe)
+      case (_, ty: Value) => Synth(ty.reflect, Value.Universe)
     }
 
     case Expr.Elimination(obj, member) => obj.synth(env).normalize.unpack match {
@@ -136,7 +136,7 @@ object Synthesis:
         returnTypeExpr.foreach { returnTypeExpr =>
           val returnType = returnTypeExpr.synth(env).term.eval
           if !(bodyType <:< returnType) then TypeNotMatch.raise(returnTypeExpr.span) {
-            s"Expected return type: ${returnType.readBack}, found: ${bodyType.readBack}"
+            s"Expected return type: ${returnType.reflect}, found: ${bodyType.reflect}"
           }
         }
         Synth(bodyTerm, bodyType)
@@ -154,7 +154,7 @@ object Synthesis:
           case Value.Pi(paramType, codomain) => {
             env.withLocal(paramIdent, argValue, paramType) { implicit env =>
               if !(paramType <:< argType) then TypeNotMatch.raise(argExpr.value.span) {
-                s"Expected argument type: ${paramType.readBack}, found argument $argExpr with type ${argType.readBack}"
+                s"Expected argument type: ${paramType.reflect}, found argument $argExpr with type ${argType.reflect}"
               }
               Synth(term.Apply(fn, argTerm), codomain(argValue))
             }
@@ -167,7 +167,7 @@ object Synthesis:
               unwrapStates = {
                 case Value.OverloadedPi(states) => states
                 case value => TypeNotMatch.raise {
-                  s"Expected an overloaded pi, but got: ${value.readBack}"
+                  s"Expected an overloaded pi, but got: ${value.reflect}"
                 }
               }
             )
@@ -182,7 +182,7 @@ object Synthesis:
               val codomainValue = env.withLocal(piParam.ident, argValue, argType) {
                 implicit env => codomain.eval(env)
               }
-              Synth(codomainValue.readBack, Value.Universe)
+              Synth(codomainValue.reflect, Value.Universe)
             }
             case _ => TypeNotMatch.raise(fnExpr.span) {
               s"Expected a function, found: $fn"
@@ -214,11 +214,11 @@ object Synthesis:
         s"Expected inductive type ${inductive.name}, found: ${constructor.owner.name}"
       }
       // Build lambda
-      val variant = term.InductiveVariant(inductiveType.readBack, constructor, constructor.paramToVars)
+      val variant = term.InductiveVariant(inductiveType.reflect, constructor, constructor.paramToVars)
       env.withLocals(inductiveType.argsMap) { implicit env =>
         Synth(
           term = constructor.params.buildLambda(variant).normalize,
-          `type` = constructor.params.buildPiType(inductiveType.readBack).eval,
+          `type` = constructor.params.buildPiType(inductiveType.reflect).eval,
         )
       }
     }
@@ -278,7 +278,7 @@ object Synthesis:
             val returnTypeValue = returnType.eval
             if !(returnTypeValue <:< bodyType) then {
               TypeNotMatch.raise(returnTypeExpr.span) {
-                s"Expected type: ${returnType.eval.readBack}, found: $bodyType"
+                s"Expected type: ${returnType.eval.reflect}, found: $bodyType"
               }
             }
             returnTypeValue
@@ -291,7 +291,7 @@ object Synthesis:
           `type` = Value.Pi(
             paramTypeValue,
             ParameterizedClosure(Param(paramIdent, paramTypeValue), env) {
-              implicit env => returnTypeValue.readBack.eval
+              implicit env => returnTypeValue.reflect.eval
             }
           )
         )
@@ -358,7 +358,7 @@ object Synthesis:
       (acc, bindings) => acc ++ bindings
     }
     val (body, ty) = env.withLocals[Synth](bindings) { clause.body.synth }.unpack
-    val substitutedType = patterns.zip(scrutinees).zip(patternsBinding).foldLeft(ty.readBack) {
+    val substitutedType = patterns.zip(scrutinees).zip(patternsBinding).foldLeft(ty.reflect) {
       case (ty, ((pattern, scrutinee), binding)) => env.withLocals(binding) {
         ty.substitute(pattern.toTerm, scrutinee.term)
       }

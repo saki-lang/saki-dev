@@ -20,14 +20,14 @@ private class ReplCore {
 
   def evaluate(expr: Expr): EvalResult = {
     val (term, ty) = expr.resolve(resolveContext)._1.synth(environment).unpack
-    EvalResult(term.forceEval(environment).readBack(environment), ty.readBack(environment))
+    EvalResult(term.forceEval(environment).reflect(environment), ty.reflect(environment))
   }
 
   def iterate(source: String): Unit = {
 
     if source.trim == "env" then {
       environment.locals.foreach { case (local, Typed(value, ty)) =>
-        println(s"  $local: ${ty.readBack(environment)} = ${value.readBack(environment)}")
+        println(s"  $local: ${ty.reflect(environment)} = ${value.reflect(environment)}")
       }
       println()
       return
@@ -75,7 +75,7 @@ private class ReplCore {
                   val expectedType = expectedTypeExpr.emit.resolve._1.synth.term.normalize
                   if !(expectedType.eval <:< ty) then {
                     throw CoreErrorKind.TypeNotMatch.raise(valueExpr.span) {
-                      s"Expected type ${expectedType}, but got a ${ty.readBack(environment)}"
+                      s"Expected type ${expectedType}, but got a ${ty.reflect(environment)}"
                     }
                   }
                 }
@@ -84,7 +84,7 @@ private class ReplCore {
               val variable: Var.Local = Var.Local(name)
               environment = environment.add(Var.Local(name), term.eval, ty)
               resolveContext += variable
-              println(s"  $name = ${term.normalize(environment)} : ${ty.readBack(environment)}\n")
+              println(s"  $name = ${term.normalize(environment)} : ${ty.reflect(environment)}\n")
             }
             case Statement.Expression(expr) => println(s"  ${evaluate(expr.emit)}\n")
           }

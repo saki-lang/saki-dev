@@ -27,7 +27,7 @@ case class Module(definitions: Set[Definition[Term]]) {
   def evaluate(expr: Expr): EvalResult = {
     val (term, ty) = expr.resolve(Resolve.Context(env))._1.synth(env).unpack
     try {
-      EvalResult(term.forceEval(env).readBack(env), ty.readBack(env))(env)
+      EvalResult(term.forceEval(env).reflect(env), ty.reflect(env))(env)
     } catch {
       case e: CoreError => throw e.spanned(expr.span)
       case e: Throwable => throw e

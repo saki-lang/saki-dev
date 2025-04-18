@@ -105,7 +105,7 @@ enum Value extends RuntimeEntity[Type] {
     case _ => false
   }
 
-  def readBack(implicit env: Environment.Typed[Value]): Term = this match {
+  def reflect(implicit env: Environment.Typed[Value]): Term = this match {
 
     case Universe => term.Universe
 
@@ -113,11 +113,11 @@ enum Value extends RuntimeEntity[Type] {
 
     case PrimitiveType(ty) => term.PrimitiveType(ty)
 
-    case Neutral(value) => value.readBack
+    case Neutral(value) => value.reflect
 
-    case Union(types) => term.Union(types.map(_.readBack))
+    case Union(types) => term.Union(types.map(_.reflect))
 
-    case Intersection(types) => term.Intersection(types.map(_.readBack))
+    case Intersection(types) => term.Intersection(types.map(_.reflect))
 
     case Pi(paramType, codomainClosure) => {
       val (param, codomain) = Value.readBackClosure(paramType, codomainClosure)
@@ -138,18 +138,18 @@ enum Value extends RuntimeEntity[Type] {
 
     case lambda: OverloadedLambda => term.OverloadedLambda(lambda.readBackStates)
 
-    case Pair(first, second) => term.Pair(first.readBack, second.readBack)
+    case Pair(first, second) => term.Pair(first.reflect, second.reflect)
 
-    case Record(fields) => term.Record(fields.map((name, value) => (name, value.readBack)))
+    case Record(fields) => term.Record(fields.map((name, value) => (name, value.reflect)))
 
-    case RecordType(fields) => term.RecordType(fields.map((name, ty) => (name, ty.readBack)))
+    case RecordType(fields) => term.RecordType(fields.map((name, ty) => (name, ty.reflect)))
 
     case InductiveType(inductive, args) => {
-      Term.inductiveType(inductive, args.map(_.readBack))
+      Term.inductiveType(inductive, args.map(_.reflect))
     }
 
     case InductiveVariant(inductive, constructor, args) => {
-      Term.inductiveVariant(inductive.readBack, constructor, args.map(_.readBack))
+      Term.inductiveVariant(inductive.reflect, constructor, args.map(_.reflect))
     }
   }
 
@@ -578,7 +578,7 @@ enum Value extends RuntimeEntity[Type] {
   }
 
   @deprecatedOverriding("For debugging purposes only, don't call it in production code")
-  override def toString: String = try this.readBack(Environment.Typed.empty).toString catch {
+  override def toString: String = try this.reflect(Environment.Typed.empty).toString catch {
     case _: Throwable => super.toString
   }
 }
@@ -629,9 +629,9 @@ object Value extends RuntimeEntityFactory[Value] {
   ): (Param[Term], Term) = {
     val paramIdent = env.uniqueVariable
     val paramVariable = Value.variable(paramIdent, paramType)
-    val paramTypeTerm = paramType.readBack
+    val paramTypeTerm = paramType.reflect
     env.withLocal(paramIdent, paramVariable, paramType) { implicit env =>
-      val term = closure(paramVariable).readBack(env)
+      val term = closure(paramVariable).reflect(env)
       (Param(paramIdent, paramTypeTerm), term)
     }
   }
@@ -654,9 +654,9 @@ private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] 
     states.map { (paramType, closure) =>
       val paramIdent = env.uniqueVariable
       val paramVariable = Value.variable(paramIdent, paramType)
-      val paramTypeTerm = paramType.readBack
+      val paramTypeTerm = paramType.reflect
       env.withLocal(paramIdent, paramVariable, paramType) { implicit env =>
-        val body = closure(paramVariable).readBack(env)
+        val body = closure(paramVariable).reflect(env)
         (Param(paramIdent, paramTypeTerm), body)
       }
     }
@@ -684,7 +684,7 @@ private sealed trait OverloadedLambdaLike[S <: OverloadedLambdaLike[S] & Value] 
     }
 
     if candidateStates.isEmpty then NoSuchOverloading.raise {
-      s"No overloading found for argument ${arg.readBack} with type: ${argType.readBack}"
+      s"No overloading found for argument ${arg.reflect} with type: ${argType.reflect}"
     }
 
     if candidateStates.size == 1 then {

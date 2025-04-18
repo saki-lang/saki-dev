@@ -44,7 +44,7 @@ object Prelude {
       assert(args.size == 2)
       val a = args.head.value
       val b = args.tail.head.value
-      Value.Primitive(Literal.BoolValue(a.readBack(env) == b.readBack(env)))
+      Value.Primitive(Literal.BoolValue(a.reflect(env) == b.reflect(env)))
     },
   )
 
@@ -56,7 +56,7 @@ object Prelude {
       assert(args.size == 2)
       val a = args.head.value
       val b = args.tail.head.value
-      Value.Primitive(Literal.BoolValue(a.readBack(env) != b.readBack(env)))
+      Value.Primitive(Literal.BoolValue(a.reflect(env) != b.reflect(env)))
     },
   )
 

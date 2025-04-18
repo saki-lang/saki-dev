@@ -20,13 +20,13 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
   test("synth lambda") {
     val (term, ty) = synthExpr("(x: Int) => x")
     term should be (core.term.Lambda(Param(!"x", IntType.term), core.term.Variable(!"x")).normalize)
-    ty.readBack should be (Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType)).readBack)
+    ty.reflect should be (Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType)).reflect)
   }
 
   test("synth lambda with explicit type") {
     val (term, ty) = synthExpr("(x: Int): Int => x")
     term should be (core.term.Lambda(Param(!"x", IntType.term), core.term.Variable(!"x")).normalize)
-    ty.readBack should be (Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType)).readBack)
+    ty.reflect should be (Value.Pi(Value.PrimitiveType(LiteralType.IntType), _ => Value.PrimitiveType(LiteralType.IntType)).reflect)
   }
 
   test("synth high-order lambda") {
@@ -43,7 +43,7 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
         )
       ).normalize
     )
-    ty.readBack should be (
+    ty.reflect should be (
       Value.Pi(
         Value.PrimitiveType(LiteralType.IntType),
         _ => Value.Pi(
@@ -53,7 +53,7 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             _ => Value.PrimitiveType(LiteralType.IntType)
           )
         )
-      ).readBack
+      ).reflect
     )
   }
 
@@ -69,9 +69,9 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             )
           )
         )
-      ).readBack
+      ).reflect
     )
-    ty.readBack should be (
+    ty.reflect should be (
       Value.Pi(
         Value.Universe, A => Value.Pi(
           Value.Universe, B => Value.Pi(
@@ -81,7 +81,7 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             )
           )
         )
-      ).readBack
+      ).reflect
     )
   }
 
@@ -97,9 +97,9 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             )
           )
         )
-      ).readBack
+      ).reflect
     )
-    ty.readBack should be(
+    ty.reflect should be(
       Value.Pi(
         Value.Universe, A => Value.Pi(
           Value.Universe, B => Value.Pi(
@@ -109,7 +109,7 @@ class ExprTest extends AnyFunSuite with should.Matchers with SakiTestExt {
             )
           )
         )
-      ).readBack
+      ).reflect
     )
   }
 

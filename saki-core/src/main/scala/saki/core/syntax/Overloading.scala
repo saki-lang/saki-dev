@@ -33,7 +33,7 @@ extension (self: OverloadedSymbol[Term, ?, Function[Term]]) {
     if candidateOverloads.isEmpty then {
       NoSuchOverloading.raise {
         s"No overloading of function ${fn.ident.name} found for arguments of types: " +
-          args.map(_.infer.readBack).mkString(", ")
+          args.map(_.infer.reflect).mkString(", ")
       }
     }
 
@@ -62,7 +62,7 @@ extension (self: OverloadedSymbol[Term, ?, Function[Term]]) {
     if (remainingOverloads.size != 1) {
       OverloadingAmbiguous.raise {
         s"Ambiguous overloading for function ${fn.ident.name} with arguments of types: " +
-          args.map(_.infer.readBack).mkString(", ")
+          args.map(_.infer.reflect).mkString(", ")
       }
     }
 
